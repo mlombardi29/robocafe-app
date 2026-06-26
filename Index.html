@@ -1,0 +1,1944 @@
+<!DOCTYPE html>
+<html><head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  :root{
+    /* warm cream surfaces, near-black warm ink */
+    --grey:#f1ece1; --paper:#fbf8f1; --black:#191c12; --ink2:#39402f; --muted:#6f745f;
+    /* mint / pastel-green accents */
+    --mint:#cfeadd; --pastel:#dcefd6; --lime:#6ecf98; --lime-deep:#1a7a4f; --moss:#2c7a62;
+    --line:#e6dfce; --shadow:0 1px 2px #1c1f1410,0 8px 22px #1c1f1412;
+    /* aliases reused across markup (do not remove) */
+    --cream:var(--grey); --espresso:var(--black); --bean:var(--ink2);
+    --crema:var(--lime); --amber:var(--lime-deep); --rust:#aa4226;
+    /* status tints */
+    --glow:0 0 0 3px rgba(110,207,152,.4);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--grey);color:var(--black);
+    font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:16px;line-height:1.45;
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  .num{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums}
+  .wrap{max-width:540px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;background:var(--grey)}
+  header{position:sticky;top:0;z-index:20;background:var(--black);color:var(--grey);
+    padding:14px 16px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;
+    box-shadow:0 1px 0 #00000022,0 6px 18px #19140c2e}
+  #backBtn{grid-column:1;justify-self:start;border:none;background:transparent;color:var(--grey);
+    padding:6px 6px 6px 0;font:inherit;font-size:14.5px;font-weight:600;white-space:nowrap;cursor:pointer}
+  #backBtn:active{opacity:.55;background:transparent}
+  header .brand{grid-column:2;justify-self:center}
+  #homeBtn{grid-column:3;justify-self:end}
+  header .brand{font-family:'Fraunces',serif;font-weight:600;font-size:19px;letter-spacing:.2px;display:flex;gap:9px;align-items:center}
+  header .dot{width:9px;height:9px;border-radius:50%;background:var(--lime);box-shadow:0 0 0 4px rgba(110,207,152,.28)}
+  header button{background:transparent;border:1px solid #ffffff33;color:var(--grey);
+    border-radius:999px;padding:6px 13px;font:inherit;font-size:13px;cursor:pointer;transition:background .12s,border-color .12s}
+  header button:active{background:#ffffff1a}
+  main{flex:1;padding:18px 16px 40px}
+  h2{font-family:'Fraunces',serif;font-weight:600;font-size:23px;margin:4px 0 2px;letter-spacing:-.01em;color:var(--black)}
+  .sub{color:var(--muted);font-size:13.5px;margin:0 0 18px}
+  .back{display:inline-flex;align-items:center;gap:4px;background:none;border:none;color:var(--ink2);
+    font:inherit;font-weight:600;font-size:15px;cursor:pointer;padding:0 0 12px;margin:0}
+  .back:active{color:var(--lime-deep)}
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:16px;
+    box-shadow:var(--shadow);margin-bottom:14px}
+  .tap{display:flex;align-items:center;gap:14px;width:100%;text-align:left;cursor:pointer;
+    background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:18px;
+    box-shadow:var(--shadow);margin-bottom:13px;font:inherit;color:inherit;transition:transform .08s,border-color .12s,box-shadow .12s}
+  .tap:active{transform:scale(.985);border-color:var(--lime)}
+  .tap .ico{width:46px;height:46px;border-radius:13px;display:grid;place-items:center;font-size:22px;flex:none;
+    background:var(--mint);border:1px solid #bfe0cf}
+  .tap .ttl{font-weight:600;font-size:17px;letter-spacing:-.005em}
+  .tap .dsc{color:var(--muted);font-size:13px;margin-top:2px}
+  .tap .chev{margin-left:auto;color:var(--lime-deep);font-size:20px}
+  label{display:block;font-size:13px;font-weight:600;color:var(--bean);margin:14px 0 6px}
+  select,input,textarea{width:100%;min-width:0;font:inherit;padding:12px 13px;border:1px solid var(--line);
+    border-radius:12px;background:var(--paper);color:var(--black)}
+  select::placeholder,input::placeholder,textarea::placeholder{color:#a7a995}
+  select:focus,input:focus,textarea:focus{outline:none;border-color:var(--lime-deep);box-shadow:var(--glow)}
+  .btn{display:block;width:100%;padding:15px;border:none;border-radius:13px;font:inherit;font-weight:700;touch-action:manipulation;
+    font-size:16px;cursor:pointer;background:var(--lime);color:var(--black);box-shadow:var(--shadow);margin-top:18px;
+    letter-spacing:.1px;transition:transform .08s,filter .12s}
+  .btn:active{transform:scale(.99);filter:brightness(.97)}
+  .btn.dark{background:var(--black);color:var(--grey)}
+  .btn.ghost{background:transparent;color:var(--bean);border:1px solid var(--line);box-shadow:none;font-weight:600}
+  .btn.ghost:active{background:#0000000a}
+  .btn:disabled{opacity:.5}
+  .row{display:flex;gap:10px;align-items:flex-end}
+  .row > *{flex:1;min-width:0}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11.5px;font-weight:700;letter-spacing:.3px}
+  .s-OUT{background:#b5371c;color:#fdeee8} .s-REORDER,.s-LOW{background:#f6e6bf;color:#86570c}
+  .s-OK{background:#cfe9d6;color:#236340}
+  .line-item{display:flex;gap:8px;align-items:center;margin-bottom:9px}
+  .line-item .x{flex:none;width:38px;height:42px;border:1px solid var(--line);border-radius:10px;background:var(--paper);color:var(--rust);font-size:18px;cursor:pointer}
+  .tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{flex:none;padding:9px 14px;border-radius:999px;border:1px solid var(--line);background:var(--paper);
+    font-size:14px;font-weight:600;color:var(--muted);cursor:pointer}
+  .tab.on{background:var(--black);color:var(--grey);border-color:var(--black)}
+  .summary{display:flex;gap:9px;margin-bottom:16px}
+  .summary .box{flex:1;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:12px;text-align:center;box-shadow:var(--shadow);font:inherit;color:inherit;cursor:pointer;transition:transform .08s,border-color .12s,box-shadow .12s}
+  .summary .box:active{transform:scale(.98)}
+  .summary .box.active{border-color:var(--lime-deep);box-shadow:0 0 0 2px rgba(26,122,79,.45)}
+  .qty .u{font-size:12px;color:var(--muted);font-weight:500}
+  .invhead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px;min-height:20px}
+  .invhead .lbl{font-size:13px;font-weight:600;color:var(--bean)}
+  .summary .n{font-family:'Fraunces',serif;font-size:26px;font-weight:600;line-height:1}
+  .summary .l{font-size:11px;color:var(--muted);margin-top:5px;text-transform:uppercase;letter-spacing:.5px}
+  .inv{border-top:1px solid var(--line)}
+  .inv .item{padding:13px 2px;border-bottom:1px solid var(--line)}
+  .inv .top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .inv .nm{font-weight:600}
+  .inv .qty{font-size:20px;font-weight:600}
+  .inv .meta{color:var(--muted);font-size:12.5px;margin-top:5px;display:flex;flex-wrap:wrap;gap:4px 14px}
+  /* dashboard open-flag rows */
+  .flag{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
+  .flag:last-child{border-bottom:none}
+  .flag .info{flex:1}.flag .info small{color:var(--muted)}
+  /* kiosk report rows */
+  .krow{display:flex;flex-direction:column;gap:6px;padding:12px 0;border-bottom:1px solid var(--line)}
+  .krow .main{display:flex;align-items:center;gap:10px}
+  .krow .info{flex:1}.krow .info small{color:var(--muted)}
+  .seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;flex:none}
+  .seg button{border:none;background:var(--paper);padding:9px 12px;font:inherit;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;transition:background .1s,color .1s}
+  .seg button + button{border-left:1px solid var(--line)}
+  .seg button.low.on{background:#e8b53e;color:#3a2a05}
+  .seg button.out.on{background:#b5371c;color:#fff}
+  .seg button.none.on{background:#cfe9d6;color:#236340}
+  .offbtn{align-self:flex-end;background:none;border:none;color:var(--muted);font:inherit;font-size:12px;text-decoration:underline;cursor:pointer;padding:2px 0 0}
+  .offzone{margin-top:18px;border-top:2px dashed var(--line);padding-top:12px}
+  .offhead{font-size:11.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:700;margin-bottom:6px}
+  .offrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+  .feed .hrow{display:flex;gap:10px;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--line)}
+  .feed .hrow:last-child{border-bottom:none}
+  .feed .hrow .grow{flex:1}.feed .hrow small{color:var(--muted)}
+  .hwhen{white-space:nowrap;color:var(--muted);font-size:12px}
+  .chgrow{padding:13px 0;border-bottom:1px solid var(--line)}
+  .chgrow:last-child{border-bottom:none}
+  .chgtop{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+  .chgdesc{font-weight:600;line-height:1.3}
+  .chgamt{font-family:'Fraunces',serif;font-weight:600;font-size:16px;white-space:nowrap}
+  .chgmeta{color:var(--muted);font-size:12.5px;margin-top:4px;line-height:1.5}
+  .chgactions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:11px}
+  .chgactions .btn{width:auto;margin-top:0;padding:9px 16px;font-size:13.5px}
+  .chgactions .chgremove{color:var(--muted);font-weight:600;margin-left:auto}
+  .milkbox{background:var(--mint,#e7f3ec);border:1px solid #bfe0cf;border-radius:13px;padding:13px;margin-bottom:12px}
+  .milkbox.overdue{background:#fdeee7;border-color:#e9b8a3}
+  .milkstat{font-weight:700;font-size:15px;color:var(--bean,#2f5d43)}
+  .milkbox.overdue .milkstat{color:#b34a23}
+  .milksub{font-size:13px;color:var(--muted);margin-top:4px;line-height:1.45}
+  .milktoggle{margin-top:11px;width:100%;padding:12px;border-radius:11px;border:1px solid var(--line);background:var(--paper);font:inherit;font-weight:700;cursor:pointer;color:var(--bean,#2f5d43);touch-action:manipulation}
+  .milktoggle.on{background:var(--lime);border-color:var(--lime-deep);color:var(--black)}
+  .milkmark{display:inline-block;margin-top:5px;font-size:11.5px;font-weight:700;color:var(--moss);background:var(--mint,#e7f3ec);border:1px solid #bfe0cf;border-radius:8px;padding:2px 8px}
+  .pastday{opacity:.82}
+  .empty{text-align:center;color:var(--muted);padding:26px 10px;font-size:14px}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px}
+  .link{color:var(--lime-deep);font-weight:600;background:none;border:none;font:inherit;cursor:pointer;padding:0}
+  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);opacity:0;
+    background:var(--black);color:var(--grey);padding:12px 18px;border-radius:12px;font-size:14px;
+    box-shadow:0 8px 30px #19140c44;transition:.25s;z-index:50;max-width:90%;pointer-events:none}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  #toast.err{border:1px solid var(--rust)}
+  .center{display:grid;place-items:center;min-height:50vh;color:var(--muted);gap:12px}
+  .spin{width:30px;height:30px;border:3px solid var(--line);border-top-color:var(--lime-deep);border-radius:50%;animation:sp 1s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .mgr-row{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
+  .mgr-row:last-child{border-bottom:none}
+  .mgr-row .grow{flex:1}.mgr-row small{color:var(--muted)}
+  .badge{font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;padding:2px 8px;border-radius:999px;white-space:nowrap}
+  .b-overlap{background:#cfe9d6;color:#236340}
+  .b-unique{background:#f6e6bf;color:#86570c}
+  .b-model{background:#c8e7df;color:#196458}
+  .sec{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:20px 0 8px}
+  .sec h3{font-family:'Fraunces',serif;font-weight:600;font-size:16px;margin:0;color:var(--black)}
+  .citem{padding:11px 0;border-bottom:1px solid var(--line)}
+  .citem:last-child{border-bottom:none}
+  .citem .crow{display:flex;gap:11px;align-items:flex-start}
+  .citem input[type=checkbox]{width:22px;height:22px;margin-top:1px;flex:none;accent-color:var(--lime-deep);cursor:pointer}
+  .citem .lab{flex:1}
+  .citem .lab .nm{font-weight:600}
+  .citem .lab .sub2{font-size:12px;color:var(--muted);margin-top:2px}
+  .req{color:var(--lime-deep);font-size:10px;font-weight:700;text-transform:uppercase;margin-left:6px}
+  .det{font-size:13px;color:var(--ink2);margin:8px 0 0 33px;background:#eef5ee;border:1px solid #d9e7da;border-radius:10px;padding:8px 11px;display:none}
+  .det.open{display:block}
+  .det ul{margin:0;padding-left:16px}
+  .citem .acts{margin:8px 0 0 33px;display:flex;gap:16px;flex-wrap:wrap}
+  .citem textarea{margin:8px 0 0 33px;width:calc(100% - 33px);min-height:46px}
+  .citem.flagged{background:#fcf3e0;border-radius:10px;margin:0 -8px;padding:11px 8px}
+  .sku-ref{font-size:11px;color:var(--lime-deep);font-weight:600;margin-top:3px}
+  .prog{height:8px;border-radius:999px;background:var(--line);overflow:hidden;margin:6px 0 0}
+  .prog > i{display:block;height:100%;background:var(--lime)}
+  .kpi{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:8px}
+  .kpi .b{flex:1;min-width:90px;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:11px;text-align:center;box-shadow:var(--shadow)}
+  .kpi .b .n{font-family:'Fraunces',serif;font-size:22px;font-weight:600}
+  .kpi .b .l{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-top:4px}
+  .mgrhd{font-family:'Fraunces',serif;font-size:15px;margin:16px 2px 7px;color:var(--moss)}
+  .mgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:4px}
+  .mtile{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:15px 8px;text-align:center;box-shadow:var(--shadow);cursor:pointer;font:inherit;transition:transform .08s,border-color .12s}
+  .mtile:active{transform:scale(.97);border-color:var(--lime)}
+  .mtile .i{font-size:22px}
+  .mtile .t{font-size:13px;margin-top:7px;font-weight:600;letter-spacing:.1px;line-height:1.22}
+  .alertcard{border-left:5px solid var(--lime-deep);background:#f3f8f1}
+  .alertcard.warn{border-left-color:var(--rust);background:#fbf2ee}
+  .schfilt{display:flex;gap:7px;flex-wrap:wrap;margin:2px 0 10px}
+  .chip{background:var(--paper);border:1px solid var(--line);border-radius:999px;padding:6px 13px;font:inherit;font-size:13px;cursor:pointer}
+  .chip.on{background:var(--black);color:var(--paper);border-color:var(--black)}
+  .schday{padding:11px 13px}
+  .schdate{font-family:'Fraunces',serif;font-size:14px;margin-bottom:4px;color:var(--moss)}
+  .schrow{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+  .schrow:first-of-type{border-top:none}
+  .schrow.cover{background:#fbf0ea;margin:0 -13px;padding:9px 13px;border-radius:8px;border-top:none;box-shadow:inset 4px 0 0 var(--rust)}
+  .schrow.cover small{color:var(--rust);font-weight:600}
+  .schrow .grow{flex:1}
+  .schmonth{display:block;width:100%;text-align:left;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin:8px 0 4px;font:inherit;font-weight:600;cursor:pointer;color:var(--moss)}
+  .schmonth.on{background:transparent;border-style:dashed}
+  /* category section headers for grouped stock lists */
+  .cathd{display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--moss);margin:18px 0 2px;padding-bottom:7px;border-bottom:1px solid var(--line)}
+  .cathd:first-child{margin-top:4px}
+  .cathd .cati{font-size:14px;line-height:1}
+  .cathd .catt{flex:0 1 auto}
+  .catn{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:11px;letter-spacing:0;color:var(--muted)}
+  .catchev{font-size:11px;color:var(--muted);margin-left:9px}
+  .cathd.collapsed{opacity:.72}
+  .stickybar{position:sticky;bottom:0;z-index:12;margin:14px -16px 0;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(to top,var(--paper) 72%,rgba(251,248,241,0));border-top:1px solid var(--line)}
+  .stickybar .btn{margin-top:0}
+  .stickybtns{display:flex;gap:10px}
+  .stickybtns .btn{margin-top:0;width:auto}
+  .stickybtns .ghost{flex:0 0 auto}
+  .stickybtns .btn:not(.ghost){flex:1}
+  .svcprlbl{font-size:12px;color:var(--muted);text-align:center;margin:0 0 6px}
+  .svcsaved{font-size:11.5px;color:var(--moss);text-align:center;margin:0 0 9px;min-height:13px}
+  .cardtoglabel{cursor:pointer;user-select:none}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <button id="backBtn" style="display:none">‹ Back</button>
+    <div class="brand"><span class="dot"></span><span id="brandText">Robo Café</span></div>
+    <button id="homeBtn" onclick="go('home')" style="display:none">Switch role</button>
+  </header>
+  <main id="main"><div class="center"><div class="spin"></div><div>Loading…</div></div></main>
+</div>
+<div id="toast"></div>
+
+<script>
+
+
+function call(fn){
+  var args = Array.prototype.slice.call(arguments,1);
+  return new Promise(function(res,rej){
+    google.script.run.withSuccessHandler(res).withFailureHandler(rej)[fn].apply(google.script.run,args);
+  });
+}
+var APP={ boot:null, role:null, mgrTab:'dash' };
+var FLAG={ loc:'', sel:{} };
+var _svcActive=false,_svcDirty=false,_svcSaving=false,_svcTimer=null;
+var M=document.getElementById('main');
+
+function toast(msg,err){var t=document.getElementById('toast');t.textContent=msg;t.className='show'+(err?' err':'');setTimeout(function(){t.className=err?'err':'';},2600);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function el(html){var d=document.createElement('div');d.innerHTML=html.trim();
+  if(d.children.length===1) return d.firstElementChild;
+  var w=document.createElement('div'); while(d.firstChild) w.appendChild(d.firstChild); return w;}
+function loading(msg){M.innerHTML='<div class="center"><div class="spin"></div><div>'+(msg||'Working…')+'</div></div>';}
+function val(id){var e=document.getElementById(id);return e?e.value:'';}
+function totalVol(qty,note){
+  if(note==null) return '';
+  var m=String(note).trim().match(/^([\d.]+)\s*(.+)$/);
+  if(!m) return '';
+  var per=parseFloat(m[1]); var unit=m[2].trim();
+  if(isNaN(per)) return '';
+  var total=qty*per;
+  if(/^ml$/i.test(unit) && total>=1000){ total=total/1000; unit='L'; }
+  else if(/^g$/i.test(unit) && total>=1000){ total=total/1000; unit='kg'; }
+  total=Math.round(total*100)/100;
+  return total+' '+unit;
+}
+function setHeaderBack(target){var b=document.getElementById('backBtn'); if(!b)return; b.style.display=''; b.onclick=function(){go(target);};}
+function clearHeaderBack(){var b=document.getElementById('backBtn'); if(b){ b.style.display='none'; b.onclick=null; }}
+function backBtn(target){ setHeaderBack(target); return document.createTextNode(''); }
+/* ----- stock categorisation: groups the long item list into scannable sections.
+   Keyword-based with an "Other" fallback, so it keeps working even if item names change.
+   (In the live app you could instead store a real category field on each SKU.) ----- */
+var STOCK_CATS=[
+  {k:'liquid',  t:'Liquids',           i:'🥛'},
+  {k:'powder',  t:'Powders',           i:'🥄'},
+  {k:'beans',   t:'Coffee & beans',    i:'☕'},
+  {k:'cleaning',t:'Cleaning supplies', i:'🧼'},
+  {k:'supplies',t:'Cups, lids & bags', i:'🥤'},
+  {k:'other',   t:'Other items',       i:'📦'}
+];
+function itemCategory(name){
+  var n=String(name||'').toLowerCase();
+  if(/clean|everclean|rinza|sanit|descal|\bballs?\b|solution/.test(n)) return 'cleaning';
+  if(/\bcup|\blid|\bstraws?\b|napkin|sleeve|\bbags?\b/.test(n)) return 'supplies';
+  if(/milk|syrup|concentrate|juice|\btea\b|\bwater\b/.test(n)) return 'liquid';
+  if(/powder|matcha|chocolate|cocoa|sugar/.test(n)) return 'powder';
+  if(/bean|espresso|coffee/.test(n)) return 'beans';
+  return 'other';
+}
+function groupByCat(list){ var g={}; (list||[]).forEach(function(it){ var c=itemCategory(it.name); (g[c]=g[c]||[]).push(it); }); return g; }
+function catHeader(cat,count){ return el('<div class="cathd"><span class="cati">'+cat.i+'</span><span class="catt">'+esc(cat.t)+'</span><span class="catn">'+count+'</span><span class="catchev">\u25be</span></div>'); }
+/* ----- tiny localStorage helpers (only touch our own rc_* keys) ----- */
+function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+function catCollapseState(){ try{ return JSON.parse(lsGet('rc_collapse')||'{}'); }catch(e){ return {}; } }
+function saveCatCollapse(st){ lsSet('rc_collapse', JSON.stringify(st)); }
+/* wire a category header to show/hide its rows, remembering the choice */
+function wireCatToggle(hd,grp,key){
+  var st=catCollapseState(), collapsed=!!st[key];
+  function apply(){ grp.style.display=collapsed?'none':''; var ch=hd.querySelector('.catchev'); if(ch) ch.textContent=collapsed?'\u25b8':'\u25be'; hd.classList.toggle('collapsed',collapsed); }
+  apply(); hd.style.cursor='pointer';
+  hd.onclick=function(){ collapsed=!collapsed; st[key]=collapsed; saveCatCollapse(st); apply(); };
+}
+/* a collapsible dashboard card: returns {card, body} */
+function collapsibleCard(titleHtml,key,opts){ opts=opts||{};
+  var card=el('<div class="card '+(opts.cls||'')+'"></div>');
+  var hd=el('<button class="cardtog"><span class="ctitle">'+titleHtml+'</span>'+(opts.count!=null?'<span class="catn">'+opts.count+'</span>':'')+'<span class="catchev">\u25be</span></button>');
+  var bd=el('<div class="cardbody"></div>');
+  card.appendChild(hd); card.appendChild(bd);
+  var st=catCollapseState();
+  var open = (key in st) ? !st[key] : (opts.open!==false);
+  function apply(){ bd.style.display=open?'':'none'; hd.querySelector('.catchev').textContent=open?'\u25be':'\u25b8'; }
+  apply();
+  hd.onclick=function(){ open=!open; st[key]=!open; saveCatCollapse(st); apply(); };
+  return {card:card, body:bd};
+}
+/* convert an already-built .card (label + rows) into a collapsible one */
+function makeCardCollapsible(card,key,defOpen){
+  var label=card.querySelector('label'); if(!label) return card;
+  var bd=el('<div class="cardbody"></div>');
+  while(label.nextSibling) bd.appendChild(label.nextSibling);
+  card.appendChild(bd);
+  label.classList.add('cardtoglabel');
+  var chev=el('<span class="catchev" style="float:right">▾</span>'); label.appendChild(chev);
+  var st=catCollapseState();
+  var open=(key in st)?!st[key]:(defOpen!==false);
+  function apply(){ bd.style.display=open?'':'none'; chev.textContent=open?'▾':'▸'; }
+  apply();
+  label.onclick=function(){ open=!open; st[key]=!open; saveCatCollapse(st); apply(); };
+  return card;
+}
+
+call('getBootstrap').then(function(b){
+  APP.boot=b;
+  document.getElementById('brandText').textContent=b.appTitle.replace(' Inventory','');
+  go('home');
+}).catch(function(e){
+  M.innerHTML='<div class="center"><div>⚠️ Could not load.</div><div style="font-size:12px">'+esc(e.message||e)+'</div></div>';
+});
+
+function go(screen){
+  if(_svcActive){ svcAutosaveNow(false); _svcActive=false; }
+  clearHeaderBack();
+  document.getElementById('homeBtn').style.display = screen==='home' ? 'none' : 'block';
+  window.scrollTo(0,0);
+  ({home:screenHome,pin:screenPin,changePin:screenChangePin,techHome:screenTechHome,withdraw:screenWithdraw,flag:screenFlag,
+    warehouse:screenWarehouse,service:screenServiceLanding,serviceChecklist:screenServiceChecklist,
+    serviceHistory:screenServiceHistory,serviceDetail:screenServiceDetail,
+    mgr:screenManager,schedule:screenScheduleTech,charge:screenCharge}[screen])();
+}
+
+// ---------- HOME / IDENTITY ----------
+var LOGIN=null;
+function screenHome(){
+  APP.role=null; APP.me=null; LOGIN=null;
+  M.innerHTML='';
+  M.appendChild(el('<div><h2>Who are you?</h2><p class="sub">Tap your name to sign in with your PIN.</p></div>'));
+  var wrap=el('<div></div>'); M.appendChild(wrap);
+  wrap.innerHTML='<div class="center"><div class="spin"></div></div>';
+  call('getMembers').then(function(list){
+    wrap.innerHTML='';
+    if(!list.length){ wrap.innerHTML='<div class="empty">No members yet. A manager can add people in Settings.</div>'; return; }
+    var lastP=lsGet('rc_lastPerson');
+    if(lastP) list.sort(function(a,b){ return (b.name===lastP?1:0)-(a.name===lastP?1:0); });
+    list.forEach(function(p){
+      var b=el('<button class="tap"><div class="ico">'+(p.role==='manager'?'📋':'🔧')+'</div>'+
+        '<div><div class="ttl">'+esc(p.name)+'</div><div class="dsc">'+(p.role==='manager'?'Manager':'Service technician')+(p.hasPin?'':' · set up a PIN')+(p.name===lastP?' · last signed in':'')+'</div></div><div class="chev">›</div></button>');
+      b.onclick=function(){ LOGIN={name:p.name, role:p.role, hasPin:p.hasPin}; go('pin'); };
+      wrap.appendChild(b);
+    });
+  }).catch(function(e){ wrap.innerHTML='<div class="empty">'+esc(e.message||e)+'</div>'; });
+}
+function pinInput(id,ph){ return '<input id="'+id+'" type="tel" inputmode="numeric" maxlength="4" pattern="[0-9]*" placeholder="'+(ph||'••••')+'" style="letter-spacing:10px;font-size:22px;text-align:center">'; }
+function screenPin(){
+  if(!LOGIN){ go('home'); return; }
+  M.innerHTML=''; M.appendChild(backBtn('home'));
+  var creating=!LOGIN.hasPin;
+  M.appendChild(el('<div><h2>'+esc(LOGIN.name)+'</h2><p class="sub">'+(creating?'Create a 4-digit PIN — you\'ll use it each time you open the app.':'Enter your 4-digit PIN.')+'</p></div>'));
+  var c=el('<div class="card"></div>');
+  c.appendChild(el('<label style="margin-top:0">'+(creating?'New PIN':'PIN')+'</label>'+pinInput('pin1')));
+  if(creating) c.appendChild(el('<label>Confirm PIN</label>'+pinInput('pin2')));
+  var btn=el('<button class="btn">'+(creating?'Create PIN & continue':'Continue')+'</button>'); c.appendChild(btn);
+  M.appendChild(c);
+  function proceed(role){ APP.me={name:LOGIN.name, role:role}; APP.role=role; lsSet('rc_lastPerson',APP.me.name); var r=role; LOGIN=null; go(r==='manager'?'mgr':'techHome'); }
+  btn.onclick=function(){
+    var p1=val('pin1');
+    if(!/^\d{4}$/.test(p1)) return toast('Enter a 4-digit PIN',true);
+    if(creating){
+      if(val('pin2')!==p1) return toast('PINs don\'t match',true);
+      loading('Saving…');
+      call('setPin',LOGIN.name,p1).then(function(r){ toast('PIN set ✓'); proceed(r.role||LOGIN.role); }).catch(function(e){ toast(e.message||e,true); screenPin(); });
+    } else {
+      loading('Checking…');
+      call('verifyIdentity',LOGIN.name,p1).then(function(r){
+        if(r.needsPin){ LOGIN.hasPin=false; toast('Let\'s set up a PIN'); screenPin(); return; }
+        if(r.ok){ proceed(r.role); } else { toast('Incorrect PIN',true); screenPin(); }
+      }).catch(function(e){ toast(e.message||e,true); screenPin(); });
+    }
+  };
+}
+function screenChangePin(){
+  if(!APP.me){ go('home'); return; }
+  var backTo=APP.me.role==='manager'?'mgr':'techHome';
+  M.innerHTML=''; M.appendChild(backBtn(backTo));
+  M.appendChild(el('<div><h2>Change PIN</h2><p class="sub">Signed in as '+esc(APP.me.name)+'.</p></div>'));
+  var c=el('<div class="card"></div>');
+  c.appendChild(el('<label style="margin-top:0">Current PIN</label>'+pinInput('cpOld')));
+  c.appendChild(el('<label>New PIN</label>'+pinInput('cpNew')));
+  c.appendChild(el('<label>Confirm new PIN</label>'+pinInput('cpNew2')));
+  var btn=el('<button class="btn">Save new PIN</button>'); c.appendChild(btn); M.appendChild(c);
+  btn.onclick=function(){
+    var oldP=val('cpOld'), newP=val('cpNew'), newP2=val('cpNew2');
+    if(!/^\d{4}$/.test(newP)) return toast('New PIN must be 4 digits',true);
+    if(newP!==newP2) return toast('New PINs don\'t match',true);
+    loading('Saving…');
+    call('changePin',APP.me.name,oldP,newP).then(function(){ toast('PIN changed ✓'); go(backTo); }).catch(function(e){ toast(e.message||e,true); screenChangePin(); });
+  };
+}
+function enterTech(){ if(!APP.me)APP.me={name:'Peter',role:'technician'}; APP.role='technician'; go('techHome'); }
+function enterMgr(){ if(!APP.me)APP.me={name:'Michael',role:'manager'}; APP.role='manager'; go('mgr'); }
+
+// ---------- TECHNICIAN DASHBOARD ----------
+function mapLocToKiosk(loc){
+  var s=(loc||'').toLowerCase();
+  if(/u of t|uoft|u\.? of t|toronto|sid/.test(s)) return 'uoft';
+  if(/sinai/.test(s)) return 'sinai';
+  if(/rbc|amphi|bud/.test(s)) return 'bud';
+  return null;
+}
+function nextServiceDateLabel(kioskId){
+  if(!kioskId) return '';
+  var d=new Date(); d.setHours(0,0,0,0);
+  for(var i=0;i<160;i++){ var iso=isoDateLocal(d); if(isServiceDay(kioskId,d,iso)) return d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}); d.setDate(d.getDate()+1); }
+  return '';
+}
+function renderPickup(container){
+  call('getPickupList').then(function(list){
+    container.innerHTML='';
+    if(!list || !list.length) return;
+    var byLoc={}; list.forEach(function(x){ (byLoc[x.locationName]=byLoc[x.locationName]||[]).push(x); });
+    var anyAvail=list.some(function(x){return x.available;});
+    var card=el('<div class="card alertcard"><label style="margin-top:0">🧺 Pick up from the warehouse</label>'+
+      '<div class="hint" style="margin-top:0">Flagged low/out at a kiosk and in stock at the warehouse — grab these on your way to the next visit.</div></div>');
+    Object.keys(byLoc).sort().forEach(function(loc){
+      var items=byLoc[loc];
+      var kioskId=mapLocToKiosk(loc);
+      var nd=nextServiceDateLabel(kioskId);
+      card.appendChild(el('<div style="margin-top:12px;display:flex;justify-content:space-between;align-items:baseline"><b>'+esc(loc)+'</b>'+
+        (nd?'<span class="badge b-overlap">next: '+esc(nd)+'</span>':'')+'</div>'));
+      items.filter(function(x){return x.available;}).forEach(function(x){
+        card.appendChild(el('<div class="hrow"><div class="grow"><div><b>'+esc(x.skuName)+'</b> <span class="pill s-'+(x.status==='out'?'OUT':'REORDER')+'">'+(x.status==='out'?'OUT':'LOW')+'</span></div>'+
+          '<small>warehouse has '+esc(String(x.warehouseQty))+'</small></div></div>'));
+      });
+      var na=items.filter(function(x){return !x.available;});
+      na.forEach(function(x){
+        card.appendChild(el('<div class="hrow"><div class="grow"><div>'+esc(x.skuName)+' <span class="badge b-unique">not in warehouse</span></div>'+
+          '<small>flagged '+(x.status==='out'?'out':'low')+' — none in stock to pick up</small></div></div>'));
+      });
+    });
+    container.appendChild(card);
+  }).catch(function(){ container.innerHTML=''; });
+}
+function screenTechHome(){
+  M.innerHTML='';
+  M.appendChild(el('<div><h2>'+esc((APP.me&&APP.me.name)||'Technician')+'</h2><p class="sub">What would you like to do?</p></div>'));
+  var pickup=el('<div></div>'); M.appendChild(pickup); renderPickup(pickup);
+  M.appendChild(el('<button class="tap" onclick="go(\'withdraw\')"><div class="ico">📦</div>'+
+    '<div><div class="ttl">Take from warehouse</div><div class="dsc">Log what you\'re pulling out</div></div><div class="chev">›</div></button>'));
+  M.appendChild(el('<button class="tap" onclick="go(\'flag\')"><div class="ico">⚠️</div>'+
+    '<div><div class="ttl">Report kiosk stock</div><div class="dsc">Flag what\'s low or out at a location</div></div><div class="chev">›</div></button>'));
+  M.appendChild(el('<button class="tap" onclick="go(\'warehouse\')"><div class="ico">🗄️</div>'+
+    '<div><div class="ttl">View warehouse stock</div><div class="dsc">See live warehouse counts</div></div><div class="chev">›</div></button>'));
+  M.appendChild(el('<button class="tap" onclick="go(\'service\')"><div class="ico">🧰</div>'+
+    '<div><div class="ttl">Service a kiosk</div><div class="dsc">Run the servicing checklist</div></div><div class="chev">›</div></button>'));
+  M.appendChild(el('<button class="tap" onclick="go(\'schedule\')"><div class="ico">📅</div>'+
+    '<div><div class="ttl">Master schedule</div><div class="dsc">See who services what, request or pick up coverage</div></div><div class="chev">›</div></button>'));
+  M.appendChild(el('<button class="tap" onclick="go(\'charge\')"><div class="ico">🧾</div>'+
+    '<div><div class="ttl">Log a charge</div><div class="dsc">Reimbursement for a purchase, or non-servicing time</div></div><div class="chev">›</div></button>'));
+  var cp=el('<button class="link" style="margin-top:14px">Change my PIN</button>'); cp.onclick=function(){ go('changePin'); }; M.appendChild(cp);
+  if(APP.me && APP.me.role==='manager'){ var bm=el('<button class="btn ghost" style="margin-top:12px">‹ Back to manager view</button>'); bm.onclick=function(){ go('mgr'); }; M.appendChild(bm); }
+}
+
+// ---------- shared option builders ----------
+function nameOptions(){return APP.boot.people.map(function(p){return '<option value="'+esc(p.name)+'">'+esc(p.name)+(p.role==='manager'?' (mgr)':'')+'</option>';}).join('');}
+function skuOptions(){return APP.boot.skus.map(function(s){
+  var v=s.baseUnitNote?(' ('+esc(s.baseUnitNote)+')'):'';
+  return '<option value="'+s.id+'">'+esc(s.name)+' — '+esc(s.baseUnit)+v+'</option>';}).join('');}
+
+// ---------- WITHDRAW ----------
+function screenWithdraw(){
+  M.innerHTML='';
+  M.appendChild(backBtn('techHome'));
+  M.appendChild(el('<div><h2>Take from warehouse</h2><p class="sub">Volumes are shown in brackets — if you take a 15 lb bucket of beans, log 3 bags.</p></div>'));
+  var c=el('<div class="card"></div>');
+  c.appendChild(el('<div class="hint" style="margin-top:0">Signed in as <b>'+esc(APP.me.name)+'</b></div>'));
+  c.appendChild(el('<label>Items taken</label><div id="wItems"></div>'));
+  c.appendChild(el('<button class="link" onclick="addWLine()">+ add another item</button>'));
+  c.appendChild(el('<label>Note (optional)</label><input id="wNote" placeholder="e.g. weekly run">'));
+  var btn=el('<button class="btn">Log withdrawal</button>'); btn.onclick=submitWithdraw; c.appendChild(btn);
+  M.appendChild(c);
+  addWLine();
+}
+function addWLine(){
+  var box=document.getElementById('wItems');
+  var row=el('<div class="line-item"><select class="wsku">'+skuOptions()+'</select>'+
+    '<input class="wqty num" type="number" min="0" step="0.5" placeholder="qty" style="max-width:90px">'+
+    '<button class="x">×</button></div>');
+  row.querySelector('.x').onclick=function(){ if(box.children.length>1) box.removeChild(row); };
+  box.appendChild(row);
+}
+function submitWithdraw(){
+  var items=[];
+  document.querySelectorAll('#wItems .line-item').forEach(function(r){
+    var id=r.querySelector('.wsku').value, q=parseFloat(r.querySelector('.wqty').value);
+    if(id && q>0) items.push({skuId:id,qty:q});
+  });
+  if(!items.length) return toast('Enter at least one item & quantity',true);
+  var wnote=val('wNote');
+  loading('Saving…');
+  call('recordWithdrawal',{items:items,byName:APP.me.name,byRole:APP.me.role,note:wnote})
+    .then(function(){ toast('Logged ✓'); go('techHome'); })
+    .catch(function(e){ toast(e.message||e,true); screenWithdraw(); });
+}
+
+// ---------- WAREHOUSE VIEW (technician, read-only) ----------
+function screenWarehouse(){
+  M.innerHTML='';
+  M.appendChild(backBtn('techHome'));
+  M.appendChild(el('<div><h2>Warehouse stock</h2><p class="sub">Live counts — view only.</p></div>'));
+  var card=el('<div class="card"><div class="inv"></div></div>');
+  var inv=card.querySelector('.inv'); inv.innerHTML='<div class="center"><div class="spin"></div></div>';
+  M.appendChild(card);
+  call('getInventory').then(function(list){
+    inv.innerHTML='';
+    var o={OUT:0,REORDER:1,LOW:2,OK:3};
+    function renderItem(i){
+      var st=i.status==='LOW'?'REORDER':i.status;
+      var vol=totalVol(i.qty,i.baseUnitNote);
+      return el('<div class="item"><div class="top"><div><div class="nm">'+esc(i.name)+'</div>'+
+        '<span class="pill s-'+st+'">'+st+'</span></div>'+
+        '<div class="qty num">'+i.qty+' <span class="u">'+esc(i.baseUnit)+'</span>'+(vol?' <span class="u">('+esc(vol)+')</span>':'')+'</div></div></div>');
+    }
+    var groups=groupByCat(list);
+    STOCK_CATS.forEach(function(cat){
+      var items=groups[cat.k]; if(!items||!items.length) return;
+      items.sort(function(a,b){return (o[a.status]-o[b.status])||a.name.localeCompare(b.name);});
+      var hd=catHeader(cat,items.length);
+      var grp=el('<div class="catgrp"></div>');
+      items.forEach(function(i){ grp.appendChild(renderItem(i)); });
+      wireCatToggle(hd,grp,'wh_'+cat.k);
+      inv.appendChild(hd); inv.appendChild(grp);
+    });
+  }).catch(function(e){inv.innerHTML='<div class="empty">'+esc(e.message||e)+'</div>';});
+}
+
+// ---------- KIOSK REPORT ----------
+function screenFlag(){
+  M.innerHTML='';
+  M.appendChild(backBtn('techHome'));
+  M.appendChild(el('<div><h2>Report kiosk stock</h2><p class="sub">"Low" = under ~3 days left. Items are grouped by type; most-flagged rise within each group.</p></div>'));
+  var c=el('<div class="card"></div>');
+  c.appendChild(el('<div class="hint" style="margin-top:0">Signed in as <b>'+esc(APP.me.name)+'</b></div>'));
+  var locs=APP.boot.locations.map(function(l){return '<option value="'+l.id+'">'+esc(l.name)+'</option>';}).join('');
+  c.appendChild(el('<label>Location</label><select id="fLoc">'+locs+'</select>'));
+  var topBtn=el('<button class="btn" id="flagSubmitTop" style="margin-top:14px">Submit report</button>'); topBtn.onclick=submitFlags; c.appendChild(topBtn);
+  c.appendChild(el('<div id="fBoard"></div>'));
+  M.appendChild(c);
+  var locSel=document.getElementById('fLoc');
+  var lastLoc=lsGet('rc_lastLoc');
+  if(lastLoc && APP.boot.locations.some(function(l){return l.id===lastLoc;})) locSel.value=lastLoc;
+  if(!locSel.value && APP.boot.locations.length===0){ document.getElementById('fBoard').innerHTML='<div class="empty">No locations yet. A manager can add one.</div>'; return; }
+  FLAG.loc=locSel.value; FLAG.sel={};
+  locSel.onchange=function(){ FLAG.loc=locSel.value; lsSet('rc_lastLoc',FLAG.loc); FLAG.sel={}; loadBoard(); };
+  loadBoard();
+}
+function loadBoard(){
+  var board=document.getElementById('fBoard');
+  board.innerHTML='<div class="center"><div class="spin"></div></div>';
+  call('getKioskBoard',FLAG.loc).then(renderBoard).catch(function(e){board.innerHTML='<div class="empty">'+esc(e.message||e)+'</div>';});
+}
+function renderBoard(b){
+  b=b||{}; b.inUse=b.inUse||[]; b.notInUse=b.notInUse||[];
+  var board=document.getElementById('fBoard'); board.innerHTML='';
+  if(!b.inUse.length && !b.notInUse.length){ board.innerHTML='<div class="empty">No items.</div>'; return; }
+  (b.inUse||[]).forEach(function(it){ if((it.current==='low'||it.current==='out') && FLAG.sel[it.skuId]===undefined) FLAG.sel[it.skuId]=it.current; });
+  var groups=groupByCat(b.inUse);
+  STOCK_CATS.forEach(function(cat){
+    var items=groups[cat.k]; if(!items||!items.length) return;
+    var hd=catHeader(cat,items.length);
+    var grp=el('<div class="catgrp"></div>');
+    items.forEach(function(it){ grp.appendChild(kioskRow(it)); });
+    wireCatToggle(hd,grp,'flag_'+cat.k);
+    board.appendChild(hd); board.appendChild(grp);
+  });
+  var off=el('<div class="offzone"></div>');
+  off.appendChild(el('<div class="offhead">Not currently in use at this location</div>'));
+  if(!b.notInUse.length) off.appendChild(el('<div class="hint">Nothing here. Tap "Not in use here" on an item above to move it down.</div>'));
+  b.notInUse.forEach(function(it){
+    var r=el('<div class="offrow"><div>'+esc(it.name)+' <small style="color:var(--muted)">'+esc(it.baseUnitNote||it.baseUnit)+'</small></div><button class="link">Use again</button></div>');
+    r.querySelector('.link').onclick=function(){ setUse(it.skuId,true); };
+    off.appendChild(r);
+  });
+  board.appendChild(off);
+  var bar=el('<div class="stickybar"></div>');
+  var btn=el('<button class="btn" id="flagSubmit">Submit report</button>'); btn.onclick=submitFlags;
+  bar.appendChild(btn); board.appendChild(bar);
+  refreshFlagBar();
+}
+function kioskRow(it){
+  var sel=FLAG.sel[it.skuId]||'';
+  var r=el('<div class="krow" data-sku="'+it.skuId+'">'+
+    '<div class="main"><div class="info"><div>'+esc(it.name)+'</div><small>'+esc(it.baseUnitNote||it.baseUnit)+'</small></div>'+
+    '<div class="seg">'+
+      '<button class="none'+(sel===''?' on':'')+'" data-v="">OK</button>'+
+      '<button class="low'+(sel==='low'?' on':'')+'" data-v="low">Low</button>'+
+      '<button class="out'+(sel==='out'?' on':'')+'" data-v="out">Out</button>'+
+    '</div></div></div>');
+  var seg=r.querySelector('.seg');
+  seg.querySelectorAll('button').forEach(function(bn){
+    bn.onclick=function(){ seg.querySelectorAll('button').forEach(function(x){x.classList.remove('on');}); bn.classList.add('on'); FLAG.sel[it.skuId]=bn.getAttribute('data-v'); refreshFlagBar(); };
+  });
+  var off=el('<button class="offbtn">Not in use here</button>');
+  off.onclick=function(){ setUse(it.skuId,false); };
+  r.appendChild(off);
+  return r;
+}
+function refreshFlagBar(){
+  var n=Object.keys(FLAG.sel).filter(function(k){var v=FLAG.sel[k];return v==='low'||v==='out';}).length;
+  var label = n ? ('Submit report · '+n+' flagged') : 'Submit report · kiosk clean';
+  ['flagSubmit','flagSubmitTop'].forEach(function(id){ var b=document.getElementById(id); if(b) b.textContent=label; });
+}
+function setUse(skuId,inUse){
+  call('setLocationSkuInUse',FLAG.loc,skuId,inUse).then(loadBoard).catch(function(e){toast(e.message||e,true);});
+}
+function submitFlags(){
+  var items=[];
+  Object.keys(FLAG.sel).forEach(function(sku){ var v=FLAG.sel[sku]; if(v==='low'||v==='out') items.push({skuId:sku,status:v}); });
+  loading('Submitting…');
+  call('recordKioskFlags',{locationId:FLAG.loc,byName:APP.me.name,items:items,note:''})
+    .then(function(r){ r=r||{};
+      toast(items.length ? ('Report sent · '+items.length+' flagged ✓')
+                         : ((r.cleared||0) ? 'Kiosk marked clean — previous warnings cleared ✓' : 'Kiosk marked clean ✓'));
+      FLAG.sel={}; go('techHome'); })
+    .catch(function(e){ toast(e.message||e,true); screenFlag(); });
+}
+
+// ---------- MANAGER SHELL ----------
+function screenManager(){
+  M.innerHTML='';
+  M.appendChild(el('<div><h2>Manager</h2><p class="sub">Overview, inventory and servicing.</p></div>'));
+  var summaryWrap=el('<div></div>'); M.appendChild(summaryWrap);
+  summaryWrap.innerHTML='<div class="center" style="min-height:80px"><div class="spin"></div></div>';
+  // nav tiles (always visible, no horizontal scroll)
+  function tileGrid(items){
+    var g=el('<div class="mgrid"></div>');
+    items.forEach(function(it){
+      var b=el('<button class="mtile"><div class="i">'+it.i+'</div><div class="t">'+esc(it.t)+'</div></button>');
+      b.onclick=function(){ if(it.go) go(it.go); else mgrOpen(it.v); };
+      g.appendChild(b);
+    });
+    return g;
+  }
+  var nav=el('<div></div>');
+  nav.appendChild(el('<div class="mgrhd">Inventory</div>'));
+  nav.appendChild(tileGrid([
+    {i:'🗄️',t:'Warehouse stock',v:'stock'},{i:'📥',t:'Receive',v:'receive'},{i:'🔢',t:'Recount',v:'recount'},
+    {i:'🏷️',t:'Items',v:'items'},{i:'🏪',t:'Kiosks',v:'places'},{i:'🧾',t:'History',v:'history'}
+  ]));
+  nav.appendChild(el('<div class="mgrhd">Servicing</div>'));
+  nav.appendChild(tileGrid([
+    {i:'🧰',t:'Service status',v:'status'},{i:'📅',t:'Schedule',v:'schedule'},
+    {i:'⏱️',t:'Labour & reimbursements',v:'labour'},{i:'📋',t:'Reports',v:'service'},
+    {i:'🛠️',t:'Service a kiosk',go:'service'},{i:'🧑\u200d🔧',t:'Work as technician',go:'techHome'}
+  ]));
+  nav.appendChild(el('<div class="mgrhd">Settings</div>'));
+  nav.appendChild(tileGrid([{i:'⚙️',t:'Settings',v:'settings'}]));
+  M.appendChild(nav);
+
+  // four count tiles -> drill-down pages (no detail cards on the dashboard itself)
+  Promise.all([call('getDashboard'),call('getServiceFlags'),call('getScheduleOverrides')]).then(function(res){
+      var d=res[0]||{}, flags=res[1], ovr=res[2];
+      flags=flags||[]; ovr=ovr||[]; d.counts=d.counts||{out:0,reorder:0};
+      var today=isoDateLocal(new Date());
+      var coverage=(ovr||[]).filter(function(o){ return o.coverageRequested && !o.claimedBy && String(o.date)>=today; });
+      summaryWrap.innerHTML='';
+      var summary=el('<div class="summary"></div>');
+      function tile(n,label,color,kind){
+        var b=el('<button class="box"><div class="n" style="color:'+color+'">'+n+'</div><div class="l">'+label+'</div></button>');
+        b.onclick=function(){ mgrCount(kind); };
+        return b;
+      }
+      summary.appendChild(tile(d.counts.out,'Out','#13160f','out'));
+      summary.appendChild(tile(d.counts.reorder,'Reorder','var(--lime-deep)','reorder'));
+      summary.appendChild(tile(flags.length,'Service flags','#c9542c','flags'));
+      summary.appendChild(tile(coverage.length,'Coverage needed','var(--moss)','coverage'));
+      summaryWrap.appendChild(summary);
+  }).catch(function(e){ summaryWrap.innerHTML='<div class="empty">'+esc(e.message||e)+'</div>'; });
+}
+
+// Drill-down pages opened from the four dashboard count tiles.
+function mgrCount(kind){
+  var meta={ out:{t:'Out',s:'Items out of stock.'}, reorder:{t:'To reorder',s:'Items running low.'},
+    flags:{t:'Service flags',s:'Issues flagged during servicing.'}, coverage:{t:'Coverage needed',s:'Shifts that need someone.'} }[kind]||{t:'',s:''};
+  M.innerHTML=''; M.appendChild(backBtn('mgr'));
+  M.appendChild(el('<div><h2>'+esc(meta.t)+'</h2><p class="sub">'+esc(meta.s)+'</p></div>'));
+  var body=el('<div><div class="center"><div class="spin"></div></div></div>'); M.appendChild(body);
+
+  if(kind==='flags'){
+    call('getServiceFlags').then(function(flags){
+      flags=flags||[]; body.innerHTML='';
+      if(!flags.length){ body.appendChild(el('<div class="empty">No servicing issues flagged. 🎉</div>')); return; }
+      var card=el('<div class="card"></div>');
+      flags.forEach(function(f){
+        var r=el('<div class="flag"><div class="info"><div><b>'+esc(f.label)+'</b> · '+esc(f.location)+'</div>'+
+          '<small>'+esc(f.technician||'—')+(f.serviceDate?' · '+esc(f.serviceDate):'')+(f.note?' — '+esc(f.note):'')+'</small></div>'+
+          '<button class="link" style="margin-left:10px">Clear</button></div>');
+        r.querySelector('.link').onclick=function(){ call('clearServiceFlag',f.sessionId,f.itemId).then(function(){toast('Cleared ✓');mgrCount('flags');}).catch(function(e){toast(e.message||e,true);}); };
+        card.appendChild(r);
+      });
+      body.appendChild(card);
+    }).catch(function(e){ body.innerHTML='<div class="empty">'+esc(e.message||e)+'</div>'; });
+    return;
+  }
+
+  if(kind==='coverage'){
+    call('getScheduleOverrides').then(function(ovr){
+      ovr=ovr||[]; body.innerHTML='';
+      var today=isoDateLocal(new Date());
+      var cov=ovr.filter(function(o){ return o.coverageRequested && !o.claimedBy && String(o.date)>=today; })
+                 .sort(function(a,b){return String(a.date).localeCompare(String(b.date));});
+      if(!cov.length){ body.appendChild(el('<div class="empty">No coverage needed right now. ✅</div>')); }
+      else {
+        var card=el('<div class="card"></div>'); var me=(APP.me&&APP.me.name)||'';
+        cov.forEach(function(o){
+          var k=svcKiosk(o.kioskId)||{locationName:o.kioskId};
+          var dn=new Date(o.date+'T00:00:00').toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+          var r=el('<div class="flag"><div class="info"><div><b>'+esc(dn)+'</b> · '+esc(k.locationName)+'</div>'+
+            '<small>'+esc(o.requestedBy||'?')+' can\'t make it</small></div><button class="link">Pick up</button></div>');
+          r.querySelector('.link').onclick=function(){ if(!me) return toast('Sign in first',true); call('claimCoverage',{date:o.date,kioskId:o.kioskId,claimedBy:me}).then(function(){toast('You picked it up ✓');mgrCount('coverage');}).catch(function(e){toast(e.message||e,true);}); };
+          card.appendChild(r);
+        });
+        body.appendChild(card);
+      }
+      var open=el('<button class="btn ghost">Open the master schedule</button>'); open.onclick=function(){ mgrOpen('schedule'); };
+      body.appendChild(open);
+    }).catch(function(e){ body.innerHTML='<div class="empty">'+esc(e.message||e)+'</div>'; });
+    return;
+  }
+
+  // out / reorder: kiosk reports (resolvable) + warehouse levels
+  call('getDashboard').then(function(d){
+    d.inventory=d.inventory||[]; d.openFlags=d.openFlags||[]; body.innerHTML='';
+    var wantOut = kind==='out';
+    var reports=d.openFlags.filter(function(f){ return wantOut ? f.status==='out' : f.status==='low'; });
+    var whItems=d.inventory.filter(function(i){ return wantOut ? i.status==='OUT' : (i.status==='REORDER'||i.status==='LOW'); });
+    if(!reports.length && !whItems.length){ body.appendChild(el('<div class="empty">Nothing '+(wantOut?'out':'to reorder')+'. ✅</div>')); return; }
+    if(reports.length){
+      body.appendChild(el('<div class="mgrhd" style="margin-top:2px">Reported at kiosks</div>'));
+      var rc=el('<div class="card"></div>');
+      reports.forEach(function(f){
+        var r=el('<div class="flag"><div class="info"><div><b>'+esc(f.skuName)+'</b> · '+esc(f.locationName)+'</div>'+
+          '<small>'+esc(f.byName)+(f.note?' — '+esc(f.note):'')+'</small></div>'+
+          '<span class="pill s-'+(wantOut?'OUT':'REORDER')+'">'+(wantOut?'OUT':'LOW')+'</span>'+
+          '<button class="link" style="margin-left:10px">Clear</button></div>');
+        r.querySelector('.link').onclick=function(){ call('resolveFlag',f.id,'manager').then(function(){toast('Cleared ✓');mgrCount(kind);}).catch(function(e){toast(e.message||e,true);}); };
+        rc.appendChild(r);
+      });
+      body.appendChild(rc);
+    }
+    if(whItems.length){
+      body.appendChild(el('<div class="mgrhd">In the warehouse</div>'));
+      var wc=el('<div class="card"></div>');
+      whItems.forEach(function(i){
+        wc.appendChild(el('<div class="hrow"><div class="grow"><div><b>'+esc(i.name)+'</b> <span class="pill s-'+i.status+'">'+i.status+'</span></div></div>'+
+          '<div class="hwhen">'+i.qty+' '+esc(i.baseUnit)+'</div></div>'));
+      });
+      body.appendChild(wc);
+      var rcv=el('<button class="btn ghost">Receive stock</button>'); rcv.onclick=function(){ mgrOpen('receive'); };
+      body.appendChild(rcv);
+    }
+  }).catch(function(e){ body.innerHTML='<div class="empty">'+esc(e.message||e)+'</div>'; });
+}
+
+function mgrOpen(view){
+  M.innerHTML=''; M.appendChild(backBtn('mgr'));
+  var titles={stock:'Warehouse stock',receive:'Receive stock',recount:'Recount / seed',items:'Items',
+    places:'Kiosks',history:'History',service:'Servicing reports',status:'Service status',
+    schedule:'Master schedule',labour:'Labour & Reimbursements',settings:'Settings'};
+  M.appendChild(el('<div><h2>'+esc(titles[view]||'')+'</h2></div>'));
+  var body=el('<div id="mbody"></div>'); M.appendChild(body);
+  ({stock:mgrStock,receive:mgrReceive,recount:mgrRecount,items:mgrItems,places:mgrPlaces,history:mgrHistory,
+    service:mgrService,status:mgrServiceStatus,schedule:renderSchedule,labour:mgrLabour,settings:mgrSettings}[view])(body);
+}
+
+function mgrStock(body){
+  body.innerHTML='<div class="center"><div class="spin"></div></div>';
+  call('getDashboard').then(function(d){
+    body.innerHTML='';
+    var filter=null;
+    d.openFlags=d.openFlags||[]; d.inventory=d.inventory||[];
+    var flagged={}; d.openFlags.forEach(function(f){ flagged[f.skuName]=true; });
+
+    var summary=el('<div class="summary"></div>');
+    function tile(n,label,color,key){
+      var b=el('<button class="box" data-k="'+key+'"><div class="n" style="color:'+color+'">'+n+'</div><div class="l">'+label+'</div></button>');
+      b.onclick=function(){ setFilter(key); };
+      return b;
+    }
+    summary.appendChild(tile(d.counts.out,'Out','#13160f','out'));
+    summary.appendChild(tile(d.counts.reorder,'Reorder','var(--lime-deep)','reorder'));
+    summary.appendChild(tile(d.counts.flags,'Kiosk flags','var(--moss)','flags'));
+    body.appendChild(summary);
+
+    var card=el('<div class="card"><div class="invhead"><span class="lbl">Warehouse inventory</span></div><div class="inv"></div></div>');
+    body.appendChild(card);
+
+    function setFilter(key){ filter = (filter===key ? null : key); paint(); }
+    function paint(){
+      summary.querySelectorAll('.box').forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-k')===filter); });
+      var labels={out:'Out',reorder:'Reorder',flags:'Has kiosk flag'};
+      var head=card.querySelector('.invhead'); head.innerHTML='';
+      head.appendChild(el('<span class="lbl">Warehouse inventory'+(filter?' · '+labels[filter]:'')+'</span>'));
+      if(filter){ var cl=el('<button class="link">Clear filter</button>'); cl.onclick=function(){ filter=null; paint(); }; head.appendChild(cl); }
+      var inv=card.querySelector('.inv'); inv.innerHTML='';
+      var list=d.inventory.filter(function(i){
+        if(!filter) return true;
+        if(filter==='out') return i.status==='OUT';
+        if(filter==='reorder') return i.status==='REORDER'||i.status==='LOW';
+        if(filter==='flags') return !!flagged[i.name];
+        return true;
+      });
+      if(!list.length){ inv.appendChild(el('<div class="empty">Nothing matches this filter.</div>')); return; }
+      list.forEach(function(i){
+        var st=i.status==='LOW'?'REORDER':i.status;
+        var vol=totalVol(i.qty,i.baseUnitNote);
+        var meta=[];
+        meta.push(i.hasUsageData ? ('uses ~'+i.avgDaily+'/day') : 'no usage data yet');
+        if(i.daysLeft!=null) meta.push('~'+i.daysLeft+' days left');
+        meta.push('lead '+i.leadDays+'d');
+        meta.push('used 30d: '+i.withdraw30);
+        meta.push('received 30d: '+i.receive30+' ('+i.receiveCount30+'×)');
+        inv.appendChild(el('<div class="item"><div class="top"><div><div class="nm">'+esc(i.name)+'</div>'+
+          '<span class="pill s-'+st+'">'+st+'</span></div>'+
+          '<div class="qty num">'+i.qty+' <span class="u">'+esc(i.baseUnit)+'</span>'+(vol?' <span class="u">('+esc(vol)+')</span>':'')+'</div></div>'+
+          '<div class="meta">'+meta.map(function(m){return '<span>'+esc(m)+'</span>';}).join('')+'</div></div>'));
+      });
+    }
+    paint();
+  }).catch(function(e){body.innerHTML='<div class="empty">'+esc(e.message||e)+'</div>';});
+}
+
+function mgrHistory(body){
+  body.innerHTML='<div class="center"><div class="spin"></div></div>';
+  call('getHistory').then(function(list){
+    body.innerHTML='';
+    if(!list.length){ body.innerHTML='<div class="empty">No submissions yet.</div>'; return; }
+    var c=el('<div class="card"><label style="margin-top:0">Recent submissions</label><div class="feed"></div></div>');
+    var feed=c.querySelector('.feed');
+    list.forEach(function(e){ feed.appendChild(historyRow(e)); });
+    body.appendChild(c);
+  }).catch(function(e){body.innerHTML='<div class="empty">'+esc(e.message||e)+'</div>';});
+}
+function historyRow(e){
+  var w=e.when?new Date(e.when):null;
+  var t=w?(w.toLocaleDateString(undefined,{month:'short',day:'numeric'})+' '+w.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})):'';
+  var label;
+  if(e.kind==='tx'){
+    if(e.type==='withdraw') label='⬇︎ Took '+e.qty+' '+esc(e.unit)+' · '+esc(e.skuName);
+    else if(e.type==='receive') label='⬆︎ Received '+e.qty+' '+esc(e.unit)+' · '+esc(e.skuName);
+    else label='✎ Recount → '+e.qty+' · '+esc(e.skuName);
+  } else {
+    label=(e.type==='out'?'⛔ OUT':'⚠︎ LOW')+' · '+esc(e.skuName)+' @ '+esc(e.location);
+  }
+  return el('<div class="hrow"><div class="grow"><div>'+label+'</div><small>'+esc(e.by||'')+(e.note?' — '+esc(e.note):'')+'</small></div><div class="hwhen">'+t+'</div></div>');
+}
+
+function mgrReceive(body){
+  body.innerHTML='';
+  body.appendChild(el('<p class="sub" style="margin-top:0">Log a delivery that arrived at the warehouse. Stock goes up automatically.</p>'));
+  var c=el('<div class="card"></div>');
+  c.appendChild(el('<div class="hint" style="margin-top:0">Logged by <b>'+esc(APP.me.name)+'</b></div>'));
+  c.appendChild(el('<label>Item</label><select id="rSku">'+skuOptions()+'</select>'));
+  c.appendChild(el('<label>Unit received</label><select id="rUnit"></select>'));
+  c.appendChild(el('<div class="row"><div><label>How many</label><input id="rQty" class="num" type="number" min="0" step="1" placeholder="0"></div></div>'));
+  c.appendChild(el('<div class="hint" id="rHint"></div>'));
+  c.appendChild(el('<label>Note (optional)</label><input id="rNote" placeholder="PO #, supplier, etc.">'));
+  var btn=el('<button class="btn">Add to warehouse</button>'); c.appendChild(btn);
+  body.appendChild(c);
+  function refreshUnits(){
+    var s=APP.boot.skus.filter(function(x){return x.id===val('rSku');})[0];
+    document.getElementById('rUnit').innerHTML=s.options.map(function(o,idx){return '<option value="'+idx+'">'+esc(o.name)+' (×'+o.perBase+' '+esc(s.baseUnit)+')</option>';}).join('');
+    updateHint();
+  }
+  function updateHint(){
+    var s=APP.boot.skus.filter(function(x){return x.id===val('rSku');})[0];
+    var o=s.options[parseInt(val('rUnit')||0,10)]; var q=parseFloat(val('rQty'))||0;
+    document.getElementById('rHint').textContent= o ? ('= '+(q*o.perBase)+' '+s.baseUnit+' added · supplier '+(o.supplier||'—')+' · lead '+o.leadDays+'d') : '';
+  }
+  document.getElementById('rSku').onchange=refreshUnits;
+  document.getElementById('rUnit').onchange=updateHint;
+  document.getElementById('rQty').oninput=updateHint;
+  refreshUnits();
+  btn.onclick=function(){
+    var q=parseFloat(val('rQty'));
+    if(!(q>0)) return toast('Enter a quantity',true);
+    var rsku=val('rSku'), runit=parseInt(val('rUnit'),10), rnote=val('rNote');
+    loading('Saving…');
+    call('recordReceipt',{skuId:rsku,optionIndex:runit,qty:q,byName:APP.me.name,note:rnote})
+      .then(function(){toast('Added ✓');mgrOpen('receive');})
+      .catch(function(e){toast(e.message||e,true);mgrOpen('receive');});
+  };
+}
+
+function mgrRecount(body){
+  body.innerHTML='<div class="center"><div class="spin"></div></div>';
+  call('getInventory').then(function(inv){
+    body.innerHTML='';
+    body.appendChild(el('<p class="sub" style="margin-top:0">Set an item to its true counted quantity (base units). Use this to seed your starting numbers or fix drift.</p>'));
+    var c=el('<div class="card"></div>');
+    c.appendChild(el('<div class="hint" style="margin-top:0">Counted by <b>'+esc(APP.me.name)+'</b></div>'));
+    var opts=inv.map(function(i){return '<option value="'+i.id+'" data-qty="'+i.qty+'" data-u="'+esc(i.baseUnit)+'" data-note="'+esc(i.baseUnitNote||'')+'">'+esc(i.name)+'</option>';}).join('');
+    c.appendChild(el('<label>Item</label><select id="aSku">'+opts+'</select>'));
+    c.appendChild(el('<div class="row"><div><label>System now</label><input id="aCur" class="num" disabled></div>'+
+      '<div><label>True count</label><input id="aNew" class="num" type="number" min="0" step="1"></div></div>'));
+    c.appendChild(el('<label>Note (optional)</label><input id="aNote" placeholder="e.g. monthly count">'));
+    var btn=el('<button class="btn dark">Save count</button>'); c.appendChild(btn);
+    body.appendChild(c);
+    function sync(){var o=document.getElementById('aSku').selectedOptions[0];var q=parseFloat(o.getAttribute('data-qty'))||0;var vol=totalVol(q,o.getAttribute('data-note'));document.getElementById('aCur').value=q+' '+o.getAttribute('data-u')+(vol?' ('+vol+')':'');}
+    document.getElementById('aSku').onchange=sync; sync();
+    btn.onclick=function(){
+      var n=parseFloat(val('aNew'));
+      if(isNaN(n)||n<0) return toast('Enter the counted quantity',true);
+      var asku=val('aSku'), anote=val('aNote');
+      loading('Saving…');
+      call('recordAdjustment',{skuId:asku,newQty:n,byName:APP.me.name,note:anote})
+        .then(function(r){toast('Set to '+r.to+' ✓');mgrOpen('recount');})
+        .catch(function(e){toast(e.message||e,true);mgrOpen('recount');});
+    };
+  }).catch(function(e){body.innerHTML='<div class="empty">'+esc(e.message||e)+'</div>';});
+}
+
+function mgrItems(body){
+  body.innerHTML='<div class="center"><div class="spin"></div></div>';
+  call('getAllSkusForManager').then(function(list){
+    body.innerHTML='';
+    var addBtn=el('<button class="btn ghost" style="margin:0 0 14px">+ Add new item</button>');
+    addBtn.onclick=function(){itemForm(body,null);}; body.appendChild(addBtn);
+    var c=el('<div class="card"><label style="margin-top:0">All items</label></div>');
+    list.forEach(function(s){
+      var r=el('<div class="mgr-row"><div class="grow"><div'+(s.active?'':' style="opacity:.45"')+'>'+esc(s.name)+'</div>'+
+        '<small>'+esc(s.baseUnit)+(s.baseUnitNote?' · '+esc(s.baseUnitNote):'')+(s.active?'':' · inactive')+'</small></div>'+
+        '<button class="link">Edit</button><button class="link" style="margin-left:12px;color:var(--muted)">'+(s.active?'Hide':'Show')+'</button></div>');
+      var b=r.querySelectorAll('.link');
+      b[0].onclick=function(){itemForm(body,s);};
+      b[1].onclick=function(){ call('setSkuActive',s.id,!s.active).then(function(){mgrItems(body);}).catch(function(e){toast(e.message||e,true);}); };
+      c.appendChild(r);
+    });
+    body.appendChild(c);
+  }).catch(function(e){body.innerHTML='<div class="empty">'+esc(e.message||e)+'</div>';});
+}
+function itemForm(body,s){
+  body.innerHTML='';
+  body.appendChild(el('<h2 style="font-size:19px">'+(s?'Edit item':'New item')+'</h2>'));
+  var c=el('<div class="card"></div>');
+  function f(label,id,v,ph,type){return '<label>'+label+'</label><input id="'+id+'" '+(type?'type="'+type+'"':'')+' value="'+esc(v||'')+'" placeholder="'+(ph||'')+'">';}
+  c.appendChild(el(f('Name','iName',s&&s.name,'e.g. Oat Milk')));
+  c.appendChild(el('<div class="row"><div>'+f('Base unit','iBase',s&&s.baseUnit,'box / bag / bottle')+'</div><div>'+f('Volume per unit','iNote',s&&s.baseUnitNote,'946 ml')+'</div></div>'));
+  c.appendChild(el('<label style="color:var(--lime-deep)">Purchase option 1</label>'));
+  c.appendChild(el('<div class="row"><div>'+f('Unit name','iO1n',s&&s.opt1Name,'pack')+'</div><div>'+f('Base units per','iO1p',s&&s.opt1PerBase,'6','number')+'</div></div>'));
+  c.appendChild(el('<div class="row"><div>'+f('Supplier','iO1s',s&&s.opt1Supplier,'Instacart')+'</div><div>'+f('Lead days','iO1l',s&&s.opt1LeadDays,'2','number')+'</div></div>'));
+  c.appendChild(el('<label style="color:var(--lime-deep)">Purchase option 2 (optional)</label>'));
+  c.appendChild(el('<div class="row"><div>'+f('Unit name','iO2n',s&&s.opt2Name,'container')+'</div><div>'+f('Base units per','iO2p',s&&s.opt2PerBase,'3','number')+'</div></div>'));
+  c.appendChild(el('<div class="row"><div>'+f('Supplier','iO2s',s&&s.opt2Supplier,'')+'</div><div>'+f('Lead days','iO2l',s&&s.opt2LeadDays,'','number')+'</div></div>'));
+  c.appendChild(el(f('Manual reorder point (optional)','iThr',s&&s.reorderThreshold,'blank = usage-based','number')));
+  c.appendChild(el('<div class="hint">If usage-based flags aren\'t enough, set a hard minimum here.</div>'));
+  var save=el('<button class="btn">Save item</button>');
+  var back=el('<button class="btn ghost">Cancel</button>'); back.onclick=function(){mgrItems(body);};
+  c.appendChild(save); c.appendChild(back); body.appendChild(c);
+  save.onclick=function(){
+    if(!val('iName')||!val('iBase')) return toast('Name and base unit are required',true);
+    var p={id:s?s.id:'',name:val('iName'),baseUnit:val('iBase'),baseUnitNote:val('iNote'),
+      opt1Name:val('iO1n'),opt1PerBase:val('iO1p'),opt1Supplier:val('iO1s'),opt1LeadDays:val('iO1l'),
+      opt2Name:val('iO2n'),opt2PerBase:val('iO2p'),opt2Supplier:val('iO2s'),opt2LeadDays:val('iO2l'),
+      reorderThreshold:val('iThr')};
+    loading('Saving…');
+    call('saveSku',p).then(function(){ toast('Saved ✓'); return call('getBootstrap'); })
+      .then(function(b){APP.boot=b;mgrItems(body);})
+      .catch(function(e){toast(e.message||e,true);mgrOpen('items');});
+  };
+}
+
+function mgrPlaces(body){
+  body.innerHTML='';
+  var add=el('<button class="btn ghost" style="margin:0 0 14px">+ Add kiosk / location</button>');
+  add.onclick=function(){placeForm(body,null);}; body.appendChild(add);
+  var c=el('<div class="card"><label style="margin-top:0">Kiosks</label></div>');
+  call('getBootstrap').then(function(b){
+    APP.boot=b;
+    b.locations.forEach(function(l){
+      var r=el('<div class="mgr-row"><div class="grow"><div>'+esc(l.name)+'</div><small>'+esc(l.series||'')+'</small></div><button class="link">Edit</button></div>');
+      r.querySelector('.link').onclick=function(){placeForm(body,l);};
+      c.appendChild(r);
+    });
+    body.appendChild(c);
+  });
+}
+function placeForm(body,l){
+  body.innerHTML='';
+  body.appendChild(el('<h2 style="font-size:19px">'+(l?'Edit kiosk':'New kiosk')+'</h2>'));
+  var c=el('<div class="card"></div>');
+  c.appendChild(el('<label>Location name</label><input id="lName" value="'+esc(l&&l.name||'')+'" placeholder="e.g. City Hall">'));
+  c.appendChild(el('<label>Kiosk series</label><input id="lSeries" value="'+esc(l&&l.series||'')+'" placeholder="e.g. Series 5">'));
+  var save=el('<button class="btn">Save</button>');
+  var back=el('<button class="btn ghost">Cancel</button>'); back.onclick=function(){mgrPlaces(body);};
+  c.appendChild(save); c.appendChild(back); body.appendChild(c);
+  save.onclick=function(){
+    if(!val('lName')) return toast('Name required',true);
+    call('saveLocation',{id:l?l.id:'',name:val('lName'),series:val('lSeries')})
+      .then(function(){toast('Saved ✓');return call('getBootstrap');})
+      .then(function(b){APP.boot=b;mgrPlaces(body);})
+      .catch(function(e){toast(e.message||e,true);});
+  };
+}
+
+function mgrSettings(body){
+  body.innerHTML='<div class="center"><div class="spin"></div></div>';
+  call('getPeopleForManager').then(function(people){
+    body.innerHTML='';
+    var pc=el('<div class="card"><label style="margin-top:0">People</label></div>');
+    people.forEach(function(p){
+      var r=el('<div class="mgr-row"><div class="grow"><div'+(p.active?'':' style="opacity:.45"')+'>'+esc(p.name)+'</div><small>'+esc(p.role)+(p.active?'':' · inactive')+' · '+(p.hasPin?'PIN set':'no PIN yet')+'</small></div>'+
+        (p.hasPin?'<button class="link" style="color:var(--muted)">Reset PIN</button>':'')+
+        '<button class="link" style="margin-left:12px;color:var(--muted)">'+(p.active?'Deactivate':'Activate')+'</button></div>');
+      var links=r.querySelectorAll('.link');
+      if(p.hasPin){
+        links[0].onclick=function(){ call('clearPin',p.name).then(function(){toast(p.name+'\u2019s PIN reset — they\u2019ll set a new one next sign-in');mgrSettings(body);}).catch(function(e){toast(e.message||e,true);}); };
+      }
+      links[links.length-1].onclick=function(){call('setPersonActive',p.name,!p.active).then(function(){mgrSettings(body);}).catch(function(e){toast(e.message||e,true);});};
+      pc.appendChild(r);
+    });
+    pc.appendChild(el('<label>Add person</label>'));
+    pc.appendChild(el('<div class="row"><div><input id="pNew" placeholder="Name"></div><div><select id="pRole"><option value="technician">Technician</option><option value="manager">Manager</option></select></div></div>'));
+    var pAdd=el('<button class="btn ghost" style="margin-top:12px">Add person</button>');
+    pAdd.onclick=function(){ if(!val('pNew'))return toast('Enter a name',true);
+      call('savePerson',{name:val('pNew'),role:val('pRole')}).then(function(){toast('Added ✓');return call('getBootstrap');}).then(function(b){APP.boot=b;mgrSettings(body);}).catch(function(e){toast(e.message||e,true);});};
+    pc.appendChild(pAdd); body.appendChild(pc);
+
+    var myc=el('<div class="card"><label style="margin-top:0">My PIN</label></div>');
+    myc.appendChild(el('<div class="hint">Change the 4-digit PIN you use to sign in.</div>'));
+    var cpBtn=el('<button class="btn ghost" style="margin-top:10px">Change my PIN</button>'); cpBtn.onclick=function(){ go('changePin'); };
+    myc.appendChild(cpBtn); body.appendChild(myc);
+
+
+    var tc=el('<div class="card"><label style="margin-top:0">"Reorder soon" buffer (days)</label></div>');
+    tc.appendChild(el('<div class="hint">Flags an item when projected days-left ≤ its lead time + this buffer.</div>'));
+    tc.appendChild(el('<input id="thr" class="num" type="number" min="0" value="3">'));
+    var tBtn=el('<button class="btn ghost" style="margin-top:12px">Save buffer</button>');
+    tBtn.onclick=function(){call('setLowDaysThreshold',val('thr')).then(function(){toast('Saved ✓');}).catch(function(e){toast(e.message||e,true);});};
+    tc.appendChild(tBtn); body.appendChild(tc);
+
+    var sc=el('<div class="card"><label style="margin-top:0">Standard items</label></div>');
+    sc.appendChild(el('<div class="hint">Adds any missing standard consumables (2% milk, cups, lids) to your item list. Safe to tap anytime — it only adds what\'s missing, never duplicates or removes.</div>'));
+    var syncBtn=el('<button class="btn ghost" style="margin-top:10px">Sync standard items</button>');
+    syncBtn.onclick=function(){
+      syncBtn.disabled=true; syncBtn.textContent='Syncing…';
+      call('syncStandardItems').then(function(r){
+        var added=(r&&r.added)||[];
+        toast(added.length?('Added '+added.length+' item'+(added.length>1?'s':'')+' ✓'):'Already up to date ✓');
+        return call('getBootstrap');
+      }).then(function(b){ APP.boot=b; mgrSettings(body); })
+        .catch(function(e){ syncBtn.disabled=false; syncBtn.textContent='Sync standard items'; toast(e.message||e,true); });
+    };
+    sc.appendChild(syncBtn); body.appendChild(sc);
+
+    var bc=el('<div class="card"><label style="margin-top:0">Backups</label><div id="bkBody"><div class="center" style="min-height:46px"><div class="spin"></div></div></div></div>');
+    body.appendChild(bc);
+    loadBackupCard();
+  }).catch(function(e){body.innerHTML='<div class="empty">'+esc(e.message||e)+'</div>';});
+}
+function loadBackupCard(){
+  var box=document.getElementById('bkBody'); if(!box) return;
+  call('getBackupStatus').then(function(s){
+    s=s||{}; box.innerHTML='';
+    box.appendChild(el('<div class="hint" style="margin-top:0">A full timestamped copy of the whole database is saved to your \u201c'+esc(s.folderName||'Robo Caf\u00e9 \u2014 DB backups')+'\u201d Google Drive folder \u2014 the most recent '+(s.keep||30)+' are kept. A complete .xlsx snapshot is also emailed to '+esc((s.emails||[]).join(' and '))+' every '+(s.emailDays||60)+' days.</div>'));
+    box.appendChild(el('<div class="hrow" style="border:none;padding-top:6px"><div class="grow"><div><b>Automatic daily backup</b></div><small>'+(s.lastBackupAt?('Last backup: '+esc(s.lastBackupAt)):'No backup taken yet')+(s.count?(' \u00b7 '+s.count+' on file'):'')+'</small></div></div>'));
+    var tg=el('<button class="milktoggle'+(s.autoOn?' on':'')+'" type="button" style="margin-top:2px">'+(s.autoOn?'\u2713 Automatic daily backups are ON':'Turn on automatic daily backups')+'</button>');
+    tg.onclick=function(){ tg.disabled=true; call('setAutoBackup',!s.autoOn).then(function(){ toast(!s.autoOn?'Daily backups on \u2713':'Daily backups turned off'); loadBackupCard(); }).catch(function(e){ tg.disabled=false; toast(e.message||e,true); }); };
+    box.appendChild(tg);
+    var now=el('<button class="btn ghost" style="margin-top:10px">Back up now</button>');
+    now.onclick=function(){ now.disabled=true; now.textContent='Backing up\u2026'; call('backupNow').then(function(r){ toast('Backed up \u2713'+(r&&r.emailed?' \u00b7 snapshot emailed':'')); loadBackupCard(); }).catch(function(e){ now.disabled=false; now.textContent='Back up now'; toast(e.message||e,true); }); };
+    box.appendChild(now);
+    var foot=el('<div class="hint"></div>');
+    if(s.folderUrl){ var lk=el('<a class="link" target="_blank">Open backups folder \u2197</a>'); lk.href=s.folderUrl; foot.appendChild(lk); }
+    if(s.lastEmailAt){ foot.appendChild(el('<div style="margin-top:4px">Last emailed snapshot: '+esc(s.lastEmailAt)+'</div>')); }
+    box.appendChild(foot);
+  }).catch(function(e){ box.innerHTML='<div class="hint">Backup status unavailable. If this is the first time, open the Apps Script editor and run <b>enableBackups</b> once \u2014 that grants Drive &amp; Mail permissions, turns on daily backups, and takes the first one. ('+esc(e.message||e)+')</div>'; });
+}
+/* ===================== MASTER SCHEDULE + STATUS + LABOUR ===================== */
+function renderSchedule(body){
+  body.innerHTML='<div class="center"><div class="spin"></div></div>';
+  call('getScheduleOverrides').then(function(ovr){
+   return call('getMilkBagLog').then(function(milkLog){
+    body.innerHTML='';
+    var me=(APP.me&&APP.me.name)||'';
+    var ovMap={}; (ovr||[]).forEach(function(o){ ovMap[o.date+'|'+o.kioskId]=o; });
+    milkLog=milkLog||{}; var milkSet={}; Object.keys(milkLog).forEach(function(kid){ milkSet[kid]={}; (milkLog[kid]||[]).forEach(function(ds){ milkSet[kid][ds]=true; }); });
+    body.appendChild(el('<p class="sub" style="margin-top:0">Weekdays are Rob, weekends Peter. You can request coverage only for your own days; anyone can pick up a day that needs coverage.</p>'));
+
+    var kioskList=[['all','All'],['uoft','University of Toronto'],['sinai','Mount Sinai Hospital'],['bud','RBC Amphitheatre']];
+    var cur='all';
+    var filt=el('<div class="schfilt"></div>');
+    kioskList.forEach(function(kk){ var b=el('<button class="chip" data-k="'+kk[0]+'">'+kk[1]+'</button>'); b.onclick=function(){ cur=kk[0]; paint(); }; filt.appendChild(b); });
+    body.appendChild(filt);
+    var listWrap=el('<div></div>'); body.appendChild(listWrap);
+    var expanded={}; var pastOpen=false; // monthKey -> true
+
+    function build(){
+      var days=[]; var today=new Date(); today.setHours(0,0,0,0);
+      var end=new Date(today); end.setMonth(end.getMonth()+4);
+      for(var d=new Date(today); d<=end; d.setDate(d.getDate()+1)){
+        var iso=isoDateLocal(d), entries=[];
+        SERVICE_KIOSKS.forEach(function(k){
+          if(cur!=='all' && k.id!==cur) return;
+          if(!isServiceDay(k.id,d,iso)) return;
+          var base=defaultAssignee(d), o=ovMap[iso+'|'+k.id];
+          var assignee=base, coverage=false, requestedBy='';
+          if(o){ if(o.claimedBy) assignee=o.claimedBy; if(o.coverageRequested){ coverage=true; requestedBy=o.requestedBy; } }
+          var event = k.id==='bud' ? BUD_CONCERTS[iso] : null;
+          entries.push({kiosk:k,iso:iso,assignee:assignee,coverage:coverage,requestedBy:requestedBy,event:event});
+        });
+        if(entries.length) days.push({iso:iso,dateObj:new Date(d),entries:entries});
+      }
+      return days;
+    }
+    function buildPast(){
+      var days=[]; var today=new Date(); today.setHours(0,0,0,0);
+      var start=new Date(today); start.setDate(start.getDate()-60);
+      for(var d=new Date(start); d<today; d.setDate(d.getDate()+1)){
+        var iso=isoDateLocal(d), entries=[];
+        SERVICE_KIOSKS.forEach(function(k){
+          if(cur!=='all' && k.id!==cur) return;
+          if(!isServiceDay(k.id,d,iso)) return;
+          var base=defaultAssignee(d), o=ovMap[iso+'|'+k.id];
+          var assignee=base; if(o&&o.claimedBy) assignee=o.claimedBy;
+          var event = k.id==='bud' ? BUD_CONCERTS[iso] : null;
+          entries.push({kiosk:k,iso:iso,assignee:assignee,coverage:false,requestedBy:'',event:event});
+        });
+        if(entries.length) days.push({iso:iso,dateObj:new Date(d),entries:entries});
+      }
+      return days.reverse();
+    }
+    function dayCard(day, past){
+      var dn=day.dateObj.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+      var card=el('<div class="card schday'+(past?' pastday':'')+'"><div class="schdate">'+esc(dn)+'</div></div>');
+      day.entries.forEach(function(e){
+        var row=el('<div class="schrow'+(e.coverage?' cover':'')+'"></div>');
+        var title=esc(e.kiosk.locationName)+(e.event?(' · '+e.event.e+' '+esc(e.event.n)):'');
+        var info=el('<div class="grow"><div><b>'+title+'</b></div><small>'+
+          (e.coverage?('⚠ Needs coverage — '+esc(e.requestedBy||'?')+' can\'t make it'):('Assigned: '+esc(e.assignee)))+'</small></div>');
+        if(milkSet[e.kiosk.id] && milkSet[e.kiosk.id][e.iso]) info.appendChild(el('<div class="milkmark">🥛 Milk bag changed</div>'));
+        row.appendChild(info);
+        if(!past){
+          if(e.coverage){
+            if(e.requestedBy && e.requestedBy===me){
+              row.appendChild(el('<button class="link" style="color:var(--moss)" disabled>Coverage requested ✓</button>'));
+            } else {
+              var pick=el('<button class="link">Pick up</button>');
+              pick.onclick=function(){ if(!me) return toast('Sign in first',true); call('claimCoverage',{date:e.iso,kioskId:e.kiosk.id,claimedBy:me}).then(function(){toast('You picked it up ✓'); renderSchedule(body);}).catch(function(x){toast(x.message||x,true);}); };
+              row.appendChild(pick);
+            }
+          } else if(e.assignee===me){
+            var req=el('<button class="link" style="color:var(--muted)">Request coverage</button>');
+            req.onclick=function(){ req.disabled=true; req.textContent='Coverage requested ✓'; req.style.color='var(--moss)'; call('requestCoverage',{date:e.iso,kioskId:e.kiosk.id,requestedBy:me,originalAssignee:e.assignee}).then(function(){toast('Coverage requested ✓'); renderSchedule(body);}).catch(function(x){ req.disabled=false; req.textContent='Request coverage'; req.style.color='var(--muted)'; toast(x.message||x,true); }); };
+            row.appendChild(req);
+          }
+        }
+        card.appendChild(row);
+      });
+      return card;
+    }
+    function paint(){
+      filt.querySelectorAll('.chip').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-k')===cur); });
+      listWrap.innerHTML='';
+      var pbtn=el('<button class="schmonth'+(pastOpen?' on':'')+'">'+(pastOpen?'▾':'▸')+' Previous 60 days</button>');
+      pbtn.onclick=function(){ pastOpen=!pastOpen; paint(); };
+      listWrap.appendChild(pbtn);
+      if(pastOpen){
+        var pdays=buildPast();
+        if(!pdays.length) listWrap.appendChild(el('<div class="hint">No past service days in this range.</div>'));
+        else pdays.forEach(function(day){ listWrap.appendChild(dayCard(day,true)); });
+      }
+      var days=build();
+      if(!days.length){ listWrap.appendChild(el('<div class="empty">No service days in range.</div>')); return; }
+      // group by month
+      var groups=[], idx={};
+      days.forEach(function(day){ var mk=day.iso.slice(0,7); if(!(mk in idx)){ idx[mk]=groups.length; groups.push({mk:mk,dateObj:day.dateObj,days:[]}); } groups[idx[mk]].days.push(day); });
+      groups.forEach(function(g,gi){
+        var mname=g.dateObj.toLocaleDateString(undefined,{month:'long',year:'numeric'});
+        var isOpen = gi===0 || expanded[g.mk]; // first month always open
+        if(gi===0){
+          listWrap.appendChild(el('<div class="mgrhd" style="margin-top:6px">'+esc(mname)+'</div>'));
+          g.days.forEach(function(day){ listWrap.appendChild(dayCard(day)); });
+        } else if(isOpen){
+          var hd=el('<button class="schmonth on">▾ '+esc(mname)+' · '+g.days.length+' service days</button>');
+          hd.onclick=function(){ expanded[g.mk]=false; paint(); };
+          listWrap.appendChild(hd);
+          g.days.forEach(function(day){ listWrap.appendChild(dayCard(day)); });
+        } else {
+          var b=el('<button class="schmonth">▸ '+esc(mname)+' · '+g.days.length+' service days</button>');
+          b.onclick=function(){ expanded[g.mk]=true; paint(); };
+          listWrap.appendChild(b);
+        }
+      });
+    }
+    paint();
+   });
+  }).catch(function(e){ body.innerHTML='<div class="empty">'+esc(e.message||e)+'</div>'; });
+}
+function screenScheduleTech(){
+  M.innerHTML=''; M.appendChild(backBtn('techHome'));
+  M.appendChild(el('<div><h2>Master schedule</h2></div>'));
+  var body=el('<div></div>'); M.appendChild(body); renderSchedule(body);
+}
+
+function fmtDate(d){ if(!d&&d!==0) return ''; var dt=(d instanceof Date)?d:new Date(d); if(isNaN(dt.getTime())) return esc(String(d)); return dt.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}); }
+function chargeAmountLabel(x){
+  if(x.type==='reimbursement') return '$'+(Number(x.amount)||0).toFixed(2);
+  return (Number(x.hours)||0).toFixed(2)+' h';
+}
+function chargeRow(x, showPerson){
+  var icon=x.type==='reimbursement'?'🧾':'⏱️';
+  var badge=x.paid?('<span class="badge b-overlap">Paid'+(x.paidDate?' '+fmtDate(x.paidDate):'')+'</span>'):'<span class="badge b-unique">Unpaid</span>';
+  var bits=[fmtDate(x.date)];
+  if(x.type==='misc_time'&&x.startTime) bits.push(esc(x.startTime)+'–'+esc(x.endTime));
+  if(showPerson&&x.personName) bits.push(esc(x.personName));
+  var row=el('<div class="chgrow"></div>');
+  row.appendChild(el('<div class="chgtop"><div class="chgdesc">'+icon+' '+esc(x.description||'(no description)')+'</div><div class="chgamt">'+chargeAmountLabel(x)+'</div></div>'));
+  row.appendChild(el('<div class="chgmeta">'+bits.join(' · ')+' '+badge+(x.paidNote?' — '+esc(x.paidNote):'')+'</div>'));
+  if(x.receiptLink){ var lk=el('<a class="link" target="_blank" style="display:inline-block;margin-top:8px">View receipt ↗</a>'); lk.href=x.receiptLink; row.appendChild(lk); }
+  return row;
+}
+function screenCharge(){
+  M.innerHTML=''; M.appendChild(backBtn('techHome'));
+  M.appendChild(el('<div><h2>Log a charge</h2><p class="sub">A reimbursement for something you bought, or non-servicing time (e.g. a pickup). Servicing time is logged in the checklist.</p></div>'));
+  var c=el('<div class="card"></div>');
+  c.appendChild(el('<div class="hint" style="margin-top:0">Logged by <b>'+esc(APP.me.name)+'</b></div>'));
+  var type='reimbursement';
+  var seg=el('<div class="schfilt"></div>');
+  [['reimbursement','🧾 Item reimbursement'],['misc_time','⏱️ Other time']].forEach(function(t){
+    var b=el('<button class="chip" data-k="'+t[0]+'">'+t[1]+'</button>'); b.onclick=function(){ type=t[0]; paint(); }; seg.appendChild(b);
+  });
+  c.appendChild(seg);
+  c.appendChild(el('<label>Date</label><input type="date" id="chgDate">'));
+  var dyn=el('<div></div>'); c.appendChild(dyn);
+  c.appendChild(el('<label>Description</label><input id="chgDesc" placeholder="What was it? (e.g. cleaning supplies, pickup run)">'));
+  var btn=el('<button class="btn">Submit charge</button>'); c.appendChild(btn);
+  M.appendChild(c);
+  c.querySelector('#chgDate').value=isoDateLocal(new Date());
+  function paint(){
+    seg.querySelectorAll('.chip').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-k')===type); });
+    dyn.innerHTML='';
+    if(type==='reimbursement'){
+      dyn.appendChild(el('<label>Amount ($)</label><input type="number" inputmode="decimal" step="0.01" min="0" id="chgAmt" placeholder="0.00">'));
+      dyn.appendChild(el('<label>Receipt link <span style="color:var(--muted);font-weight:400">(optional)</span></label><input id="chgRcpt" placeholder="Paste a photo or Drive link">'));
+    } else {
+      dyn.appendChild(el('<div class="row"><div><label>Start time</label><input type="time" id="chgStart"></div><div><label>End time</label><input type="time" id="chgEnd"></div></div>'));
+    }
+  }
+  paint();
+  btn.onclick=function(){
+    var date=val('chgDate'), desc=val('chgDesc');
+    if(!desc) return toast('Add a short description',true);
+    var payload={ personName:APP.me.name, type:type, date:date, description:desc };
+    if(type==='reimbursement'){
+      var amt=parseFloat(val('chgAmt')); if(!(amt>0)) return toast('Enter an amount',true);
+      payload.amount=amt; payload.receiptLink=val('chgRcpt');
+    } else {
+      var st=val('chgStart'), et=val('chgEnd'); if(!st||!et) return toast('Enter start and end time',true);
+      payload.startTime=st; payload.endTime=et;
+    }
+    loading('Saving…');
+    call('addCharge',payload).then(function(){ toast('Charge logged ✓'); go('charge'); }).catch(function(e){ toast(e.message||e,true); screenCharge(); });
+  };
+  var recent=el('<div></div>'); M.appendChild(recent);
+  recent.innerHTML='<div class="center"><div class="spin"></div></div>';
+  call('getCharges').then(function(list){
+    recent.innerHTML='';
+    var mine=(list||[]).filter(function(x){ return x.personName===APP.me.name; }).slice(0,12);
+    if(!mine.length) return;
+    var rc=el('<div class="card"><label style="margin-top:0">My recent charges</label><div class="feed"></div></div>');
+    var feed=rc.querySelector('.feed'); mine.forEach(function(x){ feed.appendChild(chargeRow(x,false)); });
+    recent.appendChild(rc);
+  }).catch(function(){ recent.innerHTML=''; });
+}
+
+function mgrServiceStatus(body){
+  body.innerHTML='<div class="center"><div class="spin"></div></div>';
+  call('getServiceSummary').then(function(sum){
+    sum=sum||{};
+    body.innerHTML='';
+    body.appendChild(el('<p class="sub" style="margin-top:0">When each kiosk was last serviced.</p>'));
+    var c=el('<div class="card"><label style="margin-top:0">Last serviced</label></div>');
+    SERVICE_KIOSKS.forEach(function(k){
+      var s=sum[k.id]||{};
+      var last=s.lastCompletedAt?svcDate(s.lastCompletedAt):'Never serviced';
+      var tech=s.lastTechnicianName?(' · '+s.lastTechnicianName):'';
+      var ip=s.inProgressSessionId?' <span class="badge b-model">in progress</span>':'';
+      var stat=s.lastStatus==='incomplete'?' <span class="badge b-unique">last was incomplete</span>':'';
+      c.appendChild(el('<div class="mgr-row"><div class="grow"><div><b>'+esc(k.locationName)+'</b> · '+esc(k.model)+ip+stat+'</div>'+
+        '<small>'+esc(last)+esc(tech)+'</small></div></div>'));
+    });
+    body.appendChild(c);
+  }).catch(function(e){body.innerHTML='<div class="empty">'+esc(e.message||e)+'</div>';});
+}
+
+function mgrLabour(body){
+  body.innerHTML='<div class="center"><div class="spin"></div></div>';
+  Promise.all([call('getServiceSessions'),call('getPayments'),call('getCharges')]).then(function(res){
+    var list=res[0], payments=res[1]||[], charges=res[2]||[];
+    body.innerHTML='';
+    var sess=(list||[]).filter(function(s){ return s.startTime && s.endTime; });
+    body.appendChild(el('<p class="sub" style="margin-top:0">Servicing hours, plus reimbursements and other (non-servicing) time. Filter by date range, kiosk or person, then mark things paid.</p>'));
+
+    var kioskOpts='<option value="all">All kiosks</option>'+SERVICE_KIOSKS.map(function(k){return '<option value="'+k.id+'">'+esc(k.locationName)+'</option>';}).join('');
+    var people={}; sess.forEach(function(s){ if(s.technicianName) people[s.technicianName]=true; }); charges.forEach(function(x){ if(x.personName) people[x.personName]=true; });
+    var personOpts='<option value="all">All people</option>'+Object.keys(people).map(function(p){return '<option value="'+esc(p)+'">'+esc(p)+'</option>';}).join('');
+
+    var ctl=el('<div class="card"></div>');
+    ctl.appendChild(el('<label style="margin-top:0">Date range</label>'+
+      '<select id="lbR"><option value="week">This week</option><option value="lastweek">Last week</option><option value="month">This month</option><option value="custom">Custom range…</option><option value="all">All time</option></select>'));
+    var customRow=el('<div class="row" id="lbCustom" style="display:none"><div><label>From</label><input type="date" id="lbFrom"></div><div><label>To</label><input type="date" id="lbTo"></div></div>');
+    ctl.appendChild(customRow);
+    ctl.appendChild(el('<div class="row"><div><label>Kiosk</label><select id="lbK">'+kioskOpts+'</select></div>'+
+      '<div><label>Person</label><select id="lbP">'+personOpts+'</select></div></div>'));
+    body.appendChild(ctl);
+
+    var lbView='hours';
+    var lbToggle=el('<div class="schfilt" style="margin:2px 0 10px"></div>');
+    [['hours','⏱️ Servicing hours'],['charges','🧾 Reimbursements & time']].forEach(function(t){
+      var b=el('<button class="chip" data-v="'+t[0]+'">'+t[1]+'</button>'); b.onclick=function(){ lbView=t[0]; paint(); }; lbToggle.appendChild(b);
+    });
+    body.appendChild(lbToggle);
+
+    var totalWrap=el('<div class="kpi"></div>'); body.appendChild(totalWrap);
+    var payWrap=el('<div></div>'); body.appendChild(payWrap);
+    var listWrap=el('<div class="card"><label style="margin-top:0">Servicing sessions</label><div class="feed"></div></div>'); body.appendChild(listWrap);
+    var chgWrap=el('<div></div>'); body.appendChild(chgWrap);
+
+    function mins(s){ var a=s.startTime.split(':'), b=s.endTime.split(':'); var m=(parseInt(b[0],10)*60+parseInt(b[1],10))-(parseInt(a[0],10)*60+parseInt(a[1],10)); if(m<0) m+=1440; return m; }
+    function hrs(m){ return (m/60).toFixed(2); }
+    function sDate(s){ return s.serviceDate || (s.completedAt?isoDateLocal(new Date(s.completedAt)):''); }
+    function range(){
+      var r=val('lbR'); var t=new Date(); t.setHours(0,0,0,0);
+      function iso(d){ return isoDateLocal(d); }
+      if(r==='all') return {from:'',to:'',label:'All time'};
+      if(r==='custom') return {from:val('lbFrom'),to:val('lbTo'),label:'Custom'};
+      if(r==='month'){ var a=new Date(t.getFullYear(),t.getMonth(),1), b=new Date(t.getFullYear(),t.getMonth()+1,0); return {from:iso(a),to:iso(b),label:'This month'}; }
+      // week / lastweek: Monday-Sunday
+      var dow=(t.getDay()+6)%7; var mon=new Date(t); mon.setDate(t.getDate()-dow);
+      if(r==='lastweek'){ mon.setDate(mon.getDate()-7); }
+      var sun=new Date(mon); sun.setDate(mon.getDate()+6);
+      return {from:iso(mon),to:iso(sun),label:r==='lastweek'?'Last week':'This week'};
+    }
+    function paidFor(s){
+      var d=sDate(s);
+      var p=payments.filter(function(x){ return x.personName===s.technicianName && (!x.periodStart||d>=x.periodStart) && (!x.periodEnd||d<=x.periodEnd); })[0];
+      return p||null;
+    }
+    function paint(){
+      var rg=range();
+      lbToggle.querySelectorAll('.chip').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-v')===lbView); });
+      var showHours=lbView==='hours';
+      totalWrap.style.display=showHours?'flex':'none';
+      payWrap.style.display=showHours?'':'none';
+      listWrap.style.display=showHours?'':'none';
+      chgWrap.style.display=showHours?'none':'';
+      customRow.style.display = val('lbR')==='custom' ? 'flex' : 'none';
+      var fK=val('lbK'), fP=val('lbP');
+      var f=sess.filter(function(s){
+        var d=sDate(s);
+        if(rg.from && d<rg.from) return false;
+        if(rg.to && d>rg.to) return false;
+        return (fK==='all'||s.kioskId===fK) && (fP==='all'||s.technicianName===fP);
+      });
+      var total=0, paidMin=0; f.forEach(function(s){ var m=mins(s); total+=m; if(paidFor(s)) paidMin+=m; });
+      totalWrap.innerHTML='';
+      totalWrap.appendChild(el('<div class="b"><div class="n">'+hrs(total)+'</div><div class="l">Total hours</div></div>'));
+      totalWrap.appendChild(el('<div class="b"><div class="n">'+f.length+'</div><div class="l">Sessions</div></div>'));
+      totalWrap.appendChild(el('<div class="b"><div class="n">'+hrs(total-paidMin)+'</div><div class="l">Unpaid hours</div></div>'));
+
+      // payment action (needs a specific person + bounded range)
+      payWrap.innerHTML='';
+      if(fP!=='all' && rg.from && rg.to){
+        var pc=el('<div class="card alertcard"><label style="margin-top:0">Record payment — '+esc(fP)+'</label></div>');
+        pc.appendChild(el('<div class="hint">Covers '+esc(rg.from)+' → '+esc(rg.to)+' ('+hrs(total)+' h across '+f.length+' sessions).</div>'));
+        pc.appendChild(el('<label>Paid date</label><input type="date" id="payDate">'));
+        pc.appendChild(el('<label>Notes (optional)</label><input id="payNote" placeholder="e.g. biweekly run, adjusted for a no-show">'));
+        var pb=el('<button class="btn">Mark this period as paid</button>');
+        pc.appendChild(pb); payWrap.appendChild(pc);
+        pc.querySelector('#payDate').value=isoDateLocal(new Date());
+        pb.onclick=function(){
+          var pd=val('payDate'), pn=val('payNote');
+          loading('Saving…');
+          call('savePayment',{personName:fP,periodStart:rg.from,periodEnd:rg.to,paidDate:pd,notes:pn})
+            .then(function(){ toast('Marked paid ✓'); mgrOpen('labour'); }).catch(function(e){ toast(e.message||e,true); });
+        };
+        // existing payments overlapping this person
+        var mine=payments.filter(function(x){ return x.personName===fP; });
+        if(mine.length){
+          var ec=el('<div class="card"><label style="margin-top:0">Payments on record — '+esc(fP)+'</label></div>');
+          mine.forEach(function(x){
+            var r=el('<div class="mgr-row"><div class="grow"><div><b>'+esc(x.periodStart)+' → '+esc(x.periodEnd)+'</b></div>'+
+              '<small>Paid '+esc(x.paidDate||'—')+(x.notes?' · '+esc(x.notes):'')+'</small></div><button class="link" style="color:var(--muted)">Undo</button></div>');
+            r.querySelector('.link').onclick=function(){ call('voidPayment',x.id).then(function(){toast('Removed ✓');mgrOpen('labour');}).catch(function(e){toast(e.message||e,true);}); };
+            ec.appendChild(r);
+          });
+          payWrap.appendChild(ec);
+        }
+      } else if(fP==='all'){
+        payWrap.appendChild(el('<div class="hint" style="margin:0 2px 8px">Pick a single person (and a week/month/custom range) to mark a period as paid.</div>'));
+      }
+
+      var feed=listWrap.querySelector('.feed'); feed.innerHTML='';
+      if(!f.length){ feed.innerHTML='<div class="empty">No servicing sessions with start &amp; end times in this range.</div>'; }
+      else f.forEach(function(s){
+        var p=paidFor(s);
+        var badge=p?('<span class="badge b-overlap">Paid '+esc(p.paidDate||'')+'</span>'):'<span class="badge b-unique">Unpaid</span>';
+        feed.appendChild(el('<div class="hrow"><div class="grow"><div><b>'+esc(s.locationName)+'</b> · '+esc(s.technicianName||'—')+' '+badge+'</div>'+
+          '<small>'+esc(sDate(s)||svcDate(s.completedAt||s.startedAt))+' · '+esc(s.startTime)+'–'+esc(s.endTime)+'</small></div>'+
+          '<div class="hwhen">'+hrs(mins(s))+' h</div></div>'));
+      });
+
+      // ---- reimbursements & other (non-servicing) charges ----
+      chgWrap.innerHTML='';
+      var cf=charges.filter(function(x){
+        if(rg.from && x.date<rg.from) return false;
+        if(rg.to && x.date>rg.to) return false;
+        return (fP==='all'||x.personName===fP);
+      });
+      var reimb=cf.filter(function(x){return x.type==='reimbursement';});
+      var misc=cf.filter(function(x){return x.type==='misc_time';});
+      var dueAmt=reimb.filter(function(x){return !x.paid;}).reduce(function(a,b){return a+(Number(b.amount)||0);},0);
+      var miscHrs=misc.reduce(function(a,b){return a+(Number(b.hours)||0);},0);
+      var miscUnpaidHrs=misc.filter(function(x){return !x.paid;}).reduce(function(a,b){return a+(Number(b.hours)||0);},0);
+      var cc=el('<div class="card"><label style="margin-top:0">Reimbursements & other time</label></div>');
+      var k=el('<div class="kpi"></div>');
+      k.appendChild(el('<div class="b"><div class="n">$'+dueAmt.toFixed(2)+'</div><div class="l">To reimburse</div></div>'));
+      k.appendChild(el('<div class="b"><div class="n">'+miscHrs.toFixed(2)+'</div><div class="l">Other hours</div></div>'));
+      k.appendChild(el('<div class="b"><div class="n">'+miscUnpaidHrs.toFixed(2)+'</div><div class="l">Unpaid other h</div></div>'));
+      cc.appendChild(k);
+      var cfeed=el('<div class="feed"></div>'); cc.appendChild(cfeed);
+      if(!cf.length){ cfeed.appendChild(el('<div class="empty">No reimbursements or other-time charges in this range.</div>')); }
+      cf.forEach(function(x){
+        var row=chargeRow(x,true);
+        var act=el('<div class="chgactions"></div>');
+        if(x.paid){
+          var u=el('<button class="btn ghost">Mark unpaid</button>');
+          u.onclick=function(){ call('setChargePaid',x.id,false,'','').then(function(){toast('Updated ✓');mgrOpen('labour');}).catch(function(e){toast(e.message||e,true);}); };
+          act.appendChild(u);
+        } else {
+          var mk=el('<button class="btn ghost">Mark paid</button>');
+          mk.onclick=function(){
+            if(row.querySelector('.paybox')) { row.querySelector('.paybox').remove(); return; }
+            var box=el('<div class="paybox card" style="margin-top:10px"><label style="margin-top:0">Paid date</label><input type="date" class="cpDate"><label>Notes (optional)</label><input class="cpNote" placeholder="anomaly?"><button class="btn" style="margin-top:10px">Confirm paid</button></div>');
+            box.querySelector('.cpDate').value=isoDateLocal(new Date());
+            box.querySelector('.btn').onclick=function(){
+              var pd=box.querySelector('.cpDate').value, pn=box.querySelector('.cpNote').value;
+              call('setChargePaid',x.id,true,pd,pn).then(function(){toast('Marked paid ✓');mgrOpen('labour');}).catch(function(e){toast(e.message||e,true);});
+            };
+            row.appendChild(box);
+          };
+          act.appendChild(mk);
+        }
+        var del=el('<button class="link chgremove">Remove</button>');
+        del.onclick=function(){ call('voidCharge',x.id).then(function(){toast('Removed ✓');mgrOpen('labour');}).catch(function(e){toast(e.message||e,true);}); };
+        act.appendChild(del);
+        row.appendChild(act);
+        cfeed.appendChild(row);
+      });
+      chgWrap.appendChild(cc);
+    }
+    ctl.querySelector('#lbR').onchange=paint; ctl.querySelector('#lbK').onchange=paint; ctl.querySelector('#lbP').onchange=paint;
+    customRow.querySelector('#lbFrom').onchange=paint; customRow.querySelector('#lbTo').onchange=paint;
+    paint();
+  }).catch(function(e){body.innerHTML='<div class="empty">'+esc(e.message||e)+'</div>';});
+}
+
+/* ===================== SERVICING MODULE ===================== */
+var SERVICE={ kioskId:null, sessionId:null, detailId:null, startedAt:null, st:{}, invMap:{} };
+
+function svcItem(id,label,required,type,instr,opts){opts=opts||{};
+  return {id:id,label:label,required:required,itemType:type,instr:instr||[],linkedSku:opts.linkedSku||null};}
+function svcSec(id,title,type,items){return {id:id,title:title,sectionType:type,items:items};}
+
+// --- reusable sections (fresh objects each call) ---
+function secScale(){return svcSec('scale','Start-of-service scale check','model',[
+  svcItem('scale_200','Confirm the scale measures properly at 200 grams.',true,'calibration',
+    ['Verify the scale reads correctly using the 200-gram calibration process for the carrier unit.','Confirm the displayed weight is accurate at 200 g.','If it does not read correctly, document it in the notes field.'])
+]);}
+function secArmCalib(){return svcSec('armcalib','Start-of-service robotic arm calibration','model',[
+  svcItem('arm_setup','Open the Robot API, close the claw, and place the pre-measured 200 g calibration cup on the arm.',true,'calibration',
+    ['Open the Robot / Robotic Arm API.','The arm is normally open — close the claw first, or the 200 g cup can slide off.','Use the cup already pre-measured to 200 g (no ice or liquid).']),
+  svcItem('arm_weight','Read the weight via the API and confirm 200 g; recalibrate to zero if it is off.',true,'calibration',
+    ['Use the API to get the weight.','If it reads off (e.g. 189, 180) or drifts between reads with nothing changing, recalibrate/reset to zero through the API and re-check until it reads 200 g.','Record any abnormal reading in the notes.']),
+  svcItem('arm_park','Move the robotic arm out of the way for the rest of servicing.',true,'calibration',
+    ['Park the arm clear of the work area (e.g. the lids position) so it is out of the way and clear of syrup-cleaning splash-back.','Leave it there until the final test drink unless it must move for cleaning.'])
+]);}
+function secGrayWater(){return svcSec('graywater','Gray water disposal','unique',[
+  svcItem('graywater_empty','Empty the gray water container.',true,'waste_disposal',
+    ['Bud Stage is not hooked up to local sewage; a large container at the bottom collects gray water.','Roll the hose out, point it toward sewage, open the outlet and let it empty.','Close it, then roll the hose back up and return it to position.'])
+]);}
+function secBeforeBegin(){return svcSec('beforebegin','Before you begin','overlap',[
+  svcItem('bb_hands','Wash your hands and put on gloves.',true,'other',['Wash your hands thoroughly and put on a fresh pair of gloves before handling anything.']),
+  svcItem('bb_hotwater','Fill the hot water containers to prepare the hot water you\'ll need.',true,'other',['Prepare the hot water required for this service by filling the hot water containers before you start.'])
+]);}
+function secMilk(variant){
+  var items=[ svcItem('milk_clean','Perform milk cleaning.',true,'cleaning',['Run the milk cleaning process and leave the milk system clean and ready.']) ];
+  if(variant==='uoft'){
+    items.push(svcItem('milk_fill','Check 2% milk and fill as required.',true,'refill',['U of T has one milk type: 2% milk.','Top up and confirm it is properly seated/connected.'],{linkedSku:'2% Milk'}));
+  } else if(variant==='sinai'){
+    items.push(svcItem('milk_fill_2','Check 2% milk and fill as required.',true,'refill',['Mount Sinai has 2% milk.','Top up and confirm it is seated/connected.'],{linkedSku:'2% Milk'}));
+    items.push(svcItem('milk_fill_oat','Stir or shake the oat milk, then check and fill as required.',true,'refill',['Oat milk separates — stir or shake it before filling.','Top up and confirm it is seated/connected.'],{linkedSku:'Oat Milk'}));
+  } else {
+    items.push(svcItem('milk_fill','Check 2% milk and fill as required.',true,'refill',['Top up 2% milk and confirm it is seated/connected.'],{linkedSku:'2% Milk'}));
+    items.push(svcItem('milk_fill_oat','Stir or shake the oat milk, then check and fill as required.',true,'refill',['Oat milk separates — stir or shake it before filling.','Top up and confirm it is seated/connected.'],{linkedSku:'Oat Milk'}));
+  }
+  return svcSec('milk','Milk servicing','overlap',items);
+}
+function secCameo(){return svcSec('cameo','Cameo coffee machine servicing','model',[
+  svcItem('cameo_puck','Empty the coffee puck drawer.',true,'waste_disposal',['Empty the drawer that collects coffee pucks and throw the used pucks out.']),
+  svcItem('cameo_bag','Complete a bag change if needed.',false,'waste_disposal',['Check whether a bag change is required and complete it if needed. Add a note if you changed the bag.']),
+  svcItem('cameo_beans','Check coffee beans and fill as required.',true,'refill',['Top up coffee beans for the Cameo coffee machine.'],{linkedSku:'Espresso beans'}),
+  svcItem('cameo_balls','Check cleaning balls.',true,'inspection',['Confirm enough cleaning balls for a couple of days (one ball = one cleaning cycle).','Fill the top of the machine with cleaning balls; do not overfill so as to crack others, and remove any cracked balls.'],{linkedSku:'Eversys Cleaning Balls'}),
+  svcItem('cameo_wipe','Wipe the coffee machine as needed.',true,'cleaning',['Give the coffee machine a quick wipe.'])
+]);}
+function secCameoGarbage(){return svcSec('cameogarbage','Cameo-related garbage disposal','model',[
+  svcItem('garbage_cups','Empty excess cup garbage.',true,'waste_disposal',['Series 3.5 and Series 5 kiosks throw excess cups into a garbage area. Empty it.']),
+  svcItem('garbage_drinks','Empty drink/disposal garbage.',true,'waste_disposal',['Empty the second garbage area where drinks/disposals are thrown. Both garbage areas must be emptied.'])
+]);}
+function secSyrup(armNote){
+  var clean=['Clean the syrup components the same way across all kiosks; leave no residue or splash-back.'];
+  if(armNote) clean.push('Make sure the robotic arm is parked out of the way so cleaning does not splash onto it.');
+  return svcSec('syrup','Syrup servicing','overlap',[
+    svcItem('syrup_clean','Clean the syrup area/components.',true,'cleaning',clean),
+    svcItem('syrup_check','Check syrup levels and refill or replace as required.',true,'refill',['Inspect each syrup and top up or replace as needed.'])
+  ]);
+}
+function secPowder(){return svcSec('powder','Powder servicing','overlap',[
+  svcItem('powder_clean','Clean the powder dispenser area and components.',true,'cleaning',['Clean the area and the components of the powder dispenser; leave no residue.']),
+  svcItem('powder_remove','Cover the powder spout, turn it upwards, and remove the canister.',true,'refill',['Cover the powder spout first, then turn the spout upwards to remove the canister.']),
+  svcItem('powder_fill','Fill the canister, return it, and turn the spout downwards.',true,'refill',['Refill the canister, return it to position, then turn the spout back downwards.']),
+  svcItem('powder_flush','Use the powder API \u2192 Clean to flush hot water through. Run it twice.',true,'cleaning',['In the powder API, press Clean to flush hot water throughout. Do this twice.'])
+]);}
+function secCoffeeConc(){return svcSec('coffeeconc','Coffee concentrate servicing','model',[
+  svcItem('cc_clean','Clean the coffee concentrate area/components.',true,'cleaning',['Clean the coffee concentrate components.']),
+  svcItem('cc_fill','Check coffee concentrate level and refill as required.',true,'refill',['U of T uses coffee concentrate (it has no coffee beans).','This is separate from syrup but just as critical — top up as needed.'],{linkedSku:'Coffee Concentrate'})
+]);}
+function secCupsLids(){return svcSec('cupslids','Cups & lids','overlap',[
+  svcItem('cups_fill','Check cups and fill as required.',true,'refill',['Top up cups and confirm they are loaded properly.']),
+  svcItem('lids_fill','Check lids and fill as required.',true,'refill',['Top up lids and confirm they are loaded properly.'])
+]);}
+function secArmClean(){return svcSec('armclean','Robotic arm cleaning','model',[
+  svcItem('arm_home1','Use the robotic arm API to move the arm to Home Door 1.',true,'inspection',['Home Door 1 brings the arm to an easy-to-reach position for cleaning.']),
+  svcItem('arm_claw','Very gently wipe down the claw (and underneath the lid-pressing component if needed).',true,'cleaning',['Be very careful — the robotic arm is sensitive. Wipe the claw gently, and underneath the lid-pressing component if it needs it.','Avoid any forceful movement of the arm.'])
+]);}
+function secArmSensor(){return svcSec('armsensor','Robotic arm sensor check','model',[
+  svcItem('sensor_hot','Use the Robot API to move the arm to single hot cup.',true,'inspection',['Direct the arm to the single hot cup position and observe the arm sensor.']),
+  svcItem('sensor_cold','Use the Robot API to move the arm to single cold cup.',true,'inspection',['Then direct the arm to the single cold cup position and observe the arm sensor.']),
+  svcItem('sensor_green','Confirm the arm sensor shows a solid green light.',true,'inspection',['The desired result is a solid green light. If it is not green, continue with the cleaning step below.']),
+  svcItem('sensor_clean','If not solid green, VERY gently clean the reflective/refractive sensor surface.',true,'cleaning',['Be extremely gentle — moving the sensor surface even the slightest amount can throw it off and make it fail.','Clean only the reflective/refractive surface, then re-check until the light is solid green.','Record any issue where cleaning was required.'])
+]);}
+function secGeneralClean(){return svcSec('general','General cleaning','overlap',[
+  svcItem('clean_glass','Wipe down the glass screen.',true,'cleaning',['Remove visible residue, fingerprints, or spills.']),
+  svcItem('clean_surfaces','Wipe down general kiosk surfaces.',true,'cleaning',['Leave the kiosk clean and ready for customer use.'])
+]);}
+function secFinalTest(armNote){
+  var instr=['Make a test drink and confirm the kiosk dispenses correctly.'];
+  if(armNote) instr.push('The arm can stay parked until now unless it was moved for cleaning.');
+  instr.push('Record any issues in the notes field.');
+  return svcSec('finaltest','Final test','overlap',[ svcItem('final_test','Enjoy the test drink 🍹',true,'test',instr) ]);
+}
+function secKiosoft(){return svcSec('kiosoft','Update consumables in the Kiosoft app','overlap',[
+  svcItem('kiosoft_record','Update the consumables in the Kiosoft Servicing app.',true,'other',
+    ['After finishing all refills, open the separate Kiosoft Servicing app once and update the consumables with the actual amounts you filled.','Include everything you topped up: milk, syrups, powders, cups, lids, and coffee beans / coffee concentrate.','Check this off only once the consumables are updated in Kiosoft.'])
+]);}
+
+var SERVICE_KIOSKS=[
+  { id:'uoft', locationName:"University of Toronto (Sid's Cafe)", model:'Series 2.2', checklistVersion:'Series 2.2 · v2',
+    sections:[secBeforeBegin(),secScale(),secMilk('uoft'),secSyrup(false),secPowder(),secCoffeeConc(),secCupsLids(),secGeneralClean(),secFinalTest(false),secKiosoft()] },
+  { id:'sinai', locationName:'Mount Sinai Hospital', model:'Series 3.5', checklistVersion:'Series 3.5 · v2',
+    sections:[secBeforeBegin(),secArmCalib(),secMilk('sinai'),secCameo(),secCameoGarbage(),secSyrup(true),secPowder(),secCupsLids(),secArmClean(),secArmSensor(),secGeneralClean(),secFinalTest(true),secKiosoft()] },
+  { id:'bud', locationName:'RBC Amphitheatre', model:'Series 5', checklistVersion:'Series 5 · v2',
+    sections:[secBeforeBegin(),secArmCalib(),secGrayWater(),secMilk('bud'),secCameo(),secCameoGarbage(),secSyrup(true),secPowder(),secCupsLids(),secArmClean(),secGeneralClean(),secFinalTest(true),secKiosoft()] }
+];
+
+// --- master schedule rules ---
+var BUD_CONCERTS=(function(){
+  // date -> {n: artist, e: emoji}
+  var R=[
+    ['05-21','Imagine Dragons','🎵'],['05-24','Khalid','🎵'],['05-26','Kid Cudi','🎤'],['05-28','Cake','🎸'],
+    ['05-29','Martin Garrix','🎧'],['05-30','Martin Garrix','🎧'],['05-31','Martin Garrix','🎧'],
+    ['06-04','Amyl and the Sniffers','🎸'],['06-05','bbno$','🎤'],['06-06','All Things Go','🎵'],['06-07','All Things Go','🎵'],
+    ['06-09','Bleachers','🎸'],['06-13','Goose','🎸'],['06-14','MGK','🎤'],['06-18','Bailey Zimmerman','🤠'],
+    ['06-19','Arkells','🎸'],['06-21','The Strokes','🎸'],['06-24','Godsmack','🤘'],['06-25','Paul Simon','🎵'],
+    ['06-29','Evanescence','🤘'],['06-30','Jack Johnson','🎵'],['07-01','Loud Luxury','🎧'],['07-04','Kes','🎵'],
+    ['07-05','Santana & The Doobie Brothers','🎸'],['07-07','Alex Warren','🎵'],['07-11','Zeds Dead','🎧'],
+    ['07-12','Arcángel','🎤'],['07-13','Lord Huron','🎸'],['07-14','Jack White','🎸'],['07-15','Muse','🎸'],
+    ['07-16','Tim McGraw','🤠'],['07-17','Chris Lake','🎧'],['07-18','Billy Talent','🎸'],['07-19','Death Cab for Cutie','🎸'],
+    ['07-21','The Black Crowes & Whiskey Myers','🎸'],['07-22','Mötley Crüe','🤘'],['07-26','311 & Dirty Heads','🎸'],
+    ['07-28','Styx & Chicago','🎸'],['07-30','Lynyrd Skynyrd & Foreigner','🎸'],
+    ['07-31','Ne-Yo & Akon','🎤'],['08-01','Ne-Yo & Akon','🎤'],['08-02','Five Finger Death Punch','🤘'],
+    ['08-04','Train & Barenaked Ladies','🎸'],['08-05','5 Seconds of Summer','🎵'],['08-06','Avenged Sevenfold','🤘'],
+    ['08-07','Metric & Broken Social Scene','🎸'],['08-12','Hilary Duff','🎵'],['08-13','Hilary Duff','🎵'],
+    ['08-14','Alexisonfire','🤘'],['08-15','Alexisonfire','🤘'],['08-18','Deep Purple','🤘'],['08-20','Simple Plan','🎸'],
+    ['08-22','Hugel','🎧'],['08-23','Jimmy Eat World & PUP','🎸'],['08-25','Empire of the Sun','🎵'],
+    ['08-26','The Fray & Dashboard Confessional','🎸'],['08-28','Sean Paul & Farruko','🎤'],['08-29','Blue Rodeo','🎸'],
+    ['08-30','Toto','🎸'],['08-31','Squeeze','🎸'],['09-01','Rob Zombie & Marilyn Manson','🤘'],['09-02','TLC & Salt-N-Pepa','🎤'],
+    ['09-05','Pitbull','🎤'],['09-07','Babymetal','🤘'],['09-08','Wu-Tang Clan','🎤'],['09-09','Breaking Benjamin','🤘'],
+    ['09-10','Lily Allen','🎵'],['09-12','Mt. Joy','🎸'],['09-14','$uicideboy$','🎤'],['09-15','Dermot Kennedy','🎵'],
+    ['09-20','Thee Sacred Souls','🎵'],['09-21','Staind','🤘'],['09-24','Dean Brody & The Reklaws','🤠'],
+    ['09-25','Shaboozey','🤠'],['09-26','Sofi Tukker','🎧'],['09-27','Logic & G-Eazy','🎤'],
+    ['09-30','The Red Clay Strays','🤠'],['10-03','Foster the People','🎵']
+  ];
+  var out={}; R.forEach(function(x){ out['2026-'+x[0]]={n:x[1],e:x[2]}; }); return out;
+})();
+function isoDateLocal(d){ var mm=d.getMonth()+1, dd=d.getDate(); return d.getFullYear()+'-'+(mm<10?'0'+mm:mm)+'-'+(dd<10?'0'+dd:dd); }
+function defaultAssignee(d){ var dow=d.getDay(); return (dow===0||dow===6)?'Peter':'Rob'; } // weekend->Peter, weekday->Rob
+function isServiceDay(kioskId,d,iso){ var dow=d.getDay();
+  if(kioskId==='uoft') return dow===1||dow===3||dow===5;   // Mon/Wed/Fri, closed weekends
+  if(kioskId==='sinai') return true;                        // every day
+  if(kioskId==='bud') return !!BUD_CONCERTS[iso];           // concert days only
+  return false; }
+function svcKiosk(id){return SERVICE_KIOSKS.filter(function(k){return k.id===id;})[0];}
+function svcDate(iso){ if(!iso) return ''; var d=new Date(iso); return d.toLocaleDateString(undefined,{month:'short',day:'numeric'})+' '+d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}); }
+function badgeFor(type){ return type==='overlap' ? {t:'Shared',c:'b-overlap'} : type==='unique' ? {t:'Unique to this kiosk',c:'b-unique'} : {t:'Model-specific',c:'b-model'}; }
+
+// ---------- SERVICING LANDING ----------
+function screenServiceLanding(){
+  M.innerHTML=''; M.appendChild(backBtn('techHome'));
+  M.appendChild(el('<div><h2>Service a kiosk</h2><p class="sub">Pick a kiosk to run its checklist.</p></div>'));
+  var wrap=el('<div id="svcLand"><div class="center"><div class="spin"></div></div></div>'); M.appendChild(wrap);
+  var hist=el('<button class="btn ghost">View service history</button>'); hist.onclick=function(){go('serviceHistory');}; M.appendChild(hist);
+  call('getServiceSummary').then(function(sum){
+    sum=sum||{};
+    wrap.innerHTML='';
+    SERVICE_KIOSKS.forEach(function(k){
+      var s=sum[k.id]; var st;
+      if(s && s.inProgressSessionId) st={t:'In progress',c:'b-model'};
+      else if(s && s.lastStatus==='incomplete') st={t:'Incomplete last service',c:'b-unique'};
+      else if(s && s.lastCompletedAt) st={t:'Serviced '+svcDate(s.lastCompletedAt),c:'b-overlap'};
+      else st={t:'Never serviced',c:'b-unique'};
+      var card=el('<button class="tap"><div class="ico">🧰</div><div style="flex:1">'+
+        '<div class="ttl">'+esc(k.locationName)+'</div>'+
+        '<div class="dsc">'+esc(k.model)+' · '+esc(k.checklistVersion)+'</div>'+
+        '<div style="margin-top:6px"><span class="badge '+st.c+'">'+esc(st.t)+'</span></div></div><div class="chev">›</div></button>');
+      card.onclick=function(){ SERVICE.kioskId=k.id; go('serviceChecklist'); };
+      wrap.appendChild(card);
+    });
+  }).catch(function(e){ wrap.innerHTML='<div class="empty">'+esc(e.message||e)+'</div>'; });
+}
+
+// ---------- CHECKLIST ----------
+function screenServiceChecklist(){
+  var k=svcKiosk(SERVICE.kioskId); if(!k){ go('service'); return; }
+  SERVICE.sessionId=null; SERVICE.startedAt=null; SERVICE.st={}; SERVICE.invMap={}; SERVICE.milkBagChanged=false; SERVICE.milkStatus=null;
+  _svcActive=false; _svcDirty=false; _svcSaving=false; if(_svcTimer){ clearTimeout(_svcTimer); _svcTimer=null; }
+  M.innerHTML=''; M.appendChild(backBtn('service'));
+  M.appendChild(el('<div><h2>'+esc(k.locationName)+'</h2><p class="sub">'+esc(k.model)+' · checklist '+esc(k.checklistVersion)+'</p></div>'));
+  var body=el('<div id="svcBody"><div class="center"><div class="spin"></div></div></div>'); M.appendChild(body);
+  // load inventory + any in-progress session + milk status in parallel (faster), then render
+  Promise.all([call('getInventory'), call('getOpenServiceSession',k.id), call('getKioskMilkStatus',k.id)]).then(function(res){
+    var inv=res[0]||[], open=res[1], ms=res[2]||{};
+    inv.forEach(function(i){ SERVICE.invMap[i.name]={qty:i.qty,unit:i.baseUnit}; });
+    SERVICE.milkStatus=ms;
+    if(open){ SERVICE.sessionId=open.id; SERVICE.startedAt=open.startedAt; SERVICE.milkBagChanged=!!open.milkBagChanged;
+      (open.completions||[]).forEach(function(c){ SERVICE.st[c.itemId]={completed:!!c.completed,notes:c.notes||'',flagged:!!c.flagged}; });
+    }
+    renderChecklist(k, open);
+  }).catch(function(e){ body.innerHTML='<div class="empty">'+esc(e.message||e)+'</div>'; });
+}
+function milkBagBox(){
+  var ms=SERVICE.milkStatus||{}; var overdue=!!ms.overdue;
+  var last=ms.lastChange?('Last changed '+fmtDate(ms.lastChange)):'No bag change on record yet';
+  var box=el('<div class="milkbox'+(overdue?' overdue':'')+'"></div>');
+  box.appendChild(el('<div class="milkstat">'+(overdue?'⚠ Change the milk bag first':'🥛 Milk bag is current')+'</div>'));
+  box.appendChild(el('<div class="milksub">'+esc(last)+(overdue?' · bags last ~4 days — swap it before the milk cleaning.':'')+'</div>'));
+  var tg=el('<button class="milktoggle" type="button"></button>');
+  function paint(){ tg.className='milktoggle'+(SERVICE.milkBagChanged?' on':''); tg.textContent=SERVICE.milkBagChanged?'✓ Milk bag changed today':'Mark “milk bag changed today”'; }
+  tg.onclick=function(){ SERVICE.milkBagChanged=!SERVICE.milkBagChanged; paint(); svcAutosaveSoon(); };
+  paint(); box.appendChild(tg);
+  return box;
+}
+function renderChecklist(k, open){
+  var body=document.getElementById('svcBody'); body.innerHTML='';
+  var c=el('<div class="card"></div>');
+  c.appendChild(el('<div class="hint" style="margin-top:0">Technician: <b>'+esc(APP.me.name)+'</b></div>'));
+  c.appendChild(el('<label>Service date</label><input type="date" id="svcDateInp">'));
+  c.appendChild(el('<div class="row" style="gap:8px"><div><label style="margin-top:0" id="svcStartLbl">Start time</label><input type="time" id="svcStart"></div><div><label style="margin-top:0" id="svcEndLbl">End time</label><input type="time" id="svcEnd"></div></div>'));
+  c.querySelector('#svcDateInp').value=(open&&open.serviceDate)?open.serviceDate:isoDateLocal(new Date());
+  if(open&&open.startTime) c.querySelector('#svcStart').value=open.startTime;
+  if(open) c.appendChild(el('<div class="hint">Resuming an in-progress session started '+esc(svcDate(open.startedAt))+'.</div>'));
+  body.appendChild(c);
+  ['svcDateInp','svcStart','svcEnd'].forEach(function(id){ var e=c.querySelector('#'+id); if(e) e.onchange=function(){ svcAutosaveSoon(); if(id==='svcStart'||id==='svcEnd') clearTimeMissing(); }; });
+  c.appendChild(el('<div id="svcTimeErr" style="display:none;color:var(--rust);font-size:12px;font-weight:600;margin-top:7px"></div>'));
+
+  k.sections.forEach(function(sec){
+    var b=badgeFor(sec.sectionType);
+    body.appendChild(el('<div class="sec"><h3>'+esc(sec.title)+'</h3><span class="badge '+b.c+'">'+esc(b.t)+'</span></div>'));
+    var sc=el('<div class="card" style="padding-top:4px"></div>');
+    if(sec.id==='milk') sc.appendChild(milkBagBox());
+    sec.items.forEach(function(it){ sc.appendChild(itemRow(sec,it)); });
+    body.appendChild(sc);
+  });
+
+  var fin=el('<div class="card"></div>');
+  fin.appendChild(el('<label style="margin-top:0">Overall session notes (optional)</label><textarea id="svcOverall" placeholder="Anything about this visit"></textarea>'));
+  if(open && open.overallNotes) fin.querySelector('#svcOverall').value=open.overallNotes;
+  fin.querySelector('#svcOverall').oninput=function(){ svcAutosaveSoon(); };
+  var rw=el('<div id="svcReasonWrap" style="display:none"><label>Reason required items are incomplete</label><textarea id="svcReason" placeholder="Why are required items left unchecked?"></textarea></div>');
+  fin.appendChild(rw);
+  body.appendChild(fin);
+
+  var bar=el('<div class="stickybar"></div>');
+  bar.appendChild(el('<div class="prog" style="margin:0 0 8px"><i id="svcProg" style="width:0%"></i></div>'));
+  bar.appendChild(el('<div class="svcprlbl" id="svcProgLbl"></div>'));
+  bar.appendChild(el('<div class="svcsaved" id="svcSavedLbl"></div>'));
+  var btns=el('<div class="stickybtns"></div>');
+  var save=el('<button class="btn ghost">Save progress</button>'); save.onclick=function(){submitService('in_progress');};
+  var done=el('<button class="btn">Complete service</button>'); done.onclick=function(){submitService('complete');};
+  btns.appendChild(save); btns.appendChild(done);
+  bar.appendChild(btns); body.appendChild(bar);
+  refreshSvcProgress();
+  _svcActive=true; _svcDirty=false;
+}
+function itemRow(sec,it){
+  var s=SERVICE.st[it.id]||{completed:false,notes:'',flagged:false};
+  var ref=''; if(it.linkedSku && SERVICE.invMap[it.linkedSku]){ var m=SERVICE.invMap[it.linkedSku]; ref='<div class="sku-ref">Warehouse: '+m.qty+' '+esc(m.unit)+'</div>'; }
+  var row=el('<div class="citem'+(s.flagged?' flagged':'')+'" data-id="'+it.id+'">'+
+    '<div class="crow"><input type="checkbox"'+(s.completed?' checked':'')+'>'+
+      '<div class="lab"><div class="nm">'+esc(it.label)+(it.required?'<span class="req">required</span>':'')+'</div>'+ref+'</div></div>'+
+    '<div class="det"><ul>'+it.instr.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul></div>'+
+    '<div class="acts"><button class="link js-det">Details</button><button class="link js-note">Add note</button><button class="link js-flag">⚠ Flag issue</button></div>'+
+    '<textarea class="note" placeholder="Note" style="display:'+((s.notes||s.flagged)?'block':'none')+'">'+esc(s.notes||'')+'</textarea></div>');
+  var cb=row.querySelector('input'), det=row.querySelector('.det'), note=row.querySelector('.note');
+  if(!SERVICE.st[it.id]) SERVICE.st[it.id]={completed:false,notes:'',flagged:false};
+  cb.onchange=function(){ SERVICE.st[it.id].completed=cb.checked; refreshSvcProgress(); svcAutosaveSoon(); };
+  row.querySelector('.js-det').onclick=function(){ det.classList.toggle('open'); };
+  row.querySelector('.js-note').onclick=function(){ note.style.display='block'; note.focus(); };
+  note.oninput=function(){ SERVICE.st[it.id].notes=note.value; svcAutosaveSoon(); };
+  row.querySelector('.js-flag').onclick=function(){
+    var f=!SERVICE.st[it.id].flagged; SERVICE.st[it.id].flagged=f;
+    row.classList.toggle('flagged',f); if(f){ note.style.display='block'; note.focus(); }
+    svcAutosaveSoon();
+  };
+  return row;
+}
+function refreshSvcProgress(){
+  var bar=document.getElementById('svcProg'); if(!bar)return;
+  var k=svcKiosk(SERVICE.kioskId); if(!k)return;
+  var total=0,done=0,reqLeft=0;
+  k.sections.forEach(function(sec){ sec.items.forEach(function(it){ total++; var s=SERVICE.st[it.id]||{}; if(s.completed)done++; if(it.required&&!s.completed)reqLeft++; }); });
+  var pct=total?Math.round(done/total*100):0;
+  bar.style.width=pct+'%';
+  var lbl=document.getElementById('svcProgLbl');
+  if(lbl) lbl.textContent=done+' of '+total+' done · '+(reqLeft?(reqLeft+' required left'):'all required done ✓');
+}
+function buildCompletions(k){
+  var out=[];
+  k.sections.forEach(function(sec){ sec.items.forEach(function(it){
+    var s=SERVICE.st[it.id]||{completed:false,notes:'',flagged:false};
+    out.push({itemId:it.id,section:sec.title,label:it.label,itemType:it.itemType,required:it.required,
+      completed:!!s.completed,flagged:!!s.flagged,notes:s.notes||''});
+  });});
+  return out;
+}
+function markSaving(){ var l=document.getElementById('svcSavedLbl'); if(l) l.textContent='Saving…'; }
+function markSaved(){ var l=document.getElementById('svcSavedLbl'); if(l) l.textContent='All changes saved ✓'; }
+function svcAutosaveSoon(){ if(!_svcActive) return; _svcDirty=true; markSaving(); if(_svcTimer) clearTimeout(_svcTimer); _svcTimer=setTimeout(function(){ svcAutosaveNow(false); }, 1500); }
+function svcAutosaveNow(force){
+  if(!_svcActive) return;
+  if(_svcSaving){ _svcDirty=true; return; }
+  if(!_svcDirty && !force) return;
+  var k=svcKiosk(SERVICE.kioskId); if(!k) return;
+  if(_svcTimer){ clearTimeout(_svcTimer); _svcTimer=null; }
+  _svcDirty=false; _svcSaving=true;
+  var payload={ id:SERVICE.sessionId, kioskId:k.id, locationName:k.locationName, model:k.model,
+    checklistVersion:k.checklistVersion, technicianName:APP.me.name, startedAt:SERVICE.startedAt,
+    serviceDate:val('svcDateInp'), startTime:val('svcStart'), endTime:val('svcEnd'),
+    milkBagChanged:!!SERVICE.milkBagChanged,
+    status:'in_progress', completions:buildCompletions(k), overallNotes:val('svcOverall'), incompleteReason:'' };
+  call('saveServiceSession',payload).then(function(r){
+    if(r&&r.id) SERVICE.sessionId=r.id;
+    _svcSaving=false;
+    if(_svcDirty){ svcAutosaveNow(false); } else { markSaved(); }
+  }).catch(function(){ _svcSaving=false; _svcDirty=true; });
+}
+function clearTimeMissing(){
+  var e=document.getElementById('svcTimeErr'); if(e) e.style.display='none';
+  ['svcStartLbl','svcEndLbl'].forEach(function(id){ var l=document.getElementById(id); if(l){ var b=l.querySelector('.timereq'); if(b) b.remove(); } });
+}
+function markTimeMissing(missStart,missEnd){
+  clearTimeMissing();
+  function star(id){ var l=document.getElementById(id); if(l && !l.querySelector('.timereq')) l.appendChild(el('<span class="timereq" style="color:var(--rust);font-weight:700;margin-left:6px">★ incomplete</span>')); }
+  if(missStart) star('svcStartLbl');
+  if(missEnd) star('svcEndLbl');
+  var e=document.getElementById('svcTimeErr');
+  if(e){ e.textContent='Go up and fill in the '+((missStart&&missEnd)?'start and end time':(missStart?'start time':'end time'))+' before you hit submit.'; e.style.display='block'; }
+  var top=document.getElementById('svcStartLbl'); if(top && top.scrollIntoView) top.scrollIntoView({behavior:'smooth',block:'center'});
+}
+function submitService(mode){
+  clearTimeMissing();
+  var k=svcKiosk(SERVICE.kioskId);
+  var comps=buildCompletions(k);
+  // flagged items need a note
+  var flaggedNoNote=comps.filter(function(c){return c.flagged && !c.notes.trim();});
+  if(flaggedNoNote.length) return toast('Add a note to each flagged item ('+flaggedNoNote.length+' missing)',true);
+  var _st=val('svcStart'), _et=val('svcEnd');
+  if(_st && _et && _et < _st) return toast('End time can’t be earlier than the start time',true);
+  var status='in_progress', reason='';
+  if(mode==='complete'){
+    if(!_st || !_et){ markTimeMissing(!_st,!_et); return toast('Add '+((!_st&&!_et)?'a start and end time':(!_st?'a start time':'an end time'))+' before completing',true); }
+    var reqInc=comps.filter(function(c){return c.required && !c.completed;});
+    if(reqInc.length){
+      var wrap=document.getElementById('svcReasonWrap'); wrap.style.display='block';
+      reason=val('svcReason').trim();
+      if(!reason){ wrap.scrollIntoView({behavior:'smooth'}); return toast(reqInc.length+' required item(s) unchecked — add a reason to submit',true); }
+      status='incomplete';
+    } else { status='completed'; }
+  }
+  var payload={ id:SERVICE.sessionId, kioskId:k.id, locationName:k.locationName, model:k.model,
+    checklistVersion:k.checklistVersion, technicianName:APP.me.name, startedAt:SERVICE.startedAt,
+    serviceDate:val('svcDateInp'), startTime:val('svcStart'), endTime:val('svcEnd'),
+    milkBagChanged: !!SERVICE.milkBagChanged,
+    status:status, completions:comps, overallNotes:val('svcOverall'), incompleteReason:reason };
+  _svcActive=false; _svcDirty=false; if(_svcTimer){ clearTimeout(_svcTimer); _svcTimer=null; }
+  loading('Saving…');
+  call('saveServiceSession',payload).then(function(r){
+    SERVICE.sessionId=r.id;
+    toast(status==='completed'?'Service completed ✓':status==='incomplete'?'Submitted (incomplete) ✓':'Progress saved ✓');
+    go('service');
+  }).catch(function(e){ toast(e.message||e,true); screenServiceChecklist(); });
+}
+
+// ---------- HISTORY ----------
+function screenServiceHistory(){
+  M.innerHTML=''; M.appendChild(backBtn('service'));
+  M.appendChild(el('<div><h2>Service history</h2><p class="sub">Every completed and in-progress session.</p></div>'));
+  var wrap=el('<div class="card"><div class="feed"></div></div>'); var feed=wrap.querySelector('.feed');
+  feed.innerHTML='<div class="center"><div class="spin"></div></div>'; M.appendChild(wrap);
+  call('getServiceSessions').then(function(list){
+    list=list||[];
+    feed.innerHTML='';
+    if(!list.length){ feed.innerHTML='<div class="empty">No sessions yet.</div>'; return; }
+    list.forEach(function(s){ feed.appendChild(historySessionRow(s)); });
+  }).catch(function(e){ feed.innerHTML='<div class="empty">'+esc(e.message||e)+'</div>'; });
+}
+function statusPill(status){ return status==='completed'?'<span class="badge b-overlap">Completed</span>':status==='incomplete'?'<span class="badge b-unique">Incomplete</span>':'<span class="badge b-model">In progress</span>'; }
+function historySessionRow(s){
+  var r=el('<div class="hrow"><div class="grow"><div><b>'+esc(s.locationName)+'</b> · '+esc(s.model)+'</div>'+
+    '<small>'+esc(s.technicianName||'—')+' · '+esc(svcDate(s.completedAt||s.startedAt))+' · '+s.percentComplete+'%</small>'+
+    '<div style="margin-top:5px">'+statusPill(s.status)+(s.requiredIncomplete?' <span class="hint">'+s.requiredIncomplete+' required incomplete</span>':'')+'</div></div>'+
+    '<div class="chev" style="color:var(--lime-deep)">›</div></div>');
+  r.style.cursor='pointer';
+  r.onclick=function(){ SERVICE.detailId=s.id; go('serviceDetail'); };
+  return r;
+}
+function screenServiceDetail(){
+  M.innerHTML=''; M.appendChild(backBtn('serviceHistory'));
+  var body=el('<div><div class="center"><div class="spin"></div></div></div>'); M.appendChild(body);
+  call('getServiceSession',SERVICE.detailId).then(function(s){
+    body.innerHTML='';
+    body.appendChild(el('<div><h2>'+esc(s.locationName)+'</h2><p class="sub">'+esc(s.model)+' · '+esc(s.checklistVersion)+'</p></div>'));
+    var head=el('<div class="card"></div>');
+    head.appendChild(el('<div class="mgr-row" style="border:none;padding-top:0"><div class="grow"><div>'+statusPill(s.status)+' &nbsp; <b>'+s.percentComplete+'%</b> complete</div>'+
+      '<small>'+esc(s.technicianName||'—')+' · started '+esc(svcDate(s.startedAt))+(s.completedAt?' · finished '+esc(svcDate(s.completedAt)):'')+'</small></div></div>'));
+    head.appendChild(el('<div class="prog"><i style="width:'+s.percentComplete+'%"></i></div>'));
+    if(s.incompleteReason) head.appendChild(el('<div class="hint" style="margin-top:10px"><b>Reason for incomplete:</b> '+esc(s.incompleteReason)+'</div>'));
+    if(s.overallNotes) head.appendChild(el('<div class="hint" style="margin-top:8px"><b>Overall notes:</b> '+esc(s.overallNotes)+'</div>'));
+    body.appendChild(head);
+    // group completions by section
+    var bySec=[]; var idx={};
+    (s.completions||[]).forEach(function(c){ if(!(c.section in idx)){ idx[c.section]=bySec.length; bySec.push({title:c.section,items:[]}); } bySec[idx[c.section]].items.push(c); });
+    bySec.forEach(function(g){
+      var card=el('<div class="card"><label style="margin-top:0">'+esc(g.title)+'</label></div>');
+      g.items.forEach(function(c){
+        card.appendChild(el('<div class="citem" style="padding:9px 0"><div class="crow">'+
+          '<div style="flex:none;font-size:17px">'+(c.completed?'✅':'⬜')+'</div>'+
+          '<div class="lab"><div class="nm">'+esc(c.label)+(c.flagged?' <span class="badge b-unique">flagged</span>':'')+(c.required&&!c.completed?'<span class="req">missed</span>':'')+'</div>'+
+          (c.notes?'<div class="sub2">'+esc(c.notes)+'</div>':'')+'</div></div></div>'));
+      });
+      body.appendChild(card);
+    });
+  }).catch(function(e){ body.innerHTML='<div class="empty">'+esc(e.message||e)+'</div>'; });
+}
+
+// ---------- MANAGER: SERVICING REPORTS ----------
+function mgrService(body){
+  body.innerHTML='<div class="center"><div class="spin"></div></div>';
+  Promise.all([call('getServiceReport'),call('getServiceSessions')]).then(function(res){
+    var rep=res[0]||{}, sessions=res[1]||[];
+    rep.completedByKiosk=rep.completedByKiosk||{}; rep.recentByKiosk=rep.recentByKiosk||{};
+    rep.incompleteItems=rep.incompleteItems||[]; rep.flaggedItems=rep.flaggedItems||[];
+    rep.grayWaterHistory=rep.grayWaterHistory||[]; rep.recentNotes=rep.recentNotes||[];
+    body.innerHTML='';
+    body.appendChild(el('<div class="kpi">'+
+      '<div class="b"><div class="n" style="color:var(--lime-deep)">'+rep.calibrationIssues+'</div><div class="l">Calibration issues</div></div>'+
+      '<div class="b"><div class="n" style="color:var(--lime-deep)">'+rep.sensorIssues+'</div><div class="l">Sensor issues</div></div>'+
+      '<div class="b"><div class="n" style="color:var(--moss)">'+sessions.filter(function(s){return s.status==='completed';}).length+'</div><div class="l">Completed</div></div></div>'));
+
+    var byk=el('<div class="card"><label style="margin-top:0">Services by kiosk</label></div>');
+    SERVICE_KIOSKS.forEach(function(k){
+      var n=rep.completedByKiosk[k.locationName]||0; var last=rep.recentByKiosk[k.locationName];
+      byk.appendChild(el('<div class="mgr-row"><div class="grow"><div>'+esc(k.locationName)+' <small>'+esc(k.model)+'</small></div>'+
+        '<small>'+(last?('last '+esc(svcDate(last))):'never serviced')+'</small></div><div class="qty num">'+n+'</div></div>'));
+    });
+    body.appendChild(byk);
+
+    if(rep.incompleteItems.length){
+      var ic=el('<div class="card"><label style="margin-top:0">Most-missed required items</label></div>');
+      rep.incompleteItems.forEach(function(x){ ic.appendChild(el('<div class="mgr-row"><div class="grow">'+esc(x.label)+'</div><div class="qty num">'+x.count+'</div></div>')); });
+      body.appendChild(ic);
+    }
+    if(rep.flaggedItems.length){
+      var fc=el('<div class="card"><label style="margin-top:0">Most-flagged items</label></div>');
+      rep.flaggedItems.forEach(function(x){ fc.appendChild(el('<div class="mgr-row"><div class="grow">'+esc(x.label)+'</div><div class="qty num">'+x.count+'</div></div>')); });
+      body.appendChild(fc);
+    }
+    if(rep.grayWaterHistory.length){
+      var gc=el('<div class="card"><label style="margin-top:0">Gray water disposal history</label></div>');
+      rep.grayWaterHistory.forEach(function(g){ gc.appendChild(el('<div class="mgr-row"><div class="grow">'+esc(g.loc)+' <small>'+esc(svcDate(g.when))+'</small></div><span class="badge '+(g.completed?'b-overlap':'b-unique')+'">'+(g.completed?'emptied':'not emptied')+'</span></div>')); });
+      body.appendChild(gc);
+    }
+    if(rep.recentNotes.length){
+      var nc=el('<div class="card"><label style="margin-top:0">Recent notes & issues</label></div>');
+      rep.recentNotes.forEach(function(nt){ nc.appendChild(el('<div class="hrow"><div class="grow"><div><b>'+esc(nt.label)+'</b> · '+esc(nt.loc)+'</div><small>'+esc(nt.note)+'</small></div><div class="hwhen">'+esc(svcDate(nt.when))+'</div></div>')); });
+      body.appendChild(nc);
+    }
+    var allc=el('<div class="card"><label style="margin-top:0">All sessions</label><div class="feed"></div></div>'); var feed=allc.querySelector('.feed');
+    if(!sessions.length) feed.innerHTML='<div class="empty">No sessions yet.</div>';
+    else sessions.forEach(function(s){ feed.appendChild(historySessionRow(s)); });
+    body.appendChild(allc);
+  }).catch(function(e){ body.innerHTML='<div class="empty">'+esc(e.message||e)+'</div>'; });
+}
+
+</script>
+
+
+</body></html>
