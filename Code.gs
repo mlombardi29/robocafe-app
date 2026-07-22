@@ -1028,7 +1028,7 @@ function getPickupList(){
 //  - every BACKUP_EMAIL_DAYS, also emails an off-Drive .xlsx snapshot to the team
 // ============================================================================
 var BACKUP_FOLDER_NAME = 'Robo Caf\u00e9 \u2014 DB backups';
-var BACKUP_KEEP        = 30;
+var BACKUP_KEEP        = 2;   // keep only the 2 most recent copies
 var BACKUP_EMAILS      = ['backup-email-1@REMOVED.invalid','backup-email-2@REMOVED.invalid'];
 var BACKUP_EMAIL_DAYS  = 60;
 
@@ -1169,4 +1169,57 @@ function getBackupStatus(){
     count: count, keep: BACKUP_KEEP, emailDays: BACKUP_EMAIL_DAYS,
     emails: BACKUP_EMAILS, folderName: BACKUP_FOLDER_NAME, folderUrl: folderUrl
   };
+}
+
+// ---- one-time maintenance: run these from the Apps Script editor ----
+
+// Shows every scheduled trigger (handler + how often it runs). Use this to spot a runaway backup.
+function listTriggers(){
+  return ScriptApp.getProjectTriggers().map(function(t){
+    return { handler: t.getHandlerFunction(), source: String(t.getTriggerSource()), event: String(t.getEventType()) };
+  });
+}
+
+// Removes ANY backup-related trigger (catches leftovers/duplicates from earlier versions),
+// then installs exactly one clean daily backup at ~2am. Run once.
+function resetBackupSchedule(){
+  var removed = [];
+  ScriptApp.getProjectTriggers().forEach(function(t){
+    var h = t.getHandlerFunction() || '';
+    if (/backup|snapshot|copy/i.test(h)) { removed.push(h); ScriptApp.deleteTrigger(t); }
+  });
+  ScriptApp.newTrigger('dailyBackup_').timeBased().everyDays(1).atHour(2).create();
+  setConfig_('autoBackup','on');
+  return { removedTriggers: removed, installed: 'dailyBackup_ (once daily ~2am)' };
+}
+
+// Trashes all but the newest `keepN` backup copies (default 2). Reversible — files go to Drive Trash,
+// not permanently deleted. Scans the backups folder AND any stray backup sheets left loose in Drive.
+function cleanupBackups(keepN){
+  keepN = keepN || BACKUP_KEEP;
+  var liveId = ss_().getId();
+  var base = ss_().getName().toLowerCase();
+  var seen = {}, files = [];
+  function consider(f){
+    if (!f || f.getId() === liveId || seen[f.getId()]) return;
+    seen[f.getId()] = 1; files.push(f);
+  }
+  // 1) everything inside the backups folder
+  var fo = backupFolderExisting_();
+  if (fo){ var it = fo.getFiles(); while (it.hasNext()) consider(it.next()); }
+  // 2) stray backup spreadsheets anywhere in Drive that reference this database
+  var it2 = DriveApp.searchFiles("mimeType='application/vnd.google-apps.spreadsheet' and title contains 'backup' and trashed=false");
+  while (it2.hasNext()){
+    var f = it2.next(), nm = f.getName().toLowerCase();
+    if (nm.indexOf('backup') < 0) continue;
+    if (nm.indexOf(base) < 0 && nm.indexOf('cv app') < 0 && nm.indexOf('cv_app') < 0) continue;
+    consider(f);
+  }
+  files.sort(function(a,b){ return b.getDateCreated().getTime() - a.getDateCreated().getTime(); });
+  var kept = [], trashed = 0;
+  for (var i = 0; i < files.length; i++){
+    if (i < keepN) kept.push(files[i].getName());
+    else { try { files[i].setTrashed(true); trashed++; } catch(e){} }
+  }
+  return { totalFound: files.length, kept: kept, trashedCount: trashed };
 }
