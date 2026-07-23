@@ -252,8 +252,7 @@ function authExpired(){
 }
 
 var _batch=null;
-function call(fn){
-  var args=Array.prototype.slice.call(arguments,1);
+function rawCall_(fn,args){
   if(!_batch){ _batch={calls:[],waiters:[]}; setTimeout(flushBatch_,0); }
   var b=_batch;
   return new Promise(function(res,rej){ b.calls.push({fn:fn,args:args}); b.waiters.push({res:res,rej:rej}); });
@@ -269,7 +268,7 @@ function flushBatch_(){
     var sawAuth=false;
     (out.results||[]).forEach(function(r,i){
       var w=b.waiters[i]; if(!w) return;
-      if(r && r.ok) w.res(r.result);
+      if(r && r.ok){ if(WRITE_FNS[b.calls[i].fn]) clearDataCache(); w.res(r.result); }
       else { if(r && r.code==='auth') sawAuth=true; w.rej(new Error((r&&r.error)||'Request failed.')); }
     });
     if(sawAuth) authExpired();
@@ -278,6 +277,61 @@ function flushBatch_(){
     var msg=(e && /Server error|try again/.test(e.message||'')) ? e.message : 'Connection problem — check your internet and try again.';
     b.waiters.forEach(function(w){ w.rej(new Error(msg)); });
   });
+}
+
+/* ----- instant screens: device-side data memory (stale-while-revalidate) -----
+   Results of the read calls below are remembered on the device. Revisiting a
+   screen paints IMMEDIATELY from that memory while fresh data loads quietly
+   behind; if the fresh data differs, the screen quietly repaints — but only
+   screens that register VIEW.repaint (read-only listings, never forms).
+   Any successful write wipes the memory, so you never see pre-submission
+   numbers. Kiosk report + service checklist reads are deliberately NOT here —
+   those must always be live. */
+var SWR_FNS={ getInventory:1,getDashboard:1,getServiceFlags:1,getScheduleOverrides:1,getServiceSummary:1,
+  getServiceSessions:1,getServiceSession:1,getHistory:1,getServiceReport:1,getPayments:1,getCharges:1,
+  getPickupList:1,getMilkBagLog:1,getPeopleForManager:1,getAllSkusForManager:1,getBackupStatus:1 };
+var WRITE_FNS={ recordWithdrawal:1,recordReceipt:1,recordAdjustment:1,recordKioskFlags:1,resolveFlag:1,
+  saveSku:1,setSkuActive:1,saveLocation:1,setLocationActive:1,savePerson:1,setPersonActive:1,
+  setLowDaysThreshold:1,syncStandardItems:1,setLocationSkuInUse:1,saveServiceSession:1,
+  requestCoverage:1,claimCoverage:1,cancelCoverage:1,savePayment:1,voidPayment:1,addCharge:1,
+  setChargePaid:1,voidCharge:1,clearServiceFlag:1,backupNow:1,setAutoBackup:1,managerResetPin:1 };
+var SWR_TTL=60*60000;   // memory older than an hour shows a spinner instead
+var SWR_FRESH=5000;     // data this new is trusted as-is (stops repaint loops)
+var VIEW={ repaint:null };
+var _refreshing={}, _repaintTimer=null;
+
+function call(fn){
+  var args=Array.prototype.slice.call(arguments,1);
+  if(SWR_FNS[fn] && AUTH.token){
+    var key='rc_c_'+fn+(args.length?'_'+JSON.stringify(args):'');
+    var hit=null; try{ hit=JSON.parse(lsGet(key)||'null'); }catch(e){}
+    var age=hit ? (Date.now()-hit.t) : Infinity;
+    if(hit && age<SWR_TTL){
+      if(age>SWR_FRESH) refreshData_(fn,args,key);
+      return Promise.resolve(hit.v);
+    }
+    return rawCall_(fn,args).then(function(v){ lsSet(key,JSON.stringify({t:Date.now(),v:v})); return v; });
+  }
+  return rawCall_(fn,args);
+}
+function refreshData_(fn,args,key){
+  if(_refreshing[key]) return;
+  _refreshing[key]=1;
+  rawCall_(fn,args).then(function(v){
+    delete _refreshing[key];
+    var oldV=''; try{ var o=JSON.parse(lsGet(key)||'null'); if(o) oldV=JSON.stringify(o.v); }catch(e){}
+    lsSet(key,JSON.stringify({t:Date.now(),v:v}));
+    if(JSON.stringify(v)!==oldV) scheduleRepaint_();
+  }).catch(function(){ delete _refreshing[key]; });
+}
+function scheduleRepaint_(){
+  if(_repaintTimer) return;
+  _repaintTimer=setTimeout(function(){ _repaintTimer=null; if(VIEW.repaint) VIEW.repaint(); },60);
+}
+function clearDataCache(){
+  var kill=[];
+  try{ for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k&&k.indexOf('rc_c_')===0) kill.push(k); } }catch(e){}
+  kill.forEach(function(k){ try{ localStorage.removeItem(k); }catch(e){} });
 }
 var APP={ boot:null, role:null, mgrTab:'dash' };
 var FLAG={ loc:'', sel:{} };
@@ -395,6 +449,7 @@ function refreshBoot(){
 
 function go(screen){
   if(_svcActive){ svcAutosaveNow(false); _svcActive=false; }
+  VIEW.repaint=null;
   clearHeaderBack();
   document.getElementById('homeBtn').style.display = screen==='home' ? 'none' : 'block';
   window.scrollTo(0,0);
@@ -539,6 +594,7 @@ function renderPickup(container){
   }).catch(function(){ container.innerHTML=''; });
 }
 function screenTechHome(){
+  VIEW.repaint=screenTechHome;
   M.innerHTML='';
   M.appendChild(el('<div><h2>'+esc((APP.me&&APP.me.name)||'Technician')+'</h2><p class="sub">What would you like to do?</p></div>'));
   var pickup=el('<div></div>'); M.appendChild(pickup); renderPickup(pickup);
@@ -602,6 +658,7 @@ function submitWithdraw(){
 
 // ---------- WAREHOUSE VIEW (technician, read-only) ----------
 function screenWarehouse(){
+  VIEW.repaint=screenWarehouse;
   M.innerHTML='';
   M.appendChild(backBtn('techHome'));
   M.appendChild(el('<div><h2>Warehouse stock</h2><p class="sub">Live counts — view only.</p></div>'));
@@ -724,6 +781,7 @@ function submitFlags(){
 
 // ---------- MANAGER SHELL ----------
 function screenManager(){
+  VIEW.repaint=screenManager;
   M.innerHTML='';
   M.appendChild(el('<div><h2>Manager</h2><p class="sub">Overview, inventory and servicing.</p></div>'));
   var summaryWrap=el('<div></div>'); M.appendChild(summaryWrap);
@@ -777,6 +835,7 @@ function screenManager(){
 
 // Drill-down pages opened from the four dashboard count tiles.
 function mgrCount(kind){
+  VIEW.repaint=function(){ mgrCount(kind); };
   var meta={ out:{t:'Out',s:'Items out of stock.'}, reorder:{t:'To reorder',s:'Items running low.'},
     flags:{t:'Service flags',s:'Issues flagged during servicing.'}, coverage:{t:'Coverage needed',s:'Shifts that need someone.'} }[kind]||{t:'',s:''};
   M.innerHTML=''; M.appendChild(backBtn('mgr'));
@@ -860,6 +919,8 @@ function mgrCount(kind){
 }
 
 function mgrOpen(view){
+  // only read-only listings may quietly repaint; forms/filter screens must not
+  VIEW.repaint = ({stock:1,history:1,status:1,service:1}[view]) ? function(){ mgrOpen(view); } : null;
   M.innerHTML=''; M.appendChild(backBtn('mgr'));
   var titles={stock:'Warehouse stock',receive:'Receive stock',recount:'Recount / seed',items:'Items',
     places:'Kiosks',history:'History',service:'Servicing reports',status:'Service status',
@@ -1715,6 +1776,7 @@ function badgeFor(type){ return type==='overlap' ? {t:'Shared',c:'b-overlap'} : 
 
 // ---------- SERVICING LANDING ----------
 function screenServiceLanding(){
+  VIEW.repaint=screenServiceLanding;
   M.innerHTML=''; M.appendChild(backBtn('techHome'));
   M.appendChild(el('<div><h2>Service a kiosk</h2><p class="sub">Pick a kiosk to run its checklist.</p></div>'));
   var wrap=el('<div id="svcLand"><div class="center"><div class="spin"></div></div></div>'); M.appendChild(wrap);
@@ -1922,6 +1984,7 @@ function submitService(mode){
 
 // ---------- HISTORY ----------
 function screenServiceHistory(){
+  VIEW.repaint=screenServiceHistory;
   M.innerHTML=''; M.appendChild(backBtn('service'));
   M.appendChild(el('<div><h2>Service history</h2><p class="sub">Every completed and in-progress session.</p></div>'));
   var wrap=el('<div class="card"><div class="feed"></div></div>'); var feed=wrap.querySelector('.feed');
@@ -1944,6 +2007,7 @@ function historySessionRow(s){
   return r;
 }
 function screenServiceDetail(){
+  VIEW.repaint=screenServiceDetail;
   M.innerHTML=''; M.appendChild(backBtn('serviceHistory'));
   var body=el('<div><div class="center"><div class="spin"></div></div></div>'); M.appendChild(body);
   call('getServiceSession',SERVICE.detailId).then(function(s){

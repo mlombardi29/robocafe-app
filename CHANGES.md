@@ -5,6 +5,17 @@ A plain-language history of changes to the Robo Café internal app
 
 ---
 
+## Instant screens (speed pass 2)
+- Screens you've visited before now open **instantly** from data remembered on the
+  device, while fresh numbers load quietly in the background — if anything changed,
+  the screen updates itself a moment later.
+- This applies to read-only listings (dashboard, warehouse stock, histories, reports,
+  labour, pick-up list, schedule). Screens where you enter data — and the kiosk stock
+  report and service checklist — always load live data, never remembered data.
+- Anything you submit wipes the remembered data first, so you never see
+  pre-submission numbers after saving something.
+- Frontend-only change: deploying it is just this push (no Apps Script paste needed).
+
 ## Moved to GitHub Pages + real sign-in security + speed
 - **The app now lives at `https://mlombardi29.github.io/robocafe-app/`.** The page is
   hosted from this repo by GitHub Pages and talks to the Apps Script backend over the
