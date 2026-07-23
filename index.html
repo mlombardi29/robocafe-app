@@ -134,6 +134,7 @@
   .milktoggle{margin-top:11px;width:100%;padding:12px;border-radius:11px;border:1px solid var(--line);background:var(--paper);font:inherit;font-weight:700;cursor:pointer;color:var(--bean,#2f5d43);touch-action:manipulation}
   .milktoggle.on{background:var(--lime);border-color:var(--lime-deep);color:var(--black)}
   .milkmark{display:inline-block;margin-top:5px;font-size:11.5px;font-weight:700;color:var(--moss);background:var(--mint,#e7f3ec);border:1px solid #bfe0cf;border-radius:8px;padding:2px 8px}
+  .milkmark.plan{background:transparent;border:1px dashed #9dbfae;color:#5c7a6b}
   .pastday{opacity:.82}
   .empty{text-align:center;color:var(--muted);padding:26px 10px;font-size:14px}
   .hint{font-size:12px;color:var(--muted);margin-top:6px}
@@ -1244,6 +1245,36 @@ function renderSchedule(body){
     var me=(APP.me&&APP.me.name)||'';
     var ovMap={}; (ovr||[]).forEach(function(o){ ovMap[o.date+'|'+o.kioskId]=o; });
     milkLog=milkLog||{}; var milkSet={}; Object.keys(milkLog).forEach(function(kid){ milkSet[kid]={}; (milkLog[kid]||[]).forEach(function(ds){ milkSet[kid][ds]=true; }); });
+    /* Project future milk-bag changes: bags are good for 4 days. From each kiosk's
+       last recorded change, the next change lands on a service day within the 4-day
+       window — pulled EARLIER to the last visit before expiry when the due date falls
+       on a day that kiosk isn't serviced. Each projected change restarts the clock. */
+    var milkPlan={};
+    (function(){
+      var t0=new Date(); t0.setHours(0,0,0,0);
+      var tEnd=new Date(t0); tEnd.setMonth(tEnd.getMonth()+4);
+      SERVICE_KIOSKS.forEach(function(k){
+        milkPlan[k.id]={};
+        var last=''; (milkLog[k.id]||[]).forEach(function(ds){ if(ds>last) last=ds; });
+        var days=[];
+        for(var d=new Date(t0); d<=tEnd; d.setDate(d.getDate()+1)){
+          var iso=isoDateLocal(d);
+          if(isServiceDay(k.id,d,iso)) days.push(iso);
+        }
+        var lastD = last ? new Date(last+'T00:00:00') : null;
+        for(var i=0;i<days.length;i++){
+          var di=new Date(days[i]+'T00:00:00'), plan=false;
+          if(!lastD) plan=true; // no change on record — due at the next visit
+          else {
+            var due=new Date(lastD); due.setDate(due.getDate()+4);
+            var nxt = (i+1<days.length) ? new Date(days[i+1]+'T00:00:00') : null;
+            if(di>=due) plan=true;               // at or past the 4-day mark
+            else if(nxt && nxt>due) plan=true;   // last visit before the bag expires
+          }
+          if(plan){ milkPlan[k.id][days[i]]=true; lastD=di; }
+        }
+      });
+    })();
     body.appendChild(el('<p class="sub" style="margin-top:0">Weekdays are Rob, weekends Peter. You can request coverage only for your own days; anyone can pick up a day that needs coverage.</p>'));
 
     var kioskList=[['all','All'],['uoft','University of Toronto'],['sinai','Mount Sinai Hospital'],['bud','RBC Amphitheatre']];
@@ -1298,6 +1329,7 @@ function renderSchedule(body){
         var info=el('<div class="grow"><div><b>'+title+'</b></div><small>'+
           (e.coverage?('⚠ Needs coverage — '+esc(e.requestedBy||'?')+' can\'t make it'):('Assigned: '+esc(e.assignee)))+'</small></div>');
         if(milkSet[e.kiosk.id] && milkSet[e.kiosk.id][e.iso]) info.appendChild(el('<div class="milkmark">🥛 Milk bag changed</div>'));
+        else if(!past && milkPlan[e.kiosk.id] && milkPlan[e.kiosk.id][e.iso]) info.appendChild(el('<div class="milkmark plan">🥛 Scheduled milk bag change</div>'));
         row.appendChild(info);
         if(!past){
           if(e.coverage){

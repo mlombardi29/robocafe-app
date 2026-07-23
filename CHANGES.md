@@ -5,6 +5,18 @@ A plain-language history of changes to the Robo Café internal app
 
 ---
 
+## Schedule now forecasts milk-bag changes
+- Future service days show a dashed **"🥛 Scheduled milk bag change"** marker so
+  technicians can plan ahead. Past days keep the solid "Milk bag changed" marker for
+  changes that actually happened.
+- The forecast uses the 4-day bag life: counting from the kiosk's last recorded
+  change, the next change lands on a service day within the window — moved *earlier*
+  to the last visit before expiry when day 4 falls on a day that kiosk isn't visited
+  (U of T weekends, RBC non-concert days). Each projected change restarts the clock,
+  so markers repeat roughly every 4 days into the future.
+- A kiosk with no bag change on record shows the marker on its next service day.
+- Frontend-only change: deployed by the push, no Apps Script paste needed.
+
 ## Fixed "Invalid Date" coverage requests that never expired
 - The schedule, payments and charges readers were the last three that didn't convert
   the Sheet's typed date/time cells to clean text (the known date gotcha). One root
