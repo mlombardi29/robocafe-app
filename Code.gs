@@ -829,7 +829,7 @@ function getServiceReport(){
 // =========================================================================
 function getScheduleOverrides(){
   return readObjects_(SHEETS.SCHED).map(function(r){
-    return { date:String(r.date), kioskId:r.kioskId,
+    return { date:dStr_(r.date), kioskId:r.kioskId,
       coverageRequested:(r.coverageRequested===true||r.coverageRequested==='TRUE'),
       requestedBy:r.requestedBy||'', claimedBy:r.claimedBy||'', originalAssignee:r.originalAssignee||'', note:r.note||'' };
   });
@@ -837,7 +837,7 @@ function getScheduleOverrides(){
 function upsertSched_(date,kioskId,fields){
   var rows=readObjects_(SHEETS.SCHED);
   for(var i=0;i<rows.length;i++){
-    if(String(rows[i].date)===String(date) && rows[i].kioskId===kioskId){
+    if(dStr_(rows[i].date)===dStr_(date) && rows[i].kioskId===kioskId){
       Object.keys(fields).forEach(function(f){ updateCell_(SHEETS.SCHED, rows[i]._row, f, fields[f]); });
       updateCell_(SHEETS.SCHED, rows[i]._row, 'updatedAt', new Date().toISOString());
       return;
@@ -1013,7 +1013,7 @@ function clearServiceFlag(sessionId, itemId){
 // =========================================================================
 function getPayments(){
   return readObjects_(SHEETS.PAY).filter(function(r){ return !(r.voided===true||r.voided==='TRUE'); })
-    .map(function(r){ return { id:r.id, personName:r.personName, periodStart:String(r.periodStart), periodEnd:String(r.periodEnd), paidDate:String(r.paidDate), notes:r.notes||'' }; });
+    .map(function(r){ return { id:r.id, personName:r.personName, periodStart:dStr_(r.periodStart), periodEnd:dStr_(r.periodEnd), paidDate:dStr_(r.paidDate), notes:r.notes||'' }; });
 }
 function savePayment(p){
   var lock=LockService.getScriptLock(); lock.waitLock(20000);
@@ -1039,11 +1039,11 @@ function voidPayment(id){
 function getCharges(){
   return readObjects_(SHEETS.CHG).filter(function(r){ return !(r.voided===true||r.voided==='TRUE'); })
     .map(function(r){ return {
-      id:r.id, personName:r.personName||'', type:r.type||'', date:String(r.date||''),
+      id:r.id, personName:r.personName||'', type:r.type||'', date:dStr_(r.date),
       description:r.description||'', amount:num_(r.amount),
-      startTime:String(r.startTime||''), endTime:String(r.endTime||''), hours:num_(r.hours),
+      startTime:tStr_(r.startTime), endTime:tStr_(r.endTime), hours:num_(r.hours),
       receiptLink:r.receiptLink||'', paid:(r.paid===true||r.paid==='TRUE'),
-      paidDate:String(r.paidDate||''), paidNote:r.paidNote||'', createdAt:r.createdAt||'' };
+      paidDate:dStr_(r.paidDate), paidNote:r.paidNote||'', createdAt:isoS_(r.createdAt) };
     }).sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); });
 }
 function addCharge(p){

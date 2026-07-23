@@ -5,6 +5,21 @@ A plain-language history of changes to the Robo Café internal app
 
 ---
 
+## Fixed "Invalid Date" coverage requests that never expired
+- The schedule, payments and charges readers were the last three that didn't convert
+  the Sheet's typed date/time cells to clean text (the known date gotcha). One root
+  cause, four symptoms — all fixed:
+  - "Coverage needed" showed **Invalid Date** and listed requests whose dates had
+    already passed (they now hide automatically once the date is gone).
+  - Tapping "Request coverage" repeatedly created **duplicate rows** instead of
+    updating one (the row matching never matched a typed date cell).
+  - **Picking up coverage didn't clear the request**, so old requests lingered forever.
+  - Labour: paid/unpaid detection and the charges date-range filter could misjudge
+    rows because dates were compared as long raw text.
+- No data cleanup needed: the 9 stale requests (7 were duplicate taps of one June 27
+  request) disappear from view on their own now that the past-date filter works.
+- Backend change: paste `Code.gs` into the Apps Script editor and deploy a new version.
+
 ## Instant screens (speed pass 2)
 - Screens you've visited before now open **instantly** from data remembered on the
   device, while fresh numbers load quietly in the background — if anything changed,
