@@ -2,17 +2,27 @@
  * Robo Café — Warehouse Inventory
  * Google Apps Script backend (container-bound to the Google Sheet).
  *
+ * ARCHITECTURE (since the GitHub Pages move):
+ *   - The app's page (index.html) is hosted on GitHub Pages and talks to this
+ *     backend over the web: it POSTs JSON to the deployed /exec URL, and
+ *     doPost() below routes each request to the right function.
+ *   - Visiting the /exec URL directly just shows a "we've moved" notice
+ *     pointing at the GitHub Pages link (doGet below).
+ *   - Every request (except sign-in itself) must carry a session token issued
+ *     at PIN sign-in. Wrong-PIN attempts are rate limited; after too many the
+ *     PIN locks until a manager resets it from Settings.
+ *
  * SETUP (one time):
  *   1. Create a new Google Sheet (this becomes the database).
- *   2. Extensions > Apps Script. Paste this file as Code.gs and add Index.html.
+ *   2. Extensions > Apps Script. Paste this file as Code.gs.
  *   3. Run the function `setup` once (authorize when prompted). This creates all
  *      tabs and seeds your SKUs, kiosks, people and config.
  *   4. Deploy > New deployment > Web app.
  *        Execute as: Me
- *        Who has access: Anyone
- *      Copy the web app URL and share it with managers + technicians.
- *   5. Open the app, tap Manager, and enter your counted starting
- *      quantities under "Recount".
+ *        Who has access: Anyone        <-- required for the app page to reach it
+ *   5. Put that /exec URL into SCRIPT_URL near the top of index.html.
+ *   6. (Optional) In the Config tab, add a row: key `backupEmails`, value a
+ *      comma-separated list of addresses for the 60-day snapshot email.
  */
 
 // ---- Tab names ----------------------------------------------------------
@@ -47,12 +57,27 @@ var HEADERS = {
   Charges: ['id','personName','type','date','description','amount','startTime','endTime','hours','receiptLink','paid','paidDate','paidNote','voided','createdAt']
 };
 
-// ---- Web app entry point ------------------------------------------------
+// ---- Web app entry points -----------------------------------------------
+// The app itself now lives on GitHub Pages. Anyone landing on the old Apps
+// Script URL just gets a pointer to the new permanent home.
+var APP_HOME_URL = 'https://mlombardi29.github.io/robocafe-app/';
+
 function doGet() {
-  return HtmlService.createHtmlOutputFromFile('Index')
-    .setTitle('Robo Café Inventory')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  var html =
+    '<!DOCTYPE html><html><head><base target="_top"><meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+    '<style>body{font-family:system-ui,sans-serif;background:#f1ece1;color:#191c12;display:grid;place-items:center;min-height:96vh;margin:0;padding:20px;text-align:center}' +
+    '.c{background:#fbf8f1;border:1px solid #e6dfce;border-radius:16px;padding:32px 24px;max-width:420px;box-shadow:0 8px 22px #1c1f1412}' +
+    'h1{font-size:22px;margin:10px 0 8px}p{color:#6f745f;line-height:1.5;margin:0}' +
+    'a.b{display:inline-block;margin-top:18px;background:#6ecf98;color:#191c12;font-weight:700;padding:14px 26px;border-radius:12px;text-decoration:none;font-size:16px}' +
+    '.u{font-size:12px;color:#6f745f;margin-top:16px;word-break:break-all}</style></head><body>' +
+    '<div class="c"><div style="font-size:34px">☕</div><h1>Robo Café has moved</h1>' +
+    '<p>This page isn’t used anymore. The app now lives at its new permanent home — tap below and update your saved link.</p>' +
+    '<a class="b" href="' + APP_HOME_URL + '">Open the Robo Café app →</a>' +
+    '<div class="u">' + APP_HOME_URL + '</div></div></body></html>';
+  return HtmlService.createHtmlOutput(html)
+    .setTitle('Robo Café has moved')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
 // ---- Sheet helpers ------------------------------------------------------
@@ -120,8 +145,9 @@ function configMap_() {
 
 function num_(v) { var n = parseFloat(v); return isNaN(n) ? 0 : n; }
 // --- value coercion: Sheets stores dates/times as typed cells, which come back as Date
-//     objects. Returning raw Dates to the client breaks google.script.run and downstream
-//     string logic, so every service reader funnels these fields through the helpers below. ---
+//     objects. Raw Dates serialize inconsistently on their way to the browser and break
+//     downstream string logic, so every service reader funnels these fields through the
+//     helpers below. Keep doing this for any new function that returns Sheet date/times. ---
 function svcTz_(){ try { return ss_().getSpreadsheetTimeZone(); } catch(e){ try { return Session.getScriptTimeZone(); } catch(e2){ return 'America/Toronto'; } } }
 function dStr_(v){ if (v instanceof Date) return Utilities.formatDate(v, svcTz_(), 'yyyy-MM-dd'); return v==null ? '' : String(v); }
 function tStr_(v){ if (v instanceof Date) return Utilities.formatDate(v, svcTz_(), 'HH:mm'); return v==null ? '' : String(v); }
@@ -552,7 +578,8 @@ function setPersonActive(name, active) {
 
 function getPeopleForManager() {
   return readObjects_(SHEETS.PEOPLE).map(function(p){
-    return { name:p.name, role:p.role, active:!(p.active===false||p.active==='FALSE'), hasPin:!!(p.pin && String(p.pin).length>0) };
+    return { name:p.name, role:p.role, active:!(p.active===false||p.active==='FALSE'),
+             hasPin:!!(p.pin && String(p.pin).length>0), locked:pinLocked_(p.name) };
   });
 }
 
@@ -855,14 +882,65 @@ function getMembers(){
   return readObjects_(SHEETS.PEOPLE).filter(function(p){ return !(p.active===false||p.active==='FALSE'); })
     .map(function(p){ return { name:p.name, role:p.role, hasPin: !!(p.pin && String(p.pin).length>0) }; });
 }
+// ---- session tokens + wrong-PIN rate limiting ---------------------------
+// A token is issued at sign-in and must accompany every API request (doPost
+// checks it). Wrong-PIN attempts are counted; after PIN_MAX_ATTEMPTS the PIN
+// locks and only a manager reset (Settings -> Reset PIN) unlocks it.
+var PIN_MAX_ATTEMPTS = 5;
+var TOKEN_TTL_MS = 30 * 86400000; // sessions stay signed in for 30 days
+
+function props_(){ return PropertiesService.getScriptProperties(); }
+function failKey_(name){ return 'pinfail_' + String(name); }
+function pinFails_(name){ return num_(props_().getProperty(failKey_(name))); }
+function pinLocked_(name){ return pinFails_(name) >= PIN_MAX_ATTEMPTS; }
+function clearPinFails_(name){ props_().deleteProperty(failKey_(name)); }
+function lockedMsg_(){
+  var mgrs = readObjects_(SHEETS.PEOPLE)
+    .filter(function(p){ return p.role==='manager' && !(p.active===false||p.active==='FALSE'); })
+    .map(function(p){ return p.name; });
+  return 'Too many incorrect attempts — this PIN is now locked. Message ' +
+         (mgrs.length ? mgrs.join(' or ') : 'a manager') +
+         ' directly and they can reset your PIN from Settings.';
+}
+
+function issueToken_(name, role){
+  var tok = Utilities.getUuid().replace(/-/g, '');
+  props_().setProperty('tok_' + tok, JSON.stringify({ name:name, role:role, exp: Date.now() + TOKEN_TTL_MS }));
+  return tok;
+}
+function tokenInfo_(tok){
+  if (!tok) return null;
+  var raw = props_().getProperty('tok_' + String(tok));
+  if (!raw) return null;
+  var o = null; try { o = JSON.parse(raw); } catch(e){ return null; }
+  if (!o || !o.exp || Date.now() > o.exp){ props_().deleteProperty('tok_' + String(tok)); return null; }
+  return o;
+}
+function pruneTokens_(){
+  var all = props_().getProperties();
+  Object.keys(all).forEach(function(k){
+    if (k.indexOf('tok_') !== 0) return;
+    try { var o = JSON.parse(all[k]); if (!o.exp || Date.now() > o.exp) props_().deleteProperty(k); }
+    catch(e){ props_().deleteProperty(k); }
+  });
+}
+
 function verifyIdentity(name, pin){
   var rows = readObjects_(SHEETS.PEOPLE), p=null;
   for (var i=0;i<rows.length;i++) if (rows[i].name===name){ p=rows[i]; break; }
   if (!p) return { ok:false, error:'Unknown member.' };
+  if (pinLocked_(name)) return { ok:false, locked:true, error:lockedMsg_() };
   var has = p.pin && String(p.pin).length>0;
   if (!has) return { needsPin:true, role:p.role };
-  if (String(p.pin)===String(pin)) return { ok:true, role:p.role };
-  return { ok:false };
+  if (String(p.pin)===String(pin)){
+    clearPinFails_(name);
+    pruneTokens_();
+    return { ok:true, role:p.role, token:issueToken_(name, p.role) };
+  }
+  var fails = pinFails_(name) + 1;
+  props_().setProperty(failKey_(name), String(fails));
+  if (fails >= PIN_MAX_ATTEMPTS) return { ok:false, locked:true, error:lockedMsg_() };
+  return { ok:false, attemptsLeft: PIN_MAX_ATTEMPTS - fails };
 }
 function setPin(name, pin){
   pin=String(pin||''); if(!/^\d{4}$/.test(pin)) throw new Error('PIN must be exactly 4 digits.');
@@ -871,7 +949,9 @@ function setPin(name, pin){
     var rows=readObjects_(SHEETS.PEOPLE);
     for(var i=0;i<rows.length;i++) if(rows[i].name===name){
       if(rows[i].pin && String(rows[i].pin).length>0) throw new Error('A PIN already exists. Use Change PIN.');
-      updateCell_(SHEETS.PEOPLE, rows[i]._row, 'pin', pin); return { ok:true, role:rows[i].role };
+      updateCell_(SHEETS.PEOPLE, rows[i]._row, 'pin', pin);
+      clearPinFails_(name);
+      return { ok:true, role:rows[i].role, token:issueToken_(name, rows[i].role) };
     }
     throw new Error('Unknown member.');
   } finally { lock.releaseLock(); }
@@ -880,21 +960,34 @@ function changePin(name, oldPin, newPin){
   newPin=String(newPin||''); if(!/^\d{4}$/.test(newPin)) throw new Error('New PIN must be exactly 4 digits.');
   var lock=LockService.getScriptLock(); lock.waitLock(20000);
   try{
+    if (pinLocked_(name)) throw new Error(lockedMsg_());
     var rows=readObjects_(SHEETS.PEOPLE);
     for(var i=0;i<rows.length;i++) if(rows[i].name===name){
       var cur=String(rows[i].pin||'');
-      if(cur && cur!==String(oldPin)) throw new Error('Current PIN is incorrect.');
-      updateCell_(SHEETS.PEOPLE, rows[i]._row, 'pin', newPin); return { ok:true };
+      if(cur && cur!==String(oldPin)){
+        var fails = pinFails_(name) + 1;
+        props_().setProperty(failKey_(name), String(fails));
+        throw new Error(fails >= PIN_MAX_ATTEMPTS ? lockedMsg_() : 'Current PIN is incorrect.');
+      }
+      updateCell_(SHEETS.PEOPLE, rows[i]._row, 'pin', newPin);
+      clearPinFails_(name);
+      return { ok:true };
     }
     throw new Error('Unknown member.');
   } finally { lock.releaseLock(); }
 }
-function clearPin(name){
+/** Manager only (enforced by the API router): wipe someone's PIN and unlock
+ *  their sign-in. They'll create a fresh PIN the next time they tap their name. */
+function managerResetPin(name){
   var lock=LockService.getScriptLock(); lock.waitLock(20000);
   try{
     var rows=readObjects_(SHEETS.PEOPLE);
-    for(var i=0;i<rows.length;i++) if(rows[i].name===name){ updateCell_(SHEETS.PEOPLE, rows[i]._row, 'pin', ''); return { ok:true }; }
-    throw new Error('Unknown member.');
+    for(var i=0;i<rows.length;i++) if(rows[i].name===name){
+      updateCell_(SHEETS.PEOPLE, rows[i]._row, 'pin', '');
+      clearPinFails_(name);
+      return { ok:true };
+    }
+    throw new Error('Person not found.');
   } finally { lock.releaseLock(); }
 }
 
@@ -1029,8 +1122,18 @@ function getPickupList(){
 // ============================================================================
 var BACKUP_FOLDER_NAME = 'Robo Caf\u00e9 \u2014 DB backups';
 var BACKUP_KEEP        = 2;   // keep only the 2 most recent copies
-var BACKUP_EMAILS      = ['backup-email-1@REMOVED.invalid','backup-email-2@REMOVED.invalid'];
 var BACKUP_EMAIL_DAYS  = 60;
+
+// Snapshot recipients live in the PRIVATE database, not in this (public) code:
+// Config tab row with key `backupEmails`, value = comma-separated addresses.
+// If that row is missing, the snapshot goes to the spreadsheet owner.
+function backupEmails_(){
+  var v = String(getConfig_('backupEmails') || '').trim();
+  if (v) return v.split(',').map(function(s){ return s.trim(); }).filter(String);
+  try { var o = ss_().getOwner(); if (o && o.getEmail()) return [o.getEmail()]; } catch(e){}
+  try { var me = Session.getEffectiveUser().getEmail(); if (me) return [me]; } catch(e){}
+  return [];
+}
 
 // ---- tiny key/value config helpers (Config tab is [key,value]) ----
 function getConfig_(key){ var m = configMap_(); return (key in m) ? m[key] : ''; }
@@ -1096,6 +1199,8 @@ function exportXlsxBlob_(){
 }
 
 function emailBackupSnapshot_(){
+  var to = backupEmails_();
+  if (!to.length) return;
   var tz = svcTz_();
   var vol = lifetimeVolume_();
   var dateLbl = Utilities.formatDate(new Date(), tz, 'MMMM d, yyyy');
@@ -1113,7 +1218,7 @@ function emailBackupSnapshot_(){
         ' days. Daily timestamped copies also live in your \u201c' + BACKUP_FOLDER_NAME + '\u201d Google Drive folder (most recent ' + BACKUP_KEEP + ' kept).</p>' +
     '</div>';
   MailApp.sendEmail({
-    to: BACKUP_EMAILS.join(','),
+    to: to.join(','),
     subject: 'Robo Caf\u00e9 \u2014 database backup (' + dateLbl + ')',
     htmlBody: body,
     attachments: [ exportXlsxBlob_() ]
@@ -1167,7 +1272,7 @@ function getBackupStatus(){
     lastBackupAt: fmt(getConfig_('lastBackupAt')),
     lastEmailAt:  fmt(getConfig_('lastEmailBackupAt')),
     count: count, keep: BACKUP_KEEP, emailDays: BACKUP_EMAIL_DAYS,
-    emails: BACKUP_EMAILS, folderName: BACKUP_FOLDER_NAME, folderUrl: folderUrl
+    emails: backupEmails_(), folderName: BACKUP_FOLDER_NAME, folderUrl: folderUrl
   };
 }
 
@@ -1222,4 +1327,114 @@ function cleanupBackups(keepN){
     else { try { files[i].setTrashed(true); trashed++; } catch(e){} }
   }
   return { totalFound: files.length, kept: kept, trashedCount: trashed };
+}
+
+// ============================================================================
+//  API ROUTER — the bridge between the GitHub Pages app and this backend
+//  The page POSTs JSON: { token, calls:[{fn, args:[...]}, ...] }
+//  and gets back:       { ok:true, results:[{ok,result}|{ok:false,error,code}] }
+//  Several calls ride in one request (the client batches them), which is what
+//  keeps screens fast. Only functions listed below are reachable; everything
+//  else (setup, backups maintenance, etc.) stays editor-only.
+// ============================================================================
+function apiRegistry_(){
+  return {
+    // no token needed — just enough to draw the sign-in screen
+    'public': {
+      getMembers: getMembers,
+      verifyIdentity: verifyIdentity,
+      setPin: setPin
+    },
+    // any signed-in team member
+    'user': {
+      getBootstrap: getBootstrap,
+      getInventory: getInventory,
+      getKioskBoard: getKioskBoard,
+      setLocationSkuInUse: setLocationSkuInUse,
+      recordWithdrawal: recordWithdrawal,
+      recordKioskFlags: recordKioskFlags,
+      getPickupList: getPickupList,
+      getServiceSummary: getServiceSummary,
+      getOpenServiceSession: getOpenServiceSession,
+      saveServiceSession: saveServiceSession,
+      getServiceSessions: getServiceSessions,
+      getServiceSession: getServiceSession,
+      getKioskMilkStatus: getKioskMilkStatus,
+      getMilkBagLog: getMilkBagLog,
+      getScheduleOverrides: getScheduleOverrides,
+      requestCoverage: requestCoverage,
+      claimCoverage: claimCoverage,
+      cancelCoverage: cancelCoverage,
+      addCharge: addCharge,
+      getCharges: getCharges,
+      changePin: changePin
+    },
+    // managers only
+    'manager': {
+      getDashboard: getDashboard,
+      getHistory: getHistory,
+      recordReceipt: recordReceipt,
+      recordAdjustment: recordAdjustment,
+      resolveFlag: resolveFlag,
+      saveSku: saveSku,
+      setSkuActive: setSkuActive,
+      getAllSkusForManager: getAllSkusForManager,
+      saveLocation: saveLocation,
+      setLocationActive: setLocationActive,
+      savePerson: savePerson,
+      setPersonActive: setPersonActive,
+      getPeopleForManager: getPeopleForManager,
+      setLowDaysThreshold: setLowDaysThreshold,
+      syncStandardItems: syncStandardItems,
+      getServiceFlags: getServiceFlags,
+      clearServiceFlag: clearServiceFlag,
+      getServiceReport: getServiceReport,
+      getPayments: getPayments,
+      savePayment: savePayment,
+      voidPayment: voidPayment,
+      setChargePaid: setChargePaid,
+      voidCharge: voidCharge,
+      backupNow: backupNow,
+      setAutoBackup: setAutoBackup,
+      getBackupStatus: getBackupStatus,
+      managerResetPin: managerResetPin
+    }
+  };
+}
+
+function doPost(e){
+  var out;
+  try {
+    var body = {};
+    try { body = JSON.parse((e && e.postData && e.postData.contents) || '{}'); }
+    catch(pe){ throw new Error('Bad request.'); }
+    var calls = body.calls || [];
+    if (!calls.length) throw new Error('No calls in request.');
+    if (calls.length > 25) throw new Error('Too many calls in one request.');
+    var reg = apiRegistry_();
+    var auth = tokenInfo_(body.token);
+    var results = [];
+    for (var i = 0; i < calls.length; i++){
+      var c = calls[i] || {};
+      var fn = String(c.fn || '');
+      try {
+        var level = reg['public'][fn] ? 'public' : reg['user'][fn] ? 'user' : reg['manager'][fn] ? 'manager' : null;
+        if (!level) throw new Error('Unknown function: ' + fn);
+        if (level !== 'public'){
+          if (!auth){ results.push({ ok:false, code:'auth', error:'Your session expired — please sign in again.' }); continue; }
+          if (level === 'manager' && auth.role !== 'manager'){ results.push({ ok:false, code:'forbidden', error:'Managers only.' }); continue; }
+        }
+        var target = reg[level][fn];
+        var r = target.apply(null, c.args || []);
+        results.push({ ok:true, result: (r === undefined ? null : r) });
+      } catch(fe){
+        results.push({ ok:false, error: (fe && fe.message) || String(fe) });
+      }
+    }
+    out = { ok:true, results: results };
+  } catch(err){
+    out = { ok:false, error: (err && err.message) || String(err) };
+  }
+  return ContentService.createTextOutput(JSON.stringify(out))
+    .setMimeType(ContentService.MimeType.JSON);
 }

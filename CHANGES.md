@@ -5,6 +5,27 @@ A plain-language history of changes to the Robo Café internal app
 
 ---
 
+## Moved to GitHub Pages + real sign-in security + speed
+- **The app now lives at `https://mlombardi29.github.io/robocafe-app/`.** The page is
+  hosted from this repo by GitHub Pages and talks to the Apps Script backend over the
+  web. Deploying a frontend change is now just a push to this repo — pasting into the
+  Apps Script editor is only needed when `Code.gs` itself changes.
+- The old Apps Script link now shows a **"Robo Café has moved"** notice with the new
+  link, in case anyone lands there from an old bookmark.
+- **Real sign-in security.** Signing in with your PIN now issues a private session pass
+  that every request must carry — the backend rejects anything without one, so knowing
+  the backend URL alone no longer gets you in. Sessions last 30 days.
+- **Wrong-PIN protection.** Five wrong PIN attempts locks that PIN. The lock screen says
+  to message a manager directly; a manager's **Reset PIN** button (Settings → People)
+  clears the PIN *and* the lock, and works on anyone — technicians and managers alike.
+- **Speed.** The device now remembers your sign-in (no PIN re-entry every open), remembers
+  the item/people lists so screens draw instantly while fresh data loads quietly behind,
+  and bundles a screen's several server calls into one round trip instead of many.
+- **Privacy.** The backup email addresses were removed from the code (the repo is public
+  now). Recipients live in the private database instead: Config tab, key `backupEmails`,
+  value = comma-separated addresses. If missing, snapshots go to the Sheet's owner.
+- File housekeeping: `Index.html` is renamed **`index.html`** (required by GitHub Pages).
+
 ## Backups — retention & cleanup
 - Reduced automatic backup retention from 30 copies to **2** (the two most recent).
 - Added maintenance functions to run manually from the Apps Script editor:
@@ -47,6 +68,10 @@ A plain-language history of changes to the Robo Café internal app
 ---
 
 ## How to deploy a change (reminder)
-1. Paste the updated `Code.gs` and `Index.html` into the Apps Script editor.
-2. **Deploy → Manage deployments → New version.**
-3. If a change added a Sheet column, run `setup()` once (it's safe to re-run).
+- **Frontend (`index.html`):** just push to this repo — GitHub Pages updates the live
+  app automatically within a minute or two.
+- **Backend (`Code.gs`):** paste the updated file into the Apps Script editor, then
+  **Deploy → Manage deployments → New version.**
+- If a change added a Sheet column, run `setup()` once (it's safe to re-run).
+- After every deploy: open GitHub Desktop → robocafe-app → **Fetch origin** to sync
+  the local clone.

@@ -230,10 +230,53 @@
 <script>
 
 
+/* ----- backend connection -----
+   This page is hosted on GitHub Pages and talks to the Apps Script backend by
+   POSTing JSON to the deployed web-app URL below. All calls made in the same
+   moment (e.g. a screen's Promise.all) are automatically bundled into ONE
+   request, so multi-call screens cost a single round trip. */
+var SCRIPT_URL='https://script.google.com/macros/s/AKfycbz7EDiFcBVWnxR9UQgLVbs633aZ-J_kx8wUGznGAjZlKBPArd0IWzxv-NsqFdUcPkI/exec';
+
+var AUTH={ token:'', name:'', role:'' };
+function authLoad(){ AUTH.token=lsGet('rc_token')||''; AUTH.name=lsGet('rc_name')||''; AUTH.role=lsGet('rc_role')||''; }
+function authSave(token,name,role){ AUTH.token=token||''; AUTH.name=name||''; AUTH.role=role||'';
+  lsSet('rc_token',AUTH.token); lsSet('rc_name',AUTH.name); lsSet('rc_role',AUTH.role); }
+function authClear(){ authSave('','',''); }
+
+var _authKick=false;
+function authExpired(){
+  authClear();
+  if(_authKick) return; _authKick=true; setTimeout(function(){_authKick=false;},1500);
+  toast('Session expired — sign in again',true);
+  go('home');
+}
+
+var _batch=null;
 function call(fn){
-  var args = Array.prototype.slice.call(arguments,1);
-  return new Promise(function(res,rej){
-    google.script.run.withSuccessHandler(res).withFailureHandler(rej)[fn].apply(google.script.run,args);
+  var args=Array.prototype.slice.call(arguments,1);
+  if(!_batch){ _batch={calls:[],waiters:[]}; setTimeout(flushBatch_,0); }
+  var b=_batch;
+  return new Promise(function(res,rej){ b.calls.push({fn:fn,args:args}); b.waiters.push({res:res,rej:rej}); });
+}
+function flushBatch_(){
+  var b=_batch; _batch=null;
+  if(!b || !b.calls.length) return;
+  fetch(SCRIPT_URL,{ method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({ token:AUTH.token, calls:b.calls }) })
+  .then(function(r){ return r.json(); })
+  .then(function(out){
+    if(!out || out.ok!==true) throw new Error((out&&out.error)||'Server error — try again.');
+    var sawAuth=false;
+    (out.results||[]).forEach(function(r,i){
+      var w=b.waiters[i]; if(!w) return;
+      if(r && r.ok) w.res(r.result);
+      else { if(r && r.code==='auth') sawAuth=true; w.rej(new Error((r&&r.error)||'Request failed.')); }
+    });
+    if(sawAuth) authExpired();
+  })
+  .catch(function(e){
+    var msg=(e && /Server error|try again/.test(e.message||'')) ? e.message : 'Connection problem — check your internet and try again.';
+    b.waiters.forEach(function(w){ w.rej(new Error(msg)); });
   });
 }
 var APP={ boot:null, role:null, mgrTab:'dash' };
@@ -326,13 +369,29 @@ function makeCardCollapsible(card,key,defOpen){
   return card;
 }
 
-call('getBootstrap').then(function(b){
-  APP.boot=b;
-  document.getElementById('brandText').textContent=b.appTitle.replace(' Inventory','');
-  go('home');
-}).catch(function(e){
-  M.innerHTML='<div class="center"><div>⚠️ Could not load.</div><div style="font-size:12px">'+esc(e.message||e)+'</div></div>';
-});
+/* ----- startup: use cached data for an instant first paint, stay signed in -----
+   The item/location list is cached on the device and refreshed quietly in the
+   background, and a valid session token skips the sign-in screen entirely. */
+function applyBoot(b){ APP.boot=b; document.getElementById('brandText').textContent=String(b.appTitle||'Robo Café').replace(' Inventory',''); }
+function refreshBoot(){
+  return call('getBootstrap').then(function(b){ lsSet('rc_boot',JSON.stringify(b)); applyBoot(b); return b; });
+}
+(function start(){
+  authLoad();
+  var cached=null; try{ cached=JSON.parse(lsGet('rc_boot')||'null'); }catch(e){}
+  if(cached && cached.skus) applyBoot(cached);
+  if(AUTH.token && AUTH.name && AUTH.role){
+    APP.me={name:AUTH.name, role:AUTH.role}; APP.role=AUTH.role;
+    var home = AUTH.role==='manager' ? 'mgr' : 'techHome';
+    if(APP.boot){ go(home); refreshBoot().catch(function(){}); }
+    else refreshBoot().then(function(){ go(home); }).catch(function(e){
+      if(_authKick) return; // token was stale — authExpired() already sent us home
+      M.innerHTML='<div class="center"><div>⚠️ Could not load.</div><div style="font-size:12px">'+esc(e.message||e)+'</div></div>';
+    });
+  } else {
+    go('home');
+  }
+})();
 
 function go(screen){
   if(_svcActive){ svcAutosaveNow(false); _svcActive=false; }
@@ -353,18 +412,31 @@ function screenHome(){
   M.appendChild(el('<div><h2>Who are you?</h2><p class="sub">Tap your name to sign in with your PIN.</p></div>'));
   var wrap=el('<div></div>'); M.appendChild(wrap);
   wrap.innerHTML='<div class="center"><div class="spin"></div></div>';
-  call('getMembers').then(function(list){
+  var painted=false;
+  function paint(list){
+    if(!wrap.isConnected) return;
     wrap.innerHTML='';
     if(!list.length){ wrap.innerHTML='<div class="empty">No members yet. A manager can add people in Settings.</div>'; return; }
     var lastP=lsGet('rc_lastPerson');
     if(lastP) list.sort(function(a,b){ return (b.name===lastP?1:0)-(a.name===lastP?1:0); });
     list.forEach(function(p){
+      var still=(p.name===AUTH.name && !!AUTH.token);
       var b=el('<button class="tap"><div class="ico">'+(p.role==='manager'?'📋':'🔧')+'</div>'+
-        '<div><div class="ttl">'+esc(p.name)+'</div><div class="dsc">'+(p.role==='manager'?'Manager':'Service technician')+(p.hasPin?'':' · set up a PIN')+(p.name===lastP?' · last signed in':'')+'</div></div><div class="chev">›</div></button>');
-      b.onclick=function(){ LOGIN={name:p.name, role:p.role, hasPin:p.hasPin}; go('pin'); };
+        '<div><div class="ttl">'+esc(p.name)+'</div><div class="dsc">'+(p.role==='manager'?'Manager':'Service technician')+(p.hasPin?'':' · set up a PIN')+(still?' · still signed in':(p.name===lastP?' · last signed in':''))+'</div></div><div class="chev">›</div></button>');
+      b.onclick=function(){
+        if(still){ APP.me={name:AUTH.name, role:AUTH.role}; APP.role=AUTH.role; go(AUTH.role==='manager'?'mgr':'techHome'); return; }
+        LOGIN={name:p.name, role:p.role, hasPin:p.hasPin}; go('pin');
+      };
       wrap.appendChild(b);
     });
-  }).catch(function(e){ wrap.innerHTML='<div class="empty">'+esc(e.message||e)+'</div>'; });
+  }
+  var cachedM=null; try{ cachedM=JSON.parse(lsGet('rc_members')||'null'); }catch(e){}
+  if(cachedM && cachedM.length){ paint(cachedM); painted=true; }
+  call('getMembers').then(function(list){
+    list=list||[];
+    lsSet('rc_members',JSON.stringify(list));
+    paint(list);
+  }).catch(function(e){ if(!painted) wrap.innerHTML='<div class="empty">'+esc(e.message||e)+'</div>'; });
 }
 function pinInput(id,ph){ return '<input id="'+id+'" type="tel" inputmode="numeric" maxlength="4" pattern="[0-9]*" placeholder="'+(ph||'••••')+'" style="letter-spacing:10px;font-size:22px;text-align:center">'; }
 function screenPin(){
@@ -376,21 +448,33 @@ function screenPin(){
   c.appendChild(el('<label style="margin-top:0">'+(creating?'New PIN':'PIN')+'</label>'+pinInput('pin1')));
   if(creating) c.appendChild(el('<label>Confirm PIN</label>'+pinInput('pin2')));
   var btn=el('<button class="btn">'+(creating?'Create PIN & continue':'Continue')+'</button>'); c.appendChild(btn);
+  if(LOGIN.err){ c.appendChild(el('<div class="hint" style="color:var(--rust);font-weight:600;line-height:1.5">'+esc(LOGIN.err)+'</div>')); LOGIN.err=null; }
   M.appendChild(c);
-  function proceed(role){ APP.me={name:LOGIN.name, role:role}; APP.role=role; lsSet('rc_lastPerson',APP.me.name); var r=role; LOGIN=null; go(r==='manager'?'mgr':'techHome'); }
+  function proceed(role, token){
+    authSave(token||'', LOGIN.name, role);
+    APP.me={name:LOGIN.name, role:role}; APP.role=role; lsSet('rc_lastPerson',APP.me.name);
+    var r=role; LOGIN=null;
+    var home = r==='manager' ? 'mgr' : 'techHome';
+    if(APP.boot){ go(home); refreshBoot().catch(function(){}); }
+    else { loading('Loading…'); refreshBoot().then(function(){ go(home); }).catch(function(e){ toast(e.message||e,true); go('home'); }); }
+  }
+  function fail(msg){ LOGIN.err=msg; screenPin(); toast(msg,true); }
   btn.onclick=function(){
     var p1=val('pin1');
     if(!/^\d{4}$/.test(p1)) return toast('Enter a 4-digit PIN',true);
     if(creating){
       if(val('pin2')!==p1) return toast('PINs don\'t match',true);
       loading('Saving…');
-      call('setPin',LOGIN.name,p1).then(function(r){ toast('PIN set ✓'); proceed(r.role||LOGIN.role); }).catch(function(e){ toast(e.message||e,true); screenPin(); });
+      call('setPin',LOGIN.name,p1).then(function(r){ toast('PIN set ✓'); proceed(r.role||LOGIN.role, r.token); }).catch(function(e){ fail(e.message||String(e)); });
     } else {
       loading('Checking…');
       call('verifyIdentity',LOGIN.name,p1).then(function(r){
+        r=r||{};
         if(r.needsPin){ LOGIN.hasPin=false; toast('Let\'s set up a PIN'); screenPin(); return; }
-        if(r.ok){ proceed(r.role); } else { toast('Incorrect PIN',true); screenPin(); }
-      }).catch(function(e){ toast(e.message||e,true); screenPin(); });
+        if(r.ok){ proceed(r.role, r.token); return; }
+        if(r.locked){ fail(r.error||'Too many incorrect attempts — this PIN is locked. Message a manager to reset it.'); return; }
+        fail('Incorrect PIN'+(r.attemptsLeft!=null?(' — '+r.attemptsLeft+' attempt'+(r.attemptsLeft===1?'':'s')+' left before it locks'):''));
+      }).catch(function(e){ fail(e.message||String(e)); });
     }
   };
 }
@@ -412,8 +496,6 @@ function screenChangePin(){
     call('changePin',APP.me.name,oldP,newP).then(function(){ toast('PIN changed ✓'); go(backTo); }).catch(function(e){ toast(e.message||e,true); screenChangePin(); });
   };
 }
-function enterTech(){ if(!APP.me)APP.me={name:'Peter',role:'technician'}; APP.role='technician'; go('techHome'); }
-function enterMgr(){ if(!APP.me)APP.me={name:'Michael',role:'manager'}; APP.role='manager'; go('mgr'); }
 
 // ---------- TECHNICIAN DASHBOARD ----------
 function mapLocToKiosk(loc){
@@ -1024,12 +1106,13 @@ function mgrSettings(body){
     body.innerHTML='';
     var pc=el('<div class="card"><label style="margin-top:0">People</label></div>');
     people.forEach(function(p){
-      var r=el('<div class="mgr-row"><div class="grow"><div'+(p.active?'':' style="opacity:.45"')+'>'+esc(p.name)+'</div><small>'+esc(p.role)+(p.active?'':' · inactive')+' · '+(p.hasPin?'PIN set':'no PIN yet')+'</small></div>'+
-        (p.hasPin?'<button class="link" style="color:var(--muted)">Reset PIN</button>':'')+
+      var pinLbl = p.locked ? 'PIN locked 🔒' : (p.hasPin ? 'PIN set' : 'no PIN yet');
+      var r=el('<div class="mgr-row"><div class="grow"><div'+(p.active?'':' style="opacity:.45"')+'>'+esc(p.name)+'</div><small>'+esc(p.role)+(p.active?'':' · inactive')+' · '+pinLbl+'</small></div>'+
+        ((p.hasPin||p.locked)?'<button class="link" style="color:'+(p.locked?'var(--rust)':'var(--muted)')+'">Reset PIN</button>':'')+
         '<button class="link" style="margin-left:12px;color:var(--muted)">'+(p.active?'Deactivate':'Activate')+'</button></div>');
       var links=r.querySelectorAll('.link');
-      if(p.hasPin){
-        links[0].onclick=function(){ call('clearPin',p.name).then(function(){toast(p.name+'\u2019s PIN reset — they\u2019ll set a new one next sign-in');mgrSettings(body);}).catch(function(e){toast(e.message||e,true);}); };
+      if(p.hasPin||p.locked){
+        links[0].onclick=function(){ call('managerResetPin',p.name).then(function(){toast(p.name+'\u2019s PIN reset & unlocked \u2014 they\u2019ll set a new one next sign-in');mgrSettings(body);}).catch(function(e){toast(e.message||e,true);}); };
       }
       links[links.length-1].onclick=function(){call('setPersonActive',p.name,!p.active).then(function(){mgrSettings(body);}).catch(function(e){toast(e.message||e,true);});};
       pc.appendChild(r);
