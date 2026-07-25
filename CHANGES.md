@@ -10,10 +10,12 @@ A plain-language history of changes to the Robo Café internal app
   technicians can plan ahead. Past days keep the solid "Milk bag changed" marker for
   changes that actually happened.
 - The forecast uses the 4-day bag life: counting from the kiosk's last recorded
-  change, the next change lands on a service day within the window — moved *earlier*
-  to the last visit before expiry when day 4 falls on a day that kiosk isn't visited
-  (U of T weekends, RBC non-concert days). Each projected change restarts the clock,
-  so markers repeat roughly every 4 days into the future.
+  change, the next change lands on the **first service day on or after day 4** — if
+  day 4 falls on a day that kiosk isn't visited (U of T weekends, RBC non-concert
+  days), it simply waits for the next visit rather than pulling a day earlier.
+  Each projected change restarts the clock, so markers repeat down the schedule.
+  (Revised same day: the original version pulled changes earlier, which was too
+  conservative.)
 - A kiosk with no bag change on record shows the marker on its next service day.
 - Frontend-only change: deployed by the push, no Apps Script paste needed.
 

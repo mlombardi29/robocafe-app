@@ -1246,9 +1246,9 @@ function renderSchedule(body){
     var ovMap={}; (ovr||[]).forEach(function(o){ ovMap[o.date+'|'+o.kioskId]=o; });
     milkLog=milkLog||{}; var milkSet={}; Object.keys(milkLog).forEach(function(kid){ milkSet[kid]={}; (milkLog[kid]||[]).forEach(function(ds){ milkSet[kid][ds]=true; }); });
     /* Project future milk-bag changes: bags are good for 4 days. From each kiosk's
-       last recorded change, the next change lands on a service day within the 4-day
-       window — pulled EARLIER to the last visit before expiry when the due date falls
-       on a day that kiosk isn't serviced. Each projected change restarts the clock. */
+       last recorded change, the next change lands on the FIRST service day on or
+       after day 4 — if day 4 isn't a service day, it waits for the next visit
+       (never pulled earlier). Each projected change restarts the clock. */
     var milkPlan={};
     (function(){
       var t0=new Date(); t0.setHours(0,0,0,0);
@@ -1267,9 +1267,7 @@ function renderSchedule(body){
           if(!lastD) plan=true; // no change on record — due at the next visit
           else {
             var due=new Date(lastD); due.setDate(due.getDate()+4);
-            var nxt = (i+1<days.length) ? new Date(days[i+1]+'T00:00:00') : null;
-            if(di>=due) plan=true;               // at or past the 4-day mark
-            else if(nxt && nxt>due) plan=true;   // last visit before the bag expires
+            if(di>=due) plan=true; // first service day at or past the 4-day mark
           }
           if(plan){ milkPlan[k.id][days[i]]=true; lastD=di; }
         }
