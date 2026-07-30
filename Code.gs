@@ -249,6 +249,150 @@ function syncStandardItems(){
 }
 
 // =========================================================================
+//  ORDERING — where each item comes from, how it's bought, and when to reorder
+// =========================================================================
+// How each supplier is contacted. Order-email addresses are NOT stored here
+// (this repo is public) — they live in the Config tab, key `orderEmails`,
+// value like:  Kiosoft=someone@example.com
+var ORDER_SOURCES_ = {
+  'Kiosoft':            { method:'email', icon:'✉️', how:'Order by email' },
+  'Amazon':             { method:'web',   icon:'🌐', how:'Order on Amazon' },
+  'Propeller':          { method:'web',   icon:'🌐', how:'Wholesale website' },
+  'Eversys':            { method:'web',   icon:'🌐', how:'Wholesale website' },
+  'Hatch Coffee':       { method:'web',   icon:'🌐', how:'hatchcoffee.com' },
+  '8 Ounce':            { method:'web',   icon:'🌐', how:'Wholesale website (1883 brand)' },
+  'Costco (Instacart)': { method:'app',   icon:'🏬', how:'Costco via the Instacart app' },
+  'Store (technicians)':{ method:'tech',  icon:'🧑‍🔧', how:'Technicians buy this themselves — nothing for you to order' }
+};
+var ORDER_SOURCE_ORDER_ = ['Kiosoft','Amazon','Costco (Instacart)','Propeller','Eversys','Hatch Coffee','8 Ounce','Store (technicians)'];
+// Roughly how many days of stock an order should cover — keeps orders bulky
+// (about every 6 weeks) while the per-item minimums still catch urgent gaps.
+var ORDER_COVER_DAYS_ = 45;
+// Real shelf life, where it's shorter than we'd otherwise buy. Used only as a
+// CAP — it can pull an order down, never push it up past ORDER_COVER_DAYS_.
+var ORDER_SHELF_DAYS_ = {
+  'Espresso beans': 30,        // roasted coffee is best used within a month
+  'Decaf espresso beans': 30,
+  '10L Milk Bags': 60,         // sealed plastic bags — keeps well
+  '20L Milk Bags': 60
+};
+
+// The ordering facts for each item, confirmed with the owner.
+// [ item name, supplier, order-unit name, base units per order unit, lead days, minimum (base units) ]
+var ORDER_SETUP_ = [
+  ['2% Milk',                          'Store (technicians)','jug',       1,  0,  0],
+  ['Oat Milk',                         'Costco (Instacart)', 'case of 6', 6,  1, 12],
+  ['Sugar',                            'Costco (Instacart)', '4 kg bag',  2,  1,  5],
+  ['10L Milk Bags',                    'Kiosoft',            'pack of 10',10, 5, 20],
+  ['20L Milk Bags',                    'Kiosoft',            'pack of 10',10, 5, 20],
+  ['12 oz Hot Cup',                    'Kiosoft',            'box of 1,000 cups', 20, 5, 20],
+  ['12 oz Cold Cup',                   'Kiosoft',            'box of 1,000 cups', 20, 5, 20],
+  ['16 oz Cold Cup',                   'Kiosoft',            'box of 1,000 cups', 20, 5, 20],
+  ['Lids',                             'Kiosoft',            'box of 1,000 lids', 10, 5, 10],
+  ['Blueberry Pomegranate Concentrate','Kiosoft',            '4 L bottle', 1, 5,  2],
+  ['Strawberry Watermelon Concentrate','Kiosoft',            '4 L bottle', 1, 5,  2],
+  ['Lemon Lime Concentrate',           'Kiosoft',            '4 L bottle', 1, 5,  2],
+  ['12oz Hot Cup (Disposable)',        'Amazon',             'box of 500 cups', 1, 2, 2],
+  ['Hot Chocolate Powder',             'Amazon',             'tin',       1,  2,  5],
+  ['Matcha powder',                    'Amazon',             'tin',       1,  2,  5],
+  ['Rinza Cleaning Solution',          'Amazon',             'bottle',    1,  2,  5],
+  ['Blue Paper Towels',                'Amazon',             'case of 24',24, 2, 12],
+  ['Nitrile Gloves',                   'Amazon',             'box',       1,  2,  2],
+  ['Espresso beans',                   'Propeller',          '5 lb bag',  1,  2,  4],
+  ['Decaf espresso beans',             'Propeller',          '5 lb bag',  1,  2,  2],
+  ['Everclean Solution',               'Eversys',            'bottle',    1, 10,  2],
+  ['Eversys Cleaning Balls',           'Eversys',            'bottle',    1, 10,  2],
+  ['Coffee Concentrate',               'Hatch Coffee',       'pack of 6', 6,  5,  6],
+  ['Vanilla Syrup',                    '8 Ounce',            'pack of 6', 6,  5,  3],
+  ['Caramel Syrup',                    '8 Ounce',            'pack of 6', 6,  5,  3],
+  ['Iced Tea Lemon Syrup',             '8 Ounce',            'pack of 6', 6,  5,  3],
+  ['Peach Syrup',                      '8 Ounce',            'pack of 6', 6,  5,  3],
+  ['Strawberry Syrup',                 '8 Ounce',            'pack of 6', 6,  5,  3],
+  ['Hazelnut Syrup',                   '8 Ounce',            'pack of 6', 6,  5,  3]
+];
+
+/** Run once from the Apps Script editor: writes the supplier, order unit,
+ *  lead time and reorder minimum for every item into the Sheet. Safe to
+ *  re-run — it only overwrites those fields, and they stay editable in Items. */
+function applyOrderingSetup(){
+  var lock=LockService.getScriptLock(); lock.waitLock(30000);
+  try{
+    var rows = readObjects_(SHEETS.SKUS), updated=[], missing=[];
+    ORDER_SETUP_.forEach(function(x){
+      var want=String(x[0]).trim().toLowerCase(), hit=null;
+      for(var i=0;i<rows.length;i++) if(String(rows[i].name).trim().toLowerCase()===want){ hit=rows[i]; break; }
+      if(!hit){ missing.push(x[0]); return; }
+      updateCell_(SHEETS.SKUS, hit._row, 'opt1Name', x[2]);
+      updateCell_(SHEETS.SKUS, hit._row, 'opt1PerBase', x[3]);
+      updateCell_(SHEETS.SKUS, hit._row, 'opt1Supplier', x[1]);
+      updateCell_(SHEETS.SKUS, hit._row, 'opt1LeadDays', x[4]);
+      updateCell_(SHEETS.SKUS, hit._row, 'reorderThreshold', x[5]);
+      updated.push(x[0]);
+    });
+    return { ok:true, updated:updated.length, missing:missing };
+  } finally { lock.releaseLock(); }
+}
+
+function orderEmailFor_(supplier){
+  var raw = String(getConfig_('orderEmails')||'');
+  var out = '';
+  raw.split(/[;,]/).forEach(function(pair){
+    var bits = pair.split('=');
+    if (bits.length===2 && bits[0].trim().toLowerCase()===String(supplier).toLowerCase()) out = bits[1].trim();
+  });
+  return out;
+}
+
+/** The shopping list: everything out, below its minimum, or projected to run
+ *  out, grouped by where it's bought. Each line says how much to order. */
+function getOrderList(){
+  var inv = computeInventory_();
+  var sup = {};
+  readObjects_(SHEETS.SKUS).forEach(function(s){
+    sup[s.id] = { supplier: String(s.opt1Supplier||'').trim(),
+                  unitName: String(s.opt1Name||'').trim(),
+                  perBase: num_(s.opt1PerBase)||1 };
+  });
+  var groups = {};
+  inv.forEach(function(i){
+    var meta = sup[i.id] || { supplier:'', unitName:'', perBase:1 };
+    var srcName = meta.supplier || 'Other';
+    var src = ORDER_SOURCES_[srcName] || { method:'web', icon:'📦', how:'' };
+    var needs = (i.status==='OUT' || i.status==='LOW' || i.status==='REORDER');
+    if (!needs) return;
+    // How much to order. Usage is only trusted once there's a real trend behind
+    // it (a single recent withdrawal would otherwise read as "one per day" and
+    // blow the order up), and the result is capped at 3x the minimum so no
+    // single order can run away. Never below the minimum itself.
+    var min = (i.threshold === null ? 1 : i.threshold) || 1;
+    var trusted = (i.avgDaily > 0 && i.usageSpanDays >= 14 && i.withdrawCount >= 3);
+    var coverDays = Math.min(ORDER_COVER_DAYS_, ORDER_SHELF_DAYS_[i.name] || ORDER_COVER_DAYS_);
+    var target = trusted ? (i.avgDaily * coverDays) : (min * 1.5);
+    if (target > min * 3) target = min * 3;
+    if (target < min) target = min;
+    var shortBy = target - i.qty;
+    if (shortBy < 1) shortBy = 1;
+    var units = Math.ceil(shortBy / (meta.perBase||1));
+    if (units < 1) units = 1;
+    if (src.method === 'tech') units = 0; // information only — nothing to order
+    if (!groups[srcName]) groups[srcName] = { supplier:srcName, method:src.method, icon:src.icon,
+      how:src.how, email:(src.method==='email' ? orderEmailFor_(srcName) : ''), items:[] };
+    groups[srcName].items.push({
+      name:i.name, status:i.status, qty:i.qty, baseUnit:i.baseUnit, baseUnitNote:i.baseUnitNote,
+      unitName:meta.unitName || i.baseUnit, perBase:meta.perBase, units:units,
+      totalBase: units * (meta.perBase||1), daysLeft:(trusted ? i.daysLeft : null), threshold:i.threshold,
+      basedOn: trusted ? 'usage' : 'minimum'
+    });
+  });
+  var out = [];
+  ORDER_SOURCE_ORDER_.forEach(function(n){ if (groups[n]) { out.push(groups[n]); delete groups[n]; } });
+  Object.keys(groups).sort().forEach(function(n){ out.push(groups[n]); });
+  var rank = { OUT:0, LOW:1, REORDER:2 };
+  out.forEach(function(g){ g.items.sort(function(a,b){ return (rank[a.status]-rank[b.status]) || a.name.localeCompare(b.name); }); });
+  return { groups: out, coverDays: ORDER_COVER_DAYS_ };
+}
+
+// =========================================================================
 //  READ APIs (client)
 // =========================================================================
 function getBootstrap() {
@@ -297,7 +441,7 @@ function computeInventory_() {
   skus.forEach(function(s){
     byId[s.id] = {
       sku:s, qty:0,
-      withdraw7:0, withdraw30:0, receive30:0, receiveCount30:0,
+      withdraw7:0, withdraw30:0, receive30:0, receiveCount30:0, withdrawCount:0,
       firstWithdraw:null, lastTx:null
     };
   });
@@ -312,6 +456,7 @@ function computeInventory_() {
     var ageDays = (now - ts) / DAY;
     if (!b.lastTx || ts > b.lastTx) b.lastTx = ts;
     if (t.type === 'withdraw') {
+      b.withdrawCount += 1;
       if (!b.firstWithdraw || ts < b.firstWithdraw) b.firstWithdraw = ts;
       if (ageDays <= 7)  b.withdraw7  += -d;
       if (ageDays <= 30) b.withdraw30 += -d;
@@ -348,7 +493,11 @@ function computeInventory_() {
       threshold: threshold,
       status: status,
       lastTx: b.lastTx ? b.lastTx.toISOString() : null,
-      hasUsageData: avgDaily !== null
+      hasUsageData: avgDaily !== null,
+      // how much history that average is based on (ordering uses this to decide
+      // whether the rate is trustworthy — one recent withdrawal is not a trend)
+      usageSpanDays: b.firstWithdraw ? Math.round(spanDays) : 0,
+      withdrawCount: b.withdrawCount
     };
   });
 }
@@ -1372,6 +1521,7 @@ function apiRegistry_(){
     // managers only
     'manager': {
       getDashboard: getDashboard,
+      getOrderList: getOrderList,
       getHistory: getHistory,
       recordReceipt: recordReceipt,
       recordAdjustment: recordAdjustment,

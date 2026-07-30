@@ -5,6 +5,29 @@ A plain-language history of changes to the Robo Café internal app
 
 ---
 
+## New: Order list (manager) — what to buy, grouped by supplier
+- New manager tile **🛒 Order list**. It shows everything that's out, below its
+  minimum, or about to run out, **grouped by where you buy it**: Kiosoft (email),
+  Amazon, Costco via Instacart, Propeller, Eversys, Hatch Coffee, 8 Ounce (1883
+  syrups), and a technicians-buy-it section for 2% milk (information only).
+- Each line says exactly how much to order in the unit you actually buy —
+  "2 × pack of 10 (20 bags)", "1 × box of 1,000 cups".
+- **Kiosoft group has "✉️ Open order email"** — writes "Hi team, I'd like to order
+  the following…" pre-addressed and ready to send. Every group has "📋 Copy list."
+  The order email address lives in the private Sheet (Config key `orderEmails`),
+  never in this public code.
+- How quantities are worked out: enough to cover ~45 days of real usage, rounded up
+  to whole boxes/packs. Guards: usage is only trusted after 14+ days and 3+
+  withdrawals (one recent pull no longer reads as "one per day"), no order exceeds
+  3× the item's minimum, and short-life items are capped lower — espresso beans
+  30 days (roast freshness).
+- Suppliers, order sizes, lead times and reorder minimums for all 29 items are now
+  recorded in the database (run `applyOrderingSetup()` once from the Apps Script
+  editor; it's safe to re-run, and everything stays editable under Items).
+  Milk-bag minimums raised to 20; cups and lids now measured in 1,000-unit boxes.
+- Backend change: paste `Code.gs`, deploy a new version, then run
+  `applyOrderingSetup()` once.
+
 ## Schedule now forecasts milk-bag changes
 - Future service days show a dashed **"🥛 Scheduled milk bag change"** marker so
   technicians can plan ahead. Past days keep the solid "Milk bag changed" marker for
