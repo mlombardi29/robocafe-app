@@ -1942,6 +1942,12 @@ function screenServiceLanding(){
 }
 
 // ---------- CHECKLIST ----------
+/* Each checklist gets its own ID the moment it opens, so the autosave and the
+   Complete button always write to the SAME record. (Before this, a checklist had
+   no ID until its first save came back — if Complete was tapped while an autosave
+   was still in flight, both said "no ID" and the server created two records: the
+   duplicate services, and the one that stayed stuck "in progress".) */
+function newSessionId(){ return 'SS'+Date.now().toString(36)+Math.floor(Math.random()*1296).toString(36); }
 function screenServiceChecklist(){
   var k=svcKiosk(SERVICE.kioskId); if(!k){ go('service'); return; }
   SERVICE.sessionId=null; SERVICE.startedAt=null; SERVICE.st={}; SERVICE.invMap={}; SERVICE.milkBagChanged=false; SERVICE.milkStatus=null;
@@ -1956,7 +1962,21 @@ function screenServiceChecklist(){
     SERVICE.milkStatus=ms;
     if(open){ SERVICE.sessionId=open.id; SERVICE.startedAt=open.startedAt; SERVICE.milkBagChanged=!!open.milkBagChanged;
       (open.completions||[]).forEach(function(c){ SERVICE.st[c.itemId]={completed:!!c.completed,notes:c.notes||'',flagged:!!c.flagged}; });
+    } else {
+      SERVICE.sessionId=newSessionId();
     }
+    // The device copy is always at least as new as the server's, so if there's a
+    // draft here for this same checklist, it wins.
+    var draft=svcLoadLocal();
+    if(draft && draft.sessionId===SERVICE.sessionId){
+      SERVICE.st=draft.st||SERVICE.st;
+      SERVICE.milkBagChanged=!!draft.milkBagChanged;
+      open=open||{};
+      open.serviceDate=draft.serviceDate||open.serviceDate;
+      open.startTime=draft.startTime||open.startTime;
+      open.endTime=draft.endTime||open.endTime;
+      open.overallNotes=draft.overallNotes||open.overallNotes;
+    } else if(draft){ svcClearLocal(); }
     renderChecklist(k, open);
   }).catch(function(e){ body.innerHTML='<div class="empty">'+esc(e.message||e)+'</div>'; });
 }
@@ -2055,11 +2075,33 @@ function buildCompletions(k){
   });});
   return out;
 }
-function markSaving(){ var l=document.getElementById('svcSavedLbl'); if(l) l.textContent='Saving…'; }
-function markSaved(){ var l=document.getElementById('svcSavedLbl'); if(l) l.textContent='All changes saved ✓'; }
-function svcAutosaveSoon(){ if(!_svcActive) return; _svcDirty=true; markSaving(); if(_svcTimer) clearTimeout(_svcTimer); _svcTimer=setTimeout(function(){ svcAutosaveNow(false); }, 1500); }
+/* ---- autosave: save to the phone instantly, back up to the server quietly ----
+   Every tap is written to the device straight away (no waiting, no spinner), and
+   the server copy is refreshed in the background, when you leave the checklist,
+   and on submit. The server copy is what lets a service be picked up on another
+   phone, so it's kept — just no longer in the way. */
+var SVC_SYNC_MS=20000;   // background backup at most this often
+function svcLocalKey(){ return 'rc_draft_'+(SERVICE.kioskId||''); }
+function svcSaveLocal(){
+  if(!SERVICE.sessionId) return;
+  lsSet(svcLocalKey(), JSON.stringify({ sessionId:SERVICE.sessionId, savedAt:Date.now(),
+    st:SERVICE.st, milkBagChanged:!!SERVICE.milkBagChanged, serviceDate:val('svcDateInp'),
+    startTime:val('svcStart'), endTime:val('svcEnd'), overallNotes:val('svcOverall') }));
+}
+function svcLoadLocal(){ try{ return JSON.parse(lsGet(svcLocalKey())||'null'); }catch(e){ return null; } }
+function svcClearLocal(){ try{ localStorage.removeItem(svcLocalKey()); }catch(e){} }
+function markSaved(){ var l=document.getElementById('svcSavedLbl'); if(l) l.textContent='Saved ✓'; }
+function markBacked(){ var l=document.getElementById('svcSavedLbl'); if(l) l.textContent='Saved ✓ · backed up'; }
+function svcAutosaveSoon(){
+  if(!_svcActive) return;
+  svcSaveLocal(); markSaved();          // instant — this is the bit that felt slow
+  _svcDirty=true;
+  if(_svcTimer) return;                 // a backup is already scheduled
+  _svcTimer=setTimeout(function(){ _svcTimer=null; svcAutosaveNow(false); }, SVC_SYNC_MS);
+}
 function svcAutosaveNow(force){
   if(!_svcActive) return;
+  svcSaveLocal();
   if(_svcSaving){ _svcDirty=true; return; }
   if(!_svcDirty && !force) return;
   var k=svcKiosk(SERVICE.kioskId); if(!k) return;
@@ -2073,7 +2115,7 @@ function svcAutosaveNow(force){
   call('saveServiceSession',payload).then(function(r){
     if(r&&r.id) SERVICE.sessionId=r.id;
     _svcSaving=false;
-    if(_svcDirty){ svcAutosaveNow(false); } else { markSaved(); }
+    if(_svcDirty && _svcActive){ svcAutosaveNow(false); } else if(_svcActive){ markBacked(); }
   }).catch(function(){ _svcSaving=false; _svcDirty=true; });
 }
 function clearTimeMissing(){
@@ -2114,10 +2156,14 @@ function submitService(mode){
     serviceDate:val('svcDateInp'), startTime:val('svcStart'), endTime:val('svcEnd'),
     milkBagChanged: !!SERVICE.milkBagChanged,
     status:status, completions:comps, overallNotes:val('svcOverall'), incompleteReason:reason };
+  // Stop the background backup: this submit is the authoritative save, and it
+  // carries the same session ID, so there is nothing left to race with.
   _svcActive=false; _svcDirty=false; if(_svcTimer){ clearTimeout(_svcTimer); _svcTimer=null; }
+  svcSaveLocal();
   loading('Saving…');
   call('saveServiceSession',payload).then(function(r){
-    SERVICE.sessionId=r.id;
+    SERVICE.sessionId=(r&&r.id)||SERVICE.sessionId;
+    if(status==='completed'||status==='incomplete') svcClearLocal();
     toast(status==='completed'?'Service completed ✓':status==='incomplete'?'Submitted (incomplete) ✓':'Progress saved ✓');
     go('service');
   }).catch(function(e){ toast(e.message||e,true); screenServiceChecklist(); });

@@ -51,7 +51,7 @@ var HEADERS = {
   KioskFlags: ['id','timestamp','locationId','locationName','skuId','skuName','status','byName','note','resolved','resolvedBy','resolvedAt'],
   People: ['name','role','active','pin'],
   Config: ['key','value'],
-  ServiceSessions: ['id','kioskId','locationName','model','checklistVersion','technicianName','startedAt','completedAt','status','percentComplete','requiredIncomplete','incompleteReason','overallNotes','completionsJson','serviceDate','startTime','endTime','milkBagChanged'],
+  ServiceSessions: ['id','kioskId','locationName','model','checklistVersion','technicianName','startedAt','completedAt','status','percentComplete','requiredIncomplete','incompleteReason','overallNotes','completionsJson','serviceDate','startTime','endTime','milkBagChanged','voided','voidNote'],
   ScheduleOverrides: ['date','kioskId','coverageRequested','requestedBy','claimedBy','originalAssignee','note','updatedAt'],
   Payments: ['id','personName','periodStart','periodEnd','paidDate','notes','voided','createdAt'],
   Charges: ['id','personName','type','date','description','amount','startTime','endTime','hours','receiptLink','paid','paidDate','paidNote','voided','createdAt']
@@ -826,6 +826,11 @@ function getHistory() {
 //  changes) and computes reports. Inventory functions above are untouched.
 // =========================================================================
 function serviceParse_(s){ try { return s ? JSON.parse(s) : []; } catch (e) { return []; } }
+// A voided session is a record we've cancelled (e.g. a duplicate created by the
+// old autosave race). It stays in the Sheet for the audit trail but is ignored
+// everywhere in the app - history, reports, hours, milk-bag tracking.
+function svcVoided_(r){ return r.voided===true || r.voided==='TRUE' || r.voided==='true'; }
+function svcRows_(){ return readObjects_(SHEETS.SERVICE).filter(function(r){ return !svcVoided_(r); }); }
 
 function serviceStats_(completions){
   var total=0, done=0, reqInc=0;
@@ -864,20 +869,50 @@ function saveServiceSession(payload){
       incompleteReason: payload.incompleteReason||'', overallNotes: payload.overallNotes||'',
       completionsJson: JSON.stringify(completions),
       serviceDate: sd, startTime: stt, endTime: ett,
-      milkBagChanged: (payload.milkBagChanged===true||payload.milkBagChanged==='true') ? true : false
+      milkBagChanged: (payload.milkBagChanged===true||payload.milkBagChanged==='true') ? true : false,
+      voided: existing ? (svcVoided_(existing) ? true : false) : false,
+      voidNote: existing ? (existing.voidNote||'') : ''
     };
+    // A background autosave can land just after the technician hits Complete.
+    // Never let a late 'in progress' save re-open a finished service.
+    if (existing && status==='in_progress' &&
+        (existing.status==='completed' || existing.status==='incomplete')) {
+      return { ok:true, id:existing.id, status:existing.status, ignored:true,
+               percent:num_(existing.percentComplete), requiredIncomplete:num_(existing.requiredIncomplete) };
+    }
     if (existingRow) {
-      HEADERS.ServiceSessions.forEach(function(h){ updateCell_(SHEETS.SERVICE, existingRow, h, record[h]); });
+      // One write for the whole row. (Writing column-by-column meant ~20 separate
+      // Sheet writes per autosave, which is what made saving feel slow.)
+      var head = HEADERS.ServiceSessions;
+      var vals = head.map(function(h){ return record[h]===undefined || record[h]===null ? '' : record[h]; });
+      sheet_(SHEETS.SERVICE).getRange(existingRow, 1, 1, head.length).setValues([vals]);
     } else {
       appendObject_(SHEETS.SERVICE, record);
     }
-    return { ok:true, id:record.id, status:status, percent:stats.percent, requiredIncomplete:stats.requiredIncomplete };
+    // Safety net: finishing a service closes out any older in-progress record left
+    // behind for the same kiosk by the same technician, so nothing lingers as
+    // "in progress" on the servicing screen.
+    var closed = 0;
+    if (status==='completed' || status==='incomplete') {
+      var stamp = Utilities.formatDate(new Date(), svcTz_(), 'yyyy-MM-dd');
+      rows.forEach(function(r){
+        if (r.id===record.id || svcVoided_(r)) return;
+        if (r.kioskId!==record.kioskId || r.status!=='in_progress') return;
+        if (String(r.technicianName||'')!==String(record.technicianName||'')) return;
+        updateCell_(SHEETS.SERVICE, r._row, 'voided', true);
+        updateCell_(SHEETS.SERVICE, r._row, 'voidNote',
+          'Auto-closed ' + stamp + ': left over "in progress" for this kiosk when ' +
+          record.id + ' was completed. Not a real service - ignored in history, reports and hours.');
+        closed++;
+      });
+    }
+    return { ok:true, id:record.id, status:status, percent:stats.percent, requiredIncomplete:stats.requiredIncomplete, closedStale:closed };
   } finally { lock.releaseLock(); }
 }
 
 /** Most recent in-progress session for a kiosk (to resume), or null. */
 function getOpenServiceSession(kioskId){
-  var rows = readObjects_(SHEETS.SERVICE).filter(function(r){ return r.kioskId===kioskId && r.status==='in_progress'; });
+  var rows = svcRows_().filter(function(r){ return r.kioskId===kioskId && r.status==='in_progress'; });
   if (!rows.length) return null;
   rows.sort(function(a,b){ return String(b.startedAt).localeCompare(String(a.startedAt)); });
   var r = rows[0];
@@ -890,7 +925,7 @@ function getOpenServiceSession(kioskId){
 /** Per-kiosk summary for the servicing landing page. */
 function getServiceSummary(){
   var by = {};
-  readObjects_(SHEETS.SERVICE).forEach(function(r){
+  svcRows_().forEach(function(r){
     var k = r.kioskId; if (!by[k]) by[k] = { lastCompletedAt:'', lastStatus:'', inProgressSessionId:'', lastTechnicianName:'', lastServiceDate:'' };
     if (r.status==='in_progress') by[k].inProgressSessionId = r.id;
     if ((r.status==='completed'||r.status==='incomplete') && r.completedAt) {
@@ -906,7 +941,7 @@ function rowDate_(r){ var d=dStr_(r.serviceDate); if(d) return d; var ca=isoS_(r
 // Last milk-bag change date per kiosk, plus days-since and overdue (good for 4 days; 5th day = overdue).
 function getKioskMilkStatus(kioskId){
   var last='';
-  readObjects_(SHEETS.SERVICE).forEach(function(r){
+  svcRows_().forEach(function(r){
     if(r.kioskId!==kioskId || !milkChanged_(r)) return;
     var d=rowDate_(r); if(d && d>last) last=d;
   });
@@ -920,7 +955,7 @@ function getKioskMilkStatus(kioskId){
 // Map of kioskId -> [dates] where a milk-bag change was logged (for schedule markers).
 function getMilkBagLog(){
   var by={};
-  readObjects_(SHEETS.SERVICE).forEach(function(r){
+  svcRows_().forEach(function(r){
     if(!milkChanged_(r)) return; var d=rowDate_(r); if(!d) return;
     if(!by[r.kioskId]) by[r.kioskId]=[];
     if(by[r.kioskId].indexOf(d)<0) by[r.kioskId].push(d);
@@ -928,7 +963,7 @@ function getMilkBagLog(){
   return by;
 }
 function getServiceSessions(){
-  return readObjects_(SHEETS.SERVICE).map(function(r){
+  return svcRows_().map(function(r){
     return { id:r.id, kioskId:r.kioskId, locationName:r.locationName, model:r.model, checklistVersion:r.checklistVersion,
       technicianName:r.technicianName, startedAt:isoS_(r.startedAt), completedAt:isoS_(r.completedAt), status:r.status,
       percentComplete:num_(r.percentComplete), requiredIncomplete:num_(r.requiredIncomplete),
@@ -937,7 +972,7 @@ function getServiceSessions(){
 }
 
 function getServiceSession(id){
-  var rows = readObjects_(SHEETS.SERVICE).filter(function(r){ return r.id===id; });
+  var rows = svcRows_().filter(function(r){ return r.id===id; });
   if (!rows.length) throw new Error('Session not found.');
   var r = rows[0];
   return { id:r.id, kioskId:r.kioskId, locationName:r.locationName, model:r.model, checklistVersion:r.checklistVersion,
@@ -948,7 +983,7 @@ function getServiceSession(id){
 }
 
 function getServiceReport(){
-  var rows = readObjects_(SHEETS.SERVICE);
+  var rows = svcRows_();
   var completedByKiosk={}, recentByKiosk={}, inc={}, flg={}, cal=0, sen=0, gw=[], notes=[];
   rows.forEach(function(r){
     var loc = r.locationName || r.kioskId;
@@ -971,6 +1006,109 @@ function getServiceReport(){
   gw.sort(function(a,b){ return String(b.when).localeCompare(String(a.when)); });
   return { completedByKiosk:completedByKiosk, recentByKiosk:recentByKiosk, incompleteItems:top(inc), flaggedItems:top(flg),
            calibrationIssues:cal, sensorIssues:sen, grayWaterHistory:gw.slice(0,20), recentNotes:notes.slice(0,20) };
+}
+
+// ---- one-time cleanup: duplicate service sessions from the old autosave race ----
+// Before the fix, a checklist had no ID until its first save came back. If the
+// technician hit "Complete service" while an autosave was still in flight, both
+// requests said "no ID" and the server created TWO records for one service -
+// which double-counted the hours in Labour & reimbursements.
+// This finds those pairs (same kiosk, date and technician, created within three
+// minutes of each other), keeps the best record of each pair and voids the rest
+// with a note explaining why. Nothing is deleted. Safe to re-run.
+// Run previewDuplicateServiceSessions() first to see what it would do.
+function svcCreatedMs_(id){
+  var body = String(id||'').replace(/^SS/,'');
+  for (var n=8;n<=9;n++){
+    var ms = parseInt(body.substring(0,n), 36);
+    if (ms > 1600000000000 && ms < 2000000000000) return ms;   // sane epoch range
+  }
+  return 0;
+}
+function svcMinutes_(st, et){
+  var a=String(st||'').split(':'), b=String(et||'').split(':');
+  if(a.length<2 || b.length<2) return 0;
+  var m=(parseInt(b[0],10)*60+parseInt(b[1],10))-(parseInt(a[0],10)*60+parseInt(a[1],10));
+  if(isNaN(m)) return 0;
+  return m<0 ? m+1440 : m;
+}
+function findDuplicateSessions_(){
+  var rows = readObjects_(SHEETS.SERVICE).filter(function(r){ return !svcVoided_(r) && r.id; });
+  var groups = {};
+  rows.forEach(function(r){
+    var date = dStr_(r.serviceDate) || isoS_(r.startedAt).slice(0,10);
+    var key = [r.kioskId, date, r.technicianName].join('|');
+    (groups[key] = groups[key] || []).push(r);
+  });
+  var out = [];
+  Object.keys(groups).forEach(function(k){
+    var list = groups[k];
+    if (list.length < 2) return;
+    list.sort(function(a,b){ return svcCreatedMs_(a.id) - svcCreatedMs_(b.id); });
+    var cluster = [list[0]];
+    for (var i=1;i<list.length;i++){
+      var gap = Math.abs(svcCreatedMs_(list[i].id) - svcCreatedMs_(cluster[cluster.length-1].id));
+      // created within 3 minutes of each other = the same service saved twice
+      if (gap <= 180000 && gap >= 0) cluster.push(list[i]);
+      else { if (cluster.length>1) out.push(cluster); cluster=[list[i]]; }
+    }
+    if (cluster.length>1) out.push(cluster);
+  });
+  return out;
+}
+// Which record of a duplicate pair to keep: most complete, then longest, then newest.
+function bestOfCluster_(cluster){
+  var best = cluster[0];
+  cluster.forEach(function(r){
+    var a = [num_(r.percentComplete), svcMinutes_(tStr_(r.startTime), tStr_(r.endTime)), svcCreatedMs_(r.id)];
+    var b = [num_(best.percentComplete), svcMinutes_(tStr_(best.startTime), tStr_(best.endTime)), svcCreatedMs_(best.id)];
+    if (a[0]>b[0] || (a[0]===b[0] && a[1]>b[1]) || (a[0]===b[0] && a[1]===b[1] && a[2]>b[2])) best = r;
+  });
+  return best;
+}
+/** Shows what cleanupDuplicateServiceSessions() would void. Changes nothing. */
+function previewDuplicateServiceSessions(){
+  var clusters = findDuplicateSessions_(), plan = [], extraMins = 0;
+  clusters.forEach(function(c){
+    var keep = bestOfCluster_(c);
+    c.forEach(function(r){
+      if (r.id===keep.id) return;
+      extraMins += svcMinutes_(tStr_(r.startTime), tStr_(r.endTime));
+      plan.push({ voidId:r.id, keepId:keep.id, kiosk:r.kioskId,
+                  date: dStr_(r.serviceDate) || isoS_(r.startedAt).slice(0,10),
+                  technician:r.technicianName,
+                  times: tStr_(r.startTime)+'-'+tStr_(r.endTime),
+                  secondsApart: Math.round(Math.abs(svcCreatedMs_(r.id)-svcCreatedMs_(keep.id))/1000) });
+    });
+  });
+  return { duplicateGroups:clusters.length, rowsToVoid:plan.length,
+           doubleCountedHours: Math.round(extraMins/60*100)/100, plan:plan };
+}
+/** Voids the duplicate records (keeps the best of each pair). Nothing is deleted. */
+function cleanupDuplicateServiceSessions(){
+  var lock=LockService.getScriptLock(); lock.waitLock(30000);
+  try{
+    var clusters = findDuplicateSessions_(), voided = [], extraMins = 0;
+    var stamp = Utilities.formatDate(new Date(), svcTz_(), 'yyyy-MM-dd');
+    clusters.forEach(function(c){
+      var keep = bestOfCluster_(c);
+      c.forEach(function(r){
+        if (r.id===keep.id) return;
+        var secs = Math.round(Math.abs(svcCreatedMs_(r.id)-svcCreatedMs_(keep.id))/1000);
+        extraMins += svcMinutes_(tStr_(r.startTime), tStr_(r.endTime));
+        updateCell_(SHEETS.SERVICE, r._row, 'voided', true);
+        updateCell_(SHEETS.SERVICE, r._row, 'voidNote',
+          'Voided ' + stamp + ': duplicate of ' + keep.id + '. One real service got saved twice, ' +
+          secs + 's apart, by a bug where a checklist had no ID until its first save came back - ' +
+          'so an autosave and the Complete button each created their own record. Reported by Rob ' +
+          '("submitted but still shows in progress"). Bug fixed ' + stamp + ' by giving each checklist ' +
+          'its ID up front. Voided so these hours are not counted twice in Labour. Kept the more complete record.');
+        voided.push(r.id);
+      });
+    });
+    return { ok:true, groups:clusters.length, voided:voided.length,
+             hoursRemovedFromLabour: Math.round(extraMins/60*100)/100, ids:voided };
+  } finally { lock.releaseLock(); }
 }
 
 // =========================================================================
@@ -1014,7 +1152,7 @@ function cancelCoverage(payload){
 /** Recent flagged servicing items, for the manager dashboard. */
 function getServiceFlags(){
   var out=[];
-  readObjects_(SHEETS.SERVICE).forEach(function(r){
+  svcRows_().forEach(function(r){
     serviceParse_(r.completionsJson).forEach(function(c){
       if(c.flagged) out.push({ sessionId:r.id, itemId:c.itemId, when:r.completedAt||r.startedAt, serviceDate:r.serviceDate||'',
         location:r.locationName||r.kioskId, technician:r.technicianName||'', label:c.label, section:c.section||'', note:c.notes||'' });
@@ -1379,7 +1517,7 @@ function emailBackupSnapshot_(){
 // Kiosoft/Nayax); these are the lifetime totals of the operational data held here.
 function lifetimeVolume_(){
   function cnt(key){ return readObjects_(SHEETS[key]).length; }
-  var svc = readObjects_(SHEETS.SERVICE);
+  var svc = svcRows_();
   var completed = svc.filter(function(s){ return s.status==='completed'; }).length;
   var chg = readObjects_(SHEETS.CHG);
   var reimbursed = chg.filter(function(x){ return x.type==='reimbursement'; })

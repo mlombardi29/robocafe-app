@@ -5,6 +5,34 @@ A plain-language history of changes to the Robo Café internal app
 
 ---
 
+## Fixed duplicate service reports + much faster autosave
+**Reported by Rob:** "auto save too slow, and when I submit a report it still shows
+service in progress." Both were real, and they had the same root cause.
+
+- **What was happening.** A checklist had no ID until its first save came back from
+  the server. The rule on the server is "ID given = update that record, no ID =
+  create a new one." Autosave fires a couple of seconds after each tap — so if a
+  technician hit **Complete service** while an autosave was still in flight, both
+  requests said "no ID" and the server created **two** records for one service. The
+  autosave's copy stayed "in progress" (exactly what Rob saw), and when it was later
+  resumed and finished it became a second completed record.
+- **Why it mattered:** those phantom records were **double-counting hours in Labour &
+  reimbursements** — about 8.6 hours across 13 services since mid-June.
+- **The fix:** every checklist now gets its ID the moment it opens, so the autosave
+  and the Complete button always write to the same record. Plus two safety nets: a
+  late autosave can no longer re-open a finished service, and completing a service
+  auto-closes any leftover "in progress" record for that kiosk.
+- **Autosave is now instant.** Progress saves to the phone immediately (no spinner,
+  no waiting) and the server copy is refreshed quietly in the background, when you
+  leave the checklist, and on submit. Leaving mid-service and coming back still
+  restores everything, on the same phone or another one. Separately, saving a record
+  used to write ~20 separate times to the Sheet; it's now a single write.
+- **Historical cleanup:** `previewDuplicateServiceSessions()` shows the affected
+  records and `cleanupDuplicateServiceSessions()` voids the phantom ones (run from
+  the Apps Script editor). Nothing is deleted — voided rows stay in the Sheet with a
+  note explaining what happened, and are ignored in history, reports and hours.
+  Genuine repeat visits to the same kiosk on the same day are left alone.
+
 ## New: Order list (manager) — what to buy, grouped by supplier
 - New manager tile **🛒 Order list**. It shows everything that's out, below its
   minimum, or about to run out, **grouped by where you buy it**: Kiosoft (email),
