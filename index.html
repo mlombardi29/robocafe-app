@@ -311,7 +311,8 @@ var WRITE_FNS={ recordWithdrawal:1,recordReceipt:1,recordAdjustment:1,recordKios
   saveSku:1,setSkuActive:1,saveLocation:1,setLocationActive:1,savePerson:1,setPersonActive:1,
   setLowDaysThreshold:1,syncStandardItems:1,setLocationSkuInUse:1,saveServiceSession:1,
   requestCoverage:1,claimCoverage:1,cancelCoverage:1,savePayment:1,voidPayment:1,addCharge:1,
-  setChargePaid:1,voidCharge:1,clearServiceFlag:1,backupNow:1,setAutoBackup:1,managerResetPin:1 };
+  setChargePaid:1,voidCharge:1,clearServiceFlag:1,backupNow:1,setAutoBackup:1,managerResetPin:1,
+  updateServiceTimes:1 };
 var SWR_TTL=60*60000;   // memory older than an hour shows a spinner instead
 var SWR_FRESH=5000;     // data this new is trusted as-is (stops repaint loops)
 var VIEW={ repaint:null };
@@ -2090,6 +2091,15 @@ function svcSaveLocal(){
 }
 function svcLoadLocal(){ try{ return JSON.parse(lsGet(svcLocalKey())||'null'); }catch(e){ return null; } }
 function svcClearLocal(){ try{ localStorage.removeItem(svcLocalKey()); }catch(e){} }
+var SVC_LONG_MINS=360;   // anything over 6 hours gets a second look
+function svcDurationMins(st,et){
+  var a=String(st||'').split(':'), b=String(et||'').split(':');
+  if(a.length<2||b.length<2) return 0;
+  var m=(parseInt(b[0],10)*60+parseInt(b[1],10))-(parseInt(a[0],10)*60+parseInt(a[1],10));
+  if(isNaN(m)) return 0;
+  return m<0 ? m+1440 : m;
+}
+function fmtDur(m){ var h=Math.floor(m/60), r=m%60; return (h?h+' h ':'')+(r?r+' min':(h?'':'0 min')); }
 function markSaved(){ var l=document.getElementById('svcSavedLbl'); if(l) l.textContent='Saved ✓'; }
 function markBacked(){ var l=document.getElementById('svcSavedLbl'); if(l) l.textContent='Saved ✓ · backed up'; }
 function svcAutosaveSoon(){
@@ -2140,6 +2150,12 @@ function submitService(mode){
   if(flaggedNoNote.length) return toast('Add a note to each flagged item ('+flaggedNoNote.length+' missing)',true);
   var _st=val('svcStart'), _et=val('svcEnd');
   if(_st && _et && _et < _st) return toast('End time can’t be earlier than the start time',true);
+  // An AM/PM slip (e.g. 11:45 PM instead of AM) turns a 45-minute visit into a
+  // 12-hour one and lands in the labour totals. Ask before letting it through.
+  if(_st && _et){
+    var _mins=svcDurationMins(_st,_et);
+    if(_mins>SVC_LONG_MINS && !confirm('That works out to '+fmtDur(_mins)+' for this service.\n\nDouble-check the start and end times — it\u2019s easy to pick PM instead of AM.\n\nOK to submit anyway, or Cancel to fix the times.')) return;
+  }
   var status='in_progress', reason='';
   if(mode==='complete'){
     if(!_st || !_et){ markTimeMissing(!_st,!_et); return toast('Add '+((!_st&&!_et)?'a start and end time':(!_st?'a start time':'an end time'))+' before completing',true); }
@@ -2207,6 +2223,7 @@ function screenServiceDetail(){
     if(s.incompleteReason) head.appendChild(el('<div class="hint" style="margin-top:10px"><b>Reason for incomplete:</b> '+esc(s.incompleteReason)+'</div>'));
     if(s.overallNotes) head.appendChild(el('<div class="hint" style="margin-top:8px"><b>Overall notes:</b> '+esc(s.overallNotes)+'</div>'));
     body.appendChild(head);
+    body.appendChild(svcTimesCard(s));
     // group completions by section
     var bySec=[]; var idx={};
     (s.completions||[]).forEach(function(c){ if(!(c.section in idx)){ idx[c.section]=bySec.length; bySec.push({title:c.section,items:[]}); } bySec[idx[c.section]].items.push(c); });
@@ -2221,6 +2238,67 @@ function screenServiceDetail(){
       body.appendChild(card);
     });
   }).catch(function(e){ body.innerHTML='<div class="empty">'+esc(e.message||e)+'</div>'; });
+}
+
+/* Times card on a submitted service: shows the logged times, and lets them be
+   corrected — by the technician until the end of the day they submitted (with a
+   few hours' grace for late-night services), and by a manager at any time. */
+function svcTimesCard(s){
+  var isMgr=(APP.me&&APP.me.role==='manager');
+  var mine=(APP.me&&APP.me.name)===s.technicianName;
+  var until=s.editableUntil?new Date(s.editableUntil).getTime():0;
+  var inWindow=until?(Date.now()<until):false;
+  var canEdit=isMgr||(mine&&inWindow);
+  var dur=svcDurationMins(s.startTime,s.endTime);
+
+  var card=el('<div class="card"><label style="margin-top:0">Times</label></div>');
+  var view=el('<div></div>');
+  view.appendChild(el('<div class="hrow" style="border:none;padding-top:2px"><div class="grow">'+
+    '<div><b>'+esc(s.serviceDate||'(no date)')+'</b></div>'+
+    '<small>'+esc(s.startTime||'—')+' – '+esc(s.endTime||'—')+(dur?(' · '+esc(fmtDur(dur))):'')+
+    (s.milkBagChanged?' · 🥛 milk bag changed':'')+'</small></div></div>'));
+  if(dur>SVC_LONG_MINS) view.appendChild(el('<div class="hint" style="color:var(--rust);font-weight:600">⚠ That\u2019s '+esc(fmtDur(dur))+' — check whether AM/PM got mixed up.</div>'));
+  card.appendChild(view);
+
+  if(canEdit){
+    var btn=el('<button class="btn ghost" style="margin-top:12px">✏️ Correct these times</button>');
+    card.appendChild(btn);
+    if(!isMgr && until) card.appendChild(el('<div class="hint">You can fix this until '+esc(new Date(until).toLocaleString(undefined,{weekday:'short',hour:'numeric',minute:'2-digit'}))+'. After that a manager can still change it.</div>'));
+    btn.onclick=function(){
+      btn.style.display='none'; view.style.display='none';
+      var f=el('<div></div>');
+      f.appendChild(el('<label style="margin-top:0">Service date</label><input type="date" id="etDate" value="'+esc(s.serviceDate||'')+'">'));
+      f.appendChild(el('<div class="row" style="gap:8px"><div><label>Start time</label><input type="time" id="etStart" value="'+esc(s.startTime||'')+'"></div>'+
+        '<div><label>End time</label><input type="time" id="etEnd" value="'+esc(s.endTime||'')+'"></div></div>'));
+      var mt=el('<button class="milktoggle'+(s.milkBagChanged?' on':'')+'" type="button">'+(s.milkBagChanged?'✓ Milk bag changed this service':'Mark “milk bag changed”')+'</button>');
+      var milk=!!s.milkBagChanged;
+      mt.onclick=function(){ milk=!milk; mt.className='milktoggle'+(milk?' on':''); mt.textContent=milk?'✓ Milk bag changed this service':'Mark “milk bag changed”'; };
+      f.appendChild(mt);
+      var save=el('<button class="btn">Save correction</button>');
+      var cancel=el('<button class="btn ghost">Cancel</button>');
+      cancel.onclick=function(){ go('serviceDetail'); };
+      f.appendChild(save); f.appendChild(cancel);
+      card.appendChild(f);
+      save.onclick=function(){
+        var d=val('etDate'), st=val('etStart'), et=val('etEnd');
+        if(!st||!et) return toast('Enter both a start and end time',true);
+        if(et<st) return toast('End time can’t be earlier than the start time',true);
+        var m=svcDurationMins(st,et);
+        if(m>SVC_LONG_MINS && !confirm('That works out to '+fmtDur(m)+'.\n\nDouble-check AM vs PM.\n\nOK to save anyway, or Cancel to fix it.')) return;
+        save.disabled=true; save.textContent='Saving…';
+        call('updateServiceTimes',{id:s.id,serviceDate:d,startTime:st,endTime:et,milkBagChanged:milk})
+          .then(function(r){ toast((r&&r.unchanged)?'Nothing changed':'Times corrected ✓'); go('serviceDetail'); })
+          .catch(function(e){ save.disabled=false; save.textContent='Save correction'; toast(e.message||e,true); });
+      };
+    };
+  } else if(mine && until){
+    card.appendChild(el('<div class="hint">These times are locked now. Ask Michael or Kajsa if something needs correcting.</div>'));
+  }
+  if(s.editLog){
+    var log=el('<div class="hint" style="margin-top:10px;white-space:pre-wrap;border-top:1px solid var(--line);padding-top:8px"><b>Corrections:</b>\n'+esc(s.editLog)+'</div>');
+    card.appendChild(log);
+  }
+  return card;
 }
 
 // ---------- MANAGER: SERVICING REPORTS ----------

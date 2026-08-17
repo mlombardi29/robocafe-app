@@ -51,7 +51,7 @@ var HEADERS = {
   KioskFlags: ['id','timestamp','locationId','locationName','skuId','skuName','status','byName','note','resolved','resolvedBy','resolvedAt'],
   People: ['name','role','active','pin'],
   Config: ['key','value'],
-  ServiceSessions: ['id','kioskId','locationName','model','checklistVersion','technicianName','startedAt','completedAt','status','percentComplete','requiredIncomplete','incompleteReason','overallNotes','completionsJson','serviceDate','startTime','endTime','milkBagChanged','voided','voidNote'],
+  ServiceSessions: ['id','kioskId','locationName','model','checklistVersion','technicianName','startedAt','completedAt','status','percentComplete','requiredIncomplete','incompleteReason','overallNotes','completionsJson','serviceDate','startTime','endTime','milkBagChanged','voided','voidNote','submittedAt','editLog'],
   ScheduleOverrides: ['date','kioskId','coverageRequested','requestedBy','claimedBy','originalAssignee','note','updatedAt'],
   Payments: ['id','personName','periodStart','periodEnd','paidDate','notes','voided','createdAt'],
   Charges: ['id','personName','type','date','description','amount','startTime','endTime','hours','receiptLink','paid','paidDate','paidNote','voided','createdAt']
@@ -871,7 +871,13 @@ function saveServiceSession(payload){
       serviceDate: sd, startTime: stt, endTime: ett,
       milkBagChanged: (payload.milkBagChanged===true||payload.milkBagChanged==='true') ? true : false,
       voided: existing ? (svcVoided_(existing) ? true : false) : false,
-      voidNote: existing ? (existing.voidNote||'') : ''
+      voidNote: existing ? (existing.voidNote||'') : '',
+      // The real moment of submission — the edit window counts from here, not from
+      // the end time the technician typed (which is the thing that may be wrong).
+      submittedAt: (status==='completed'||status==='incomplete')
+        ? ((existing && existing.submittedAt) ? isoS_(existing.submittedAt) : nowIso)
+        : (existing ? isoS_(existing.submittedAt) : ''),
+      editLog: existing ? (existing.editLog||'') : ''
     };
     // A background autosave can land just after the technician hits Complete.
     // Never let a late 'in progress' save re-open a finished service.
@@ -922,6 +928,86 @@ function getOpenServiceSession(kioskId){
            milkBagChanged: milkChanged_(r) };
 }
 
+// ---- correcting a submitted service (mistyped times) ----------------------
+// Technicians can fix their own service until the end of the day they submitted
+// it — with a floor of SERVICE_EDIT_MIN_HOURS, so a service finished near
+// midnight isn't locked seconds later. Managers can correct any service at any
+// time; without that, a mistake spotted the next day could never be fixed.
+var SERVICE_EDIT_MIN_HOURS = 3;
+
+// Last moment of the local day containing this timestamp.
+function endOfLocalDayMs_(ms){
+  var tz = svcTz_(), d = new Date(ms);
+  var day = Utilities.formatDate(d, tz, 'yyyy-MM-dd');
+  var off = Utilities.formatDate(d, tz, 'Z');            // e.g. -0400
+  var t = new Date(day + 'T23:59:59' + off.slice(0,3) + ':' + off.slice(3)).getTime();
+  return isNaN(t) ? (ms + 86400000) : t;
+}
+// When a technician's own edit window closes (null if we can't tell).
+function serviceEditableUntil_(r){
+  var sub = isoS_(r.submittedAt) || isoS_(r.completedAt);
+  if (!sub) return null;
+  var ms = new Date(sub).getTime();
+  if (isNaN(ms)) return null;
+  return Math.max(endOfLocalDayMs_(ms), ms + SERVICE_EDIT_MIN_HOURS*3600000);
+}
+function serviceEditableUntilIso_(r){
+  var u = serviceEditableUntil_(r);
+  return u ? new Date(u).toISOString() : '';
+}
+
+/** Correct the date/times/milk-bag flag on a service that's already submitted.
+ *  Managers: any service, any time. Technicians: their own, inside the window. */
+function updateServiceTimes(payload){
+  var lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    var me = currentUser_();
+    var rows = readObjects_(SHEETS.SERVICE), row = null;
+    for (var i=0;i<rows.length;i++) if (rows[i].id===payload.id){ row = rows[i]; break; }
+    if (!row) throw new Error('That service could not be found.');
+    if (svcVoided_(row)) throw new Error('That service record was voided and can no longer be edited.');
+
+    var isManager = me.role==='manager';
+    if (!isManager){
+      if (String(row.technicianName||'') !== String(me.name||''))
+        throw new Error('You can only correct your own services. Ask a manager to change this one.');
+      var until = serviceEditableUntil_(row);
+      if (until && Date.now() > until)
+        throw new Error('The time to correct this service has passed (it stays editable until the end of the day it was submitted). A manager can still fix it for you.');
+    }
+
+    var sd  = dStr_(payload.serviceDate || row.serviceDate);
+    var stt = tStr_(payload.startTime===undefined ? row.startTime : payload.startTime);
+    var ett = tStr_(payload.endTime===undefined ? row.endTime : payload.endTime);
+    if (!stt || !ett) throw new Error('A start and end time are both required.');
+    if (ett < stt) throw new Error('The end time can’t be earlier than the start time.');
+    var milk = (payload.milkBagChanged===true || payload.milkBagChanged==='true');
+
+    // What actually changed — recorded so hand-edited hours have a paper trail.
+    var changes = [];
+    if (dStr_(row.serviceDate)!==sd) changes.push('date ' + (dStr_(row.serviceDate)||'(blank)') + ' → ' + sd);
+    if (tStr_(row.startTime)!==stt)  changes.push('start ' + (tStr_(row.startTime)||'(blank)') + ' → ' + stt);
+    if (tStr_(row.endTime)!==ett)    changes.push('end ' + (tStr_(row.endTime)||'(blank)') + ' → ' + ett);
+    if (milkChanged_(row)!==milk)    changes.push('milk bag changed: ' + (milkChanged_(row)?'yes':'no') + ' → ' + (milk?'yes':'no'));
+    if (!changes.length) return { ok:true, unchanged:true };
+
+    function iso_(d,t){ if(!d) return ''; try{ return new Date(d+'T'+(t||'00:00')+':00').toISOString(); }catch(e){ return ''; } }
+    updateCell_(SHEETS.SERVICE, row._row, 'serviceDate', sd);
+    updateCell_(SHEETS.SERVICE, row._row, 'startTime', stt);
+    updateCell_(SHEETS.SERVICE, row._row, 'endTime', ett);
+    updateCell_(SHEETS.SERVICE, row._row, 'milkBagChanged', milk);
+    updateCell_(SHEETS.SERVICE, row._row, 'startedAt', iso_(sd,stt) || isoS_(row.startedAt));
+    if (row.status==='completed' || row.status==='incomplete')
+      updateCell_(SHEETS.SERVICE, row._row, 'completedAt', iso_(sd,ett) || isoS_(row.completedAt));
+
+    var stamp = Utilities.formatDate(new Date(), svcTz_(), 'yyyy-MM-dd HH:mm');
+    var line = stamp + ' — ' + (me.name||'someone') + (isManager?' (manager)':'') + ': ' + changes.join('; ');
+    var log = String(row.editLog||'');
+    updateCell_(SHEETS.SERVICE, row._row, 'editLog', log ? (log + '\n' + line) : line);
+    return { ok:true, changes:changes, editLog:line };
+  } finally { lock.releaseLock(); }
+}
+
 /** Per-kiosk summary for the servicing landing page. */
 function getServiceSummary(){
   var by = {};
@@ -967,7 +1053,8 @@ function getServiceSessions(){
     return { id:r.id, kioskId:r.kioskId, locationName:r.locationName, model:r.model, checklistVersion:r.checklistVersion,
       technicianName:r.technicianName, startedAt:isoS_(r.startedAt), completedAt:isoS_(r.completedAt), status:r.status,
       percentComplete:num_(r.percentComplete), requiredIncomplete:num_(r.requiredIncomplete),
-      serviceDate:dStr_(r.serviceDate), startTime:tStr_(r.startTime), endTime:tStr_(r.endTime) };
+      serviceDate:dStr_(r.serviceDate), startTime:tStr_(r.startTime), endTime:tStr_(r.endTime),
+      editableUntil: serviceEditableUntilIso_(r) };
   }).sort(function(a,b){ return String(b.completedAt||b.startedAt).localeCompare(String(a.completedAt||a.startedAt)); }).slice(0,300);
 }
 
@@ -979,7 +1066,9 @@ function getServiceSession(id){
     technicianName:r.technicianName, startedAt:isoS_(r.startedAt), completedAt:isoS_(r.completedAt), status:r.status,
     percentComplete:num_(r.percentComplete), requiredIncomplete:num_(r.requiredIncomplete),
     incompleteReason:r.incompleteReason, overallNotes:r.overallNotes, completions: serviceParse_(r.completionsJson),
-    serviceDate:dStr_(r.serviceDate), startTime:tStr_(r.startTime), endTime:tStr_(r.endTime) };
+    serviceDate:dStr_(r.serviceDate), startTime:tStr_(r.startTime), endTime:tStr_(r.endTime),
+    milkBagChanged: milkChanged_(r), submittedAt:isoS_(r.submittedAt),
+    editableUntil: serviceEditableUntilIso_(r), editLog: String(r.editLog||'') };
 }
 
 function getServiceReport(){
@@ -1654,6 +1743,7 @@ function apiRegistry_(){
       cancelCoverage: cancelCoverage,
       addCharge: addCharge,
       getCharges: getCharges,
+      updateServiceTimes: updateServiceTimes,
       changePin: changePin
     },
     // managers only
@@ -1690,6 +1780,10 @@ function apiRegistry_(){
   };
 }
 
+// Who is making the current request (set by doPost before each call).
+var _authCtx = null;
+function currentUser_(){ return _authCtx || { name:'', role:'' }; }
+
 function doPost(e){
   var out;
   try {
@@ -1713,6 +1807,7 @@ function doPost(e){
           if (level === 'manager' && auth.role !== 'manager'){ results.push({ ok:false, code:'forbidden', error:'Managers only.' }); continue; }
         }
         var target = reg[level][fn];
+        _authCtx = auth ? { name:auth.name, role:auth.role } : null;
         var r = target.apply(null, c.args || []);
         results.push({ ok:true, result: (r === undefined ? null : r) });
       } catch(fe){

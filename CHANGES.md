@@ -5,6 +5,30 @@ A plain-language history of changes to the Robo Café internal app
 
 ---
 
+## Correcting a submitted service (and catching AM/PM slips)
+**Asked for by Peter,** who logged an end time at RBC as 11:45 **PM** instead of AM
+and had no way to fix it after submitting.
+
+- **Technicians can now correct their own submitted service** — service date, start
+  time, end time and the milk-bag toggle — from Service history → tap the service →
+  **"✏️ Correct these times."**
+- **The window is the end of the day it was submitted**, as the team agreed, with a
+  **3-hour floor**: a service submitted at 11:50 PM stays editable until 2:50 AM
+  rather than locking ten minutes later. RBC concert nights and late Sinai visits run
+  right up to midnight, so a strict cut-off would have been useless exactly when it's
+  needed.
+- **Managers can correct any service at any time.** Peter reported his mistake the
+  next day — under a technician-only window that would already have been unfixable.
+- **New: an over-long service is questioned at submit.** Anything over 6 hours asks
+  "That works out to 12 h 45 m — double-check AM vs PM" before it can be submitted.
+  This is the part that stops the mistake reaching the labour totals in the first
+  place. The same check runs when correcting times, and a long service already on
+  record shows a warning on its detail screen.
+- **Every correction is recorded** — who changed it, when, and from what to what —
+  shown on the service and kept in the Sheet (`editLog`), so hand-edited hours have a
+  paper trail.
+- Backend change: paste `Code.gs` and deploy a new version. No editor function to run.
+
 ## Fixed duplicate service reports + much faster autosave
 **Reported by Rob:** "auto save too slow, and when I submit a report it still shows
 service in progress." Both were real, and they had the same root cause.
