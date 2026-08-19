@@ -1133,13 +1133,35 @@ function findDuplicateSessions_(){
   Object.keys(groups).forEach(function(k){
     var list = groups[k];
     if (list.length < 2) return;
-    list.sort(function(a,b){ return svcCreatedMs_(a.id) - svcCreatedMs_(b.id); });
-    var cluster = [list[0]];
-    for (var i=1;i<list.length;i++){
-      var gap = Math.abs(svcCreatedMs_(list[i].id) - svcCreatedMs_(cluster[cluster.length-1].id));
-      // created within 3 minutes of each other = the same service saved twice
-      if (gap <= 180000 && gap >= 0) cluster.push(list[i]);
-      else { if (cluster.length>1) out.push(cluster); cluster=[list[i]]; }
+    var used = {};
+    // (a) Same kiosk, day, technician AND the same START time is the same service
+    //     filed twice, however far apart the two saves happened and even if the end
+    //     times differ slightly. Nobody starts two separate visits to one kiosk at
+    //     the same minute, so a shared start time is the reliable signal; a genuine
+    //     second visit that day always starts at a different time. This catches a
+    //     technician re-doing a report that still looked stuck "in progress".
+    var byTimes = {};
+    list.forEach(function(r){
+      var st = tStr_(r.startTime);
+      if (!st) return;                      // no start time: leave to the rule below
+      (byTimes[st] = byTimes[st] || []).push(r);
+    });
+    Object.keys(byTimes).forEach(function(tk){
+      if (byTimes[tk].length > 1){
+        byTimes[tk].forEach(function(r){ used[r.id] = 1; });
+        out.push(byTimes[tk]);
+      }
+    });
+    // (b) Whatever is left (blank or differing times): saved within 3 minutes of
+    //     each other, which is the signature of the old autosave/submit race.
+    var rest = list.filter(function(r){ return !used[r.id]; });
+    if (rest.length < 2) return;
+    rest.sort(function(a,b){ return svcCreatedMs_(a.id) - svcCreatedMs_(b.id); });
+    var cluster = [rest[0]];
+    for (var i=1;i<rest.length;i++){
+      var gap = Math.abs(svcCreatedMs_(rest[i].id) - svcCreatedMs_(cluster[cluster.length-1].id));
+      if (gap <= 180000 && gap >= 0) cluster.push(rest[i]);
+      else { if (cluster.length>1) out.push(cluster); cluster=[rest[i]]; }
     }
     if (cluster.length>1) out.push(cluster);
   });
@@ -1186,12 +1208,16 @@ function cleanupDuplicateServiceSessions(){
         var secs = Math.round(Math.abs(svcCreatedMs_(r.id)-svcCreatedMs_(keep.id))/1000);
         extraMins += svcMinutes_(tStr_(r.startTime), tStr_(r.endTime));
         updateCell_(SHEETS.SERVICE, r._row, 'voided', true);
+        var how = (secs <= 180)
+          ? ('the two records were saved ' + secs + 's apart, by a bug where a checklist had no ID until ' +
+             'its first save came back - so an autosave and the Complete button each created their own record')
+          : ('the same service was filed twice ' + Math.round(secs/60) + ' minutes apart from the same start time - ' +
+             'typically the technician re-doing a report that still looked "in progress"');
         updateCell_(SHEETS.SERVICE, r._row, 'voidNote',
-          'Voided ' + stamp + ': duplicate of ' + keep.id + '. One real service got saved twice, ' +
-          secs + 's apart, by a bug where a checklist had no ID until its first save came back - ' +
-          'so an autosave and the Complete button each created their own record. Reported by Rob ' +
-          '("submitted but still shows in progress"). Bug fixed ' + stamp + ' by giving each checklist ' +
-          'its ID up front. Voided so these hours are not counted twice in Labour. Kept the more complete record.');
+          'Voided ' + stamp + ': duplicate of ' + keep.id + '. One real service, two records: ' + how +
+          '. Reported by Rob ("submitted but still shows in progress"). Root cause fixed Aug 2026 by giving ' +
+          'each checklist its ID up front. Voided so these hours are not counted twice in Labour. ' +
+          'Kept the more complete record.');
         voided.push(r.id);
       });
     });

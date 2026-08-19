@@ -5,6 +5,31 @@ A plain-language history of changes to the Robo Café internal app
 
 ---
 
+## Caught a second kind of duplicate + tidier service detail
+**Rob reported an RBC service on Aug 13 as logged twice — and he was right.** Two
+live records exist for that one service, saved **18 minutes apart** with identical
+times. The earlier cleanup missed it: it only looked for records saved within three
+minutes of each other (the signature of the autosave/submit race), and this pair came
+from a different cause — re-doing a report that still looked stuck "in progress".
+- **Duplicate detection widened:** same kiosk, same day, same technician **and the
+  same start time** now counts as a duplicate however far apart the two saves happened
+  and even if the end times differ by a few minutes. Nobody starts two separate visits
+  to one kiosk in the same minute, so a shared start time is the reliable signal — a
+  genuine second visit that day always starts at a different time (checked against
+  every repeat visit on record). The longer, more complete record is the one kept.
+- Re-running `cleanupDuplicateServiceSessions()` voids 3 records: the Aug 13 RBC
+  duplicate, an Aug 5 U of T pair (11:59–12:15 kept over 11:59–12:12), and a
+  Jun 23 Sinai record with no end time.
+- **The service detail screen no longer prints the times twice.** The summary card
+  showed "started 9:42 AM · finished 10:19 AM" and the new Times card repeated
+  "09:42 – 10:19" — which made a single record look like two even when it wasn't.
+  Times now appear once, in the Service times card.
+- Times read the way they're entered on a phone — **9:42 AM – 10:19 AM** rather than
+  09:42 – 10:19 — which also makes an AM/PM mix-up easier to spot. The date reads
+  "Thu Aug 13, 2026" instead of 2026-08-13.
+- **No new duplicates since the race fix went in** — Aug 14, 15, 17 and 18 are all
+  clean.
+
 ## Correcting a submitted service (and catching AM/PM slips)
 **Asked for by Peter,** who logged an end time at RBC as 11:45 **PM** instead of AM
 and had no way to fix it after submitting.

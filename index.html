@@ -2099,6 +2099,18 @@ function svcDurationMins(st,et){
   if(isNaN(m)) return 0;
   return m<0 ? m+1440 : m;
 }
+function fmt12(t){
+  var a=String(t||'').split(':'); if(a.length<2) return String(t||'');
+  var h=parseInt(a[0],10), m=a[1]; if(isNaN(h)) return String(t||'');
+  var ap=h<12?'AM':'PM', hh=h%12; if(hh===0) hh=12;
+  return hh+':'+m+' '+ap;
+}
+function fmtDayLong(iso){
+  if(!iso) return '';
+  var d=new Date(String(iso)+'T00:00:00');
+  if(isNaN(d.getTime())) return String(iso);
+  return d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+}
 function fmtDur(m){ var h=Math.floor(m/60), r=m%60; return (h?h+' h ':'')+(r?r+' min':(h?'':'0 min')); }
 function markSaved(){ var l=document.getElementById('svcSavedLbl'); if(l) l.textContent='Saved ✓'; }
 function markBacked(){ var l=document.getElementById('svcSavedLbl'); if(l) l.textContent='Saved ✓ · backed up'; }
@@ -2218,7 +2230,7 @@ function screenServiceDetail(){
     body.appendChild(el('<div><h2>'+esc(s.locationName)+'</h2><p class="sub">'+esc(s.model)+' · '+esc(s.checklistVersion)+'</p></div>'));
     var head=el('<div class="card"></div>');
     head.appendChild(el('<div class="mgr-row" style="border:none;padding-top:0"><div class="grow"><div>'+statusPill(s.status)+' &nbsp; <b>'+s.percentComplete+'%</b> complete</div>'+
-      '<small>'+esc(s.technicianName||'—')+' · started '+esc(svcDate(s.startedAt))+(s.completedAt?' · finished '+esc(svcDate(s.completedAt)):'')+'</small></div></div>'));
+      '<small>'+esc(s.technicianName||'—')+'</small></div></div>'));
     head.appendChild(el('<div class="prog"><i style="width:'+s.percentComplete+'%"></i></div>'));
     if(s.incompleteReason) head.appendChild(el('<div class="hint" style="margin-top:10px"><b>Reason for incomplete:</b> '+esc(s.incompleteReason)+'</div>'));
     if(s.overallNotes) head.appendChild(el('<div class="hint" style="margin-top:8px"><b>Overall notes:</b> '+esc(s.overallNotes)+'</div>'));
@@ -2251,12 +2263,16 @@ function svcTimesCard(s){
   var canEdit=isMgr||(mine&&inWindow);
   var dur=svcDurationMins(s.startTime,s.endTime);
 
-  var card=el('<div class="card"><label style="margin-top:0">Times</label></div>');
+  var card=el('<div class="card"><label style="margin-top:0">Service times</label></div>');
   var view=el('<div></div>');
+  var when = s.serviceDate ? fmtDayLong(s.serviceDate) : (s.startedAt?fmtDayLong(String(s.startedAt).slice(0,10)):'(no date)');
+  var times;
+  if(s.startTime && s.endTime) times = fmt12(s.startTime)+' – '+fmt12(s.endTime)+(dur?(' · '+fmtDur(dur)):'');
+  else if(s.status==='in_progress') times = 'Started '+esc(svcDate(s.startedAt))+' · still in progress';
+  else times = 'No times logged';
   view.appendChild(el('<div class="hrow" style="border:none;padding-top:2px"><div class="grow">'+
-    '<div><b>'+esc(s.serviceDate||'(no date)')+'</b></div>'+
-    '<small>'+esc(s.startTime||'—')+' – '+esc(s.endTime||'—')+(dur?(' · '+esc(fmtDur(dur))):'')+
-    (s.milkBagChanged?' · 🥛 milk bag changed':'')+'</small></div></div>'));
+    '<div><b>'+esc(when)+'</b></div>'+
+    '<small>'+esc(times)+(s.milkBagChanged?' · 🥛 milk bag changed':'')+'</small></div></div>'));
   if(dur>SVC_LONG_MINS) view.appendChild(el('<div class="hint" style="color:var(--rust);font-weight:600">⚠ That\u2019s '+esc(fmtDur(dur))+' — check whether AM/PM got mixed up.</div>'));
   card.appendChild(view);
 
