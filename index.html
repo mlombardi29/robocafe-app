@@ -1187,17 +1187,20 @@ function receiveHint(opt, sku, q){
   if(!opt||!sku) return '';
   var base=String(sku.baseUnit||'unit');
   var added=Math.round((q||0)*opt.perBase*100)/100;
+  var bottles=isBottleUnitName(base);
   var line;
-  if(opt.perBase>1 && isBottleUnitName(base)){
+  if(opt.perBase>1 && bottles){
     line = q>0
       ? ((q===1?'1 box':(q+' boxes'))+' of '+opt.perBase+' = '+added+' bottles added')
       : ('1 box = '+opt.perBase+' bottles');
-  } else if(isBottleUnitName(base)){
+  } else if(opt.perBase>1){
+    var n=q>0?q:1;
+    var total=q>0?added:opt.perBase;
+    line = n+' × '+opt.name+' = '+total+' '+(total===1?base:pluralUnit(base))+(q>0?' added':'');
+  } else if(bottles){
     line = q>0 ? ('= '+added+' bottle'+(added===1?'':'s')+' added') : 'Adds 1 bottle at a time';
   } else if(q>0){
-    line = '= '+added+' '+ (added===1?base:pluralUnit(base)) +' added';
-  } else if(opt.perBase>1){
-    line = '1 '+opt.name+' = '+opt.perBase+' '+pluralUnit(base);
+    line = '= '+added+' '+(added===1?base:pluralUnit(base))+' added';
   } else {
     line = 'Counted in '+pluralUnit(base);
   }
