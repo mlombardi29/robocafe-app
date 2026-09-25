@@ -189,11 +189,11 @@ function setup() {
       ['Hot Chocolate Powder','tin','1.7 kg','tin',1,'Amazon',1, '',0,'',''],
       ['Matcha powder','tin','250 g','tin',1,'Amazon',1, '',0,'',''],
       ['Sugar','bag','2 kg','bag',1,'Instacart',0, '',0,'',''],
-      ['Vanilla Syrup','bottle','1 L','pack',6,'8 Ounce',5, '',0,'',''],
-      ['Caramel Syrup','bottle','1 L','pack',6,'8 Ounce',5, '',0,'',''],
-      ['Iced Tea Lemon Syrup','bottle','1 L','pack',6,'8 Ounce',5, '',0,'',''],
-      ['Peach Syrup','bottle','1 L','pack',6,'8 Ounce',5, '',0,'',''],
-      ['Coffee Concentrate','bottle','1 L','pack',6,'Hatch',5, '',0,'',''],
+      ['Vanilla Syrup','bottle','1 L','pack',6,'8 Ounce',5, 'bottle',1,'8 Ounce',5],
+      ['Caramel Syrup','bottle','1 L','pack',6,'8 Ounce',5, 'bottle',1,'8 Ounce',5],
+      ['Iced Tea Lemon Syrup','bottle','1 L','pack',6,'8 Ounce',5, 'bottle',1,'8 Ounce',5],
+      ['Peach Syrup','bottle','1 L','pack',6,'8 Ounce',5, 'bottle',1,'8 Ounce',5],
+      ['Coffee Concentrate','bottle','1 L','box of 4',4,'Hatch',5, 'bottle',1,'Hatch',5],
       ['Blueberry Pomegranate Concentrate','bottle','4 L','pack',2,'Kiosoft',5, '',0,'',''],
       ['Strawberry Watermelon Concentrate','bottle','4 L','pack',2,'Kiosoft',5, '',0,'',''],
       ['Lemon Lime Concentrate','bottle','4 L','pack',2,'Kiosoft',5, '',0,'',''],
@@ -218,6 +218,10 @@ function setup() {
   }
   // Idempotent top-up: make sure standard items exist even on already-seeded sheets.
   ensureCoreSkus_();
+  // Existing sheets may still say coffee concentrate is a pack of 6, and may
+  // have no single-bottle purchase option. Both fixes are safe to re-run.
+  applyPackSizeFix_();
+  ensureBottleSingles_();
   return 'Setup complete. Deploy as a web app next.';
 }
 
@@ -302,7 +306,7 @@ var ORDER_SETUP_ = [
   ['Decaf espresso beans',             'Propeller',          '5 lb bag',  1,  2,  2],
   ['Everclean Solution',               'Eversys',            'bottle',    1, 10,  2],
   ['Eversys Cleaning Balls',           'Eversys',            'bottle',    1, 10,  2],
-  ['Coffee Concentrate',               'Hatch Coffee',       'pack of 6', 6,  5,  6],
+  ['Coffee Concentrate',               'Hatch Coffee',       'box of 4',  4,  5,  6],
   ['Vanilla Syrup',                    '8 Ounce',            'pack of 6', 6,  5,  3],
   ['Caramel Syrup',                    '8 Ounce',            'pack of 6', 6,  5,  3],
   ['Iced Tea Lemon Syrup',             '8 Ounce',            'pack of 6', 6,  5,  3],
@@ -313,7 +317,9 @@ var ORDER_SETUP_ = [
 
 /** Run once from the Apps Script editor: writes the supplier, order unit,
  *  lead time and reorder minimum for every item into the Sheet. Safe to
- *  re-run — it only overwrites those fields, and they stay editable in Items. */
+ *  re-run — it only overwrites those fields, and they stay editable in Items.
+ *  Also corrects coffee concentrate to a box of 4 and fills a blank
+ *  single-bottle option on multi-bottle items. */
 function applyOrderingSetup(){
   var lock=LockService.getScriptLock(); lock.waitLock(30000);
   try{
@@ -329,8 +335,45 @@ function applyOrderingSetup(){
       updateCell_(SHEETS.SKUS, hit._row, 'reorderThreshold', x[5]);
       updated.push(x[0]);
     });
-    return { ok:true, updated:updated.length, missing:missing };
+    var packFixed = applyPackSizeFix_();
+    var bottleOptions = ensureBottleSingles_();
+    return { ok:true, updated:updated.length, missing:missing, packFixed:packFixed, bottleOptions:bottleOptions };
   } finally { lock.releaseLock(); }
+}
+
+// Coffee concentrate is bought in boxes of 4 bottles. Sheets set up earlier
+// still say "pack of 6". Returns item names whose purchase unit was corrected.
+function applyPackSizeFix_(){
+  var updated = [];
+  readObjects_(SHEETS.SKUS).forEach(function(s){
+    if (!isCoffeeConcentrate_(s)) return;
+    var name = String(s.opt1Name||'').trim();
+    var per = num_(s.opt1PerBase);
+    if (name === 'box of 4' && per === 4) return;
+    updateCell_(SHEETS.SKUS, s._row, 'opt1Name', 'box of 4');
+    updateCell_(SHEETS.SKUS, s._row, 'opt1PerBase', 4);
+    updated.push(s.name);
+  });
+  return updated;
+}
+
+// Multi-bottle items (syrups in a box of 6, concentrate in a box of 4, …) can
+// also be received one bottle at a time. Fills purchase option 2 only when it
+// is blank, so a real second option (beans sold by the container, etc.) stays.
+function ensureBottleSingles_(){
+  var added = [];
+  readObjects_(SHEETS.SKUS).forEach(function(s){
+    if (!isBottleUnit_(s.baseUnit)) return;
+    var per = isCoffeeConcentrate_(s) ? 4 : (num_(s.opt1PerBase)||1);
+    if (per <= 1) return;
+    if (String(s.opt2Name||'').trim()) return;
+    updateCell_(SHEETS.SKUS, s._row, 'opt2Name', 'bottle');
+    updateCell_(SHEETS.SKUS, s._row, 'opt2PerBase', 1);
+    updateCell_(SHEETS.SKUS, s._row, 'opt2Supplier', s.opt1Supplier||'');
+    updateCell_(SHEETS.SKUS, s._row, 'opt2LeadDays', s.opt1LeadDays===''||s.opt1LeadDays==null ? '' : s.opt1LeadDays);
+    added.push(s.name);
+  });
+  return added;
 }
 
 function orderEmailFor_(supplier){
@@ -349,9 +392,10 @@ function getOrderList(){
   var inv = computeInventory_();
   var sup = {};
   readObjects_(SHEETS.SKUS).forEach(function(s){
+    var pack = canonicalOpt1_(s);
     sup[s.id] = { supplier: String(s.opt1Supplier||'').trim(),
-                  unitName: String(s.opt1Name||'').trim(),
-                  perBase: num_(s.opt1PerBase)||1 };
+                  unitName: pack.name,
+                  perBase: pack.perBase||1 };
   });
   var groups = {};
   inv.forEach(function(i){
@@ -411,10 +455,47 @@ function activeSkus_() {
   return readObjects_(SHEETS.SKUS).filter(function(s){ return s.active !== false && s.active !== 'FALSE'; });
 }
 
-function skuPublic_(s) {
+function isCoffeeConcentrate_(s){
+  return String(s && s.name || '').trim().toLowerCase() === 'coffee concentrate';
+}
+function isBottleUnit_(unit){
+  return /^bottles?$/i.test(String(unit||'').trim());
+}
+/** Purchase option 1 as receiving and ordering should use it. */
+function canonicalOpt1_(s){
+  var name = String(s.opt1Name||'').trim();
+  var per = num_(s.opt1PerBase)||1;
+  if (isCoffeeConcentrate_(s)) { name = 'box of 4'; per = 4; }
+  return { name:name, perBase:per, supplier:String(s.opt1Supplier||''), leadDays:num_(s.opt1LeadDays) };
+}
+/** Units a manager can receive. A multi-bottle box always includes singles,
+ *  even on sheets that only stored the box. */
+function receiveOptionsFor_(s){
   var opts = [];
-  if (s.opt1Name) opts.push({ name:s.opt1Name, perBase:num_(s.opt1PerBase)||1, supplier:s.opt1Supplier, leadDays:num_(s.opt1LeadDays) });
-  if (s.opt2Name) opts.push({ name:s.opt2Name, perBase:num_(s.opt2PerBase)||1, supplier:s.opt2Supplier, leadDays:num_(s.opt2LeadDays) });
+  var pack = canonicalOpt1_(s);
+  if (pack.name) {
+    var optName = pack.name;
+    if (isBottleUnit_(s.baseUnit) && pack.perBase > 1) optName = 'box of ' + pack.perBase;
+    opts.push({ name:optName, perBase:pack.perBase, supplier:pack.supplier, leadDays:pack.leadDays });
+  }
+  if (String(s.opt2Name||'').trim()) {
+    opts.push({ name:String(s.opt2Name).trim(), perBase:num_(s.opt2PerBase)||1,
+      supplier:String(s.opt2Supplier||''), leadDays:num_(s.opt2LeadDays) });
+  }
+  var multi = opts.some(function(o){ return o.perBase > 1; });
+  var hasSingleBottle = opts.some(function(o){ return o.perBase === 1 && isBottleUnit_(o.name); });
+  if (isBottleUnit_(s.baseUnit) && multi && !hasSingleBottle) {
+    var src = opts[0] || { supplier:'', leadDays:0 };
+    opts.push({ name:'bottle', perBase:1, supplier:src.supplier||'', leadDays:src.leadDays||0 });
+  }
+  if (!opts.length) opts.push({ name:s.baseUnit||'unit', perBase:1, supplier:'', leadDays:0 });
+  return opts;
+}
+
+function skuPublic_(s) {
+  var opts = receiveOptionsFor_(s).map(function(o){
+    return { name:o.name, perBase:o.perBase, supplier:o.supplier||'', leadDays:o.leadDays||0 };
+  });
   return {
     id:s.id, name:s.name, baseUnit:s.baseUnit, baseUnitNote:s.baseUnitNote,
     options:opts, reorderThreshold:s.reorderThreshold, notes:s.notes
@@ -557,9 +638,11 @@ function recordReceipt(payload) {
   try {
     var s = readObjects_(SHEETS.SKUS).filter(function(x){ return x.id === payload.skuId; })[0];
     if (!s) throw new Error('Unknown item.');
-    var perBase = 1, rawUnit = s.baseUnit;
-    if (payload.optionIndex === 0 && s.opt1Name) { perBase = num_(s.opt1PerBase)||1; rawUnit = s.opt1Name; }
-    else if (payload.optionIndex === 1 && s.opt2Name) { perBase = num_(s.opt2PerBase)||1; rawUnit = s.opt2Name; }
+    var opts = receiveOptionsFor_(s);
+    var idx = parseInt(payload.optionIndex, 10);
+    if (isNaN(idx) || idx < 0 || idx >= opts.length) idx = 0;
+    var opt = opts[idx];
+    var perBase = opt.perBase || 1, rawUnit = opt.name || s.baseUnit;
     var rawQty = num_(payload.qty);
     if (rawQty <= 0) throw new Error('Quantity must be greater than zero.');
     var delta = rawQty * perBase;
@@ -651,6 +734,13 @@ function saveSku(payload) {
       opt2Name:payload.opt2Name||'', opt2PerBase:payload.opt2PerBase||'', opt2Supplier:payload.opt2Supplier||'', opt2LeadDays:payload.opt2LeadDays||'',
       reorderThreshold:(payload.reorderThreshold===undefined?'':payload.reorderThreshold), notes:payload.notes||''
     };
+    if (isCoffeeConcentrate_(fields)) { fields.opt1Name = 'box of 4'; fields.opt1PerBase = 4; }
+    if (isBottleUnit_(fields.baseUnit) && (num_(fields.opt1PerBase)||1) > 1 && !String(fields.opt2Name||'').trim()) {
+      fields.opt2Name = 'bottle';
+      fields.opt2PerBase = 1;
+      fields.opt2Supplier = fields.opt1Supplier||'';
+      fields.opt2LeadDays = fields.opt1LeadDays||'';
+    }
     if (payload.id) {
       var rows = readObjects_(SHEETS.SKUS);
       for (var i=0;i<rows.length;i++) if (rows[i].id===payload.id) {
@@ -679,8 +769,16 @@ function getAllSkusForManager() {
   return readObjects_(SHEETS.SKUS).map(function(s){
     var pub = skuPublic_(s);
     pub.active = !(s.active === false || s.active === 'FALSE');
-    pub.opt1Name=s.opt1Name; pub.opt1PerBase=s.opt1PerBase; pub.opt1Supplier=s.opt1Supplier; pub.opt1LeadDays=s.opt1LeadDays;
-    pub.opt2Name=s.opt2Name; pub.opt2PerBase=s.opt2PerBase; pub.opt2Supplier=s.opt2Supplier; pub.opt2LeadDays=s.opt2LeadDays;
+    var pack = canonicalOpt1_(s);
+    pub.opt1Name = pack.name || s.opt1Name;
+    pub.opt1PerBase = pack.name ? pack.perBase : s.opt1PerBase;
+    pub.opt1Supplier = s.opt1Supplier; pub.opt1LeadDays = s.opt1LeadDays;
+    var opt2Name = String(s.opt2Name||'').trim();
+    var opt2Per = s.opt2PerBase, opt2Sup = s.opt2Supplier, opt2Lead = s.opt2LeadDays;
+    if (!opt2Name && isBottleUnit_(s.baseUnit) && pack.perBase > 1) {
+      opt2Name = 'bottle'; opt2Per = 1; opt2Sup = s.opt1Supplier||''; opt2Lead = s.opt1LeadDays||'';
+    }
+    pub.opt2Name = opt2Name; pub.opt2PerBase = opt2Per; pub.opt2Supplier = opt2Sup; pub.opt2LeadDays = opt2Lead;
     return pub;
   });
 }
