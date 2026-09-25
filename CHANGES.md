@@ -5,6 +5,23 @@ A plain-language history of changes to the Robo Café internal app
 
 ---
 
+## Receive stock: coffee concentrate is a box of 4, and boxes can be split into bottles
+**Coffee concentrate is bought in boxes of 4 bottles, not 6.** Receive stock,
+the order list, and the item editor were still treating it as a pack of 6.
+
+- **Box or bottles.** On Receive stock, any item stocked as a multi-bottle box
+  now has two big choices: **Box of 4** (coffee concentrate) or **Box of 6**
+  (syrups and any other bottle multi-pack — those box sizes are unchanged), or
+  **Individual bottles**. The line under the quantity says exactly what will be
+  added, for example "2 boxes of 4 = 8 bottles added".
+- A cached catalog that still says "pack of 6" for coffee concentrate is shown
+  and counted as a box of 4. Other pack sizes are left alone.
+- Re-run `applyOrderingSetup()` once from the Apps Script editor (or `setup()`)
+  so the Sheet itself stores "box of 4" and a single-bottle option. Safe to
+  re-run — it won't overwrite a real second purchase option, and the receive
+  screen is already correct as soon as the new `Code.gs` is deployed.
+- Backend change: paste `Code.gs` and deploy a new version.
+
 ## Caught a second kind of duplicate + tidier service detail
 **Rob reported an RBC service on Aug 13 as logged twice — and he was right.** Two
 live records exist for that one service, saved **18 minutes apart** with identical

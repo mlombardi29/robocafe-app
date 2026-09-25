@@ -138,6 +138,19 @@
   .pastday{opacity:.82}
   .empty{text-align:center;color:var(--muted);padding:26px 10px;font-size:14px}
   .hint{font-size:12px;color:var(--muted);margin-top:6px}
+  .unitpick{display:flex;gap:8px}
+  .unitpick button{flex:1;min-height:76px;border:1px solid var(--line);border-radius:14px;background:var(--paper);
+    font:inherit;cursor:pointer;padding:12px 8px;text-align:center;touch-action:manipulation;color:var(--black)}
+  .unitpick button:active{transform:scale(.98)}
+  .unitpick button.on{background:var(--lime);border-color:var(--lime-deep);box-shadow:0 0 0 2px rgba(26,122,79,.4)}
+  .unitpick .ut{display:block;font-weight:700;font-size:16px;line-height:1.2}
+  .unitpick .us{display:block;font-size:12.5px;color:var(--muted);margin-top:4px;font-weight:600}
+  .unitpick button.on .us{color:var(--black)}
+  .qtyrow{display:flex;gap:8px;align-items:center}
+  .qtyrow .step{flex:none;width:56px;height:56px;border-radius:14px;border:1px solid var(--line);background:var(--paper);
+    font:inherit;font-size:28px;font-weight:600;line-height:1;cursor:pointer;touch-action:manipulation;color:var(--black)}
+  .qtyrow .step:active{background:var(--mint)}
+  .qtyrow input{flex:1;text-align:center;font-size:22px;height:56px;padding:8px}
   .link{color:var(--lime-deep);font-weight:600;background:none;border:none;font:inherit;cursor:pointer;padding:0}
   #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);opacity:0;
     background:var(--black);color:var(--grey);padding:12px 18px;border-radius:12px;font-size:14px;
@@ -952,7 +965,10 @@ function mgrOpen(view){
 
 /* ---------- ORDER LIST: what to buy, grouped by where it's bought ---------- */
 function ordLine(it){
-  var unit = it.units===1 ? it.unitName : (/\b(of|bag|box|case|pack|bottle|tin)\b/i.test(it.unitName) ? it.unitName+'s' : it.unitName);
+  var name = String(it.unitName||'');
+  var unit = name;
+  // "box of 4" already states the count — don't turn it into "box of 4s".
+  if (it.units !== 1 && name && !/\bof\b/i.test(name) && /\b(bag|box|case|pack|bottle|tin)\b/i.test(name)) unit = name+'s';
   return it.units + ' × ' + unit;
 }
 function ordText(g){
@@ -1126,36 +1142,152 @@ function historyRow(e){
   return el('<div class="hrow"><div class="grow"><div>'+label+'</div><small>'+esc(e.by||'')+(e.note?' — '+esc(e.note):'')+'</small></div><div class="hwhen">'+t+'</div></div>');
 }
 
+function isCoffeeConcentrateName(name){
+  return String(name||'').trim().toLowerCase()==='coffee concentrate';
+}
+function isBottleUnitName(unit){
+  return /^bottles?$/i.test(String(unit||'').trim());
+}
+function pluralUnit(unit){
+  var u=String(unit||'unit');
+  if(/s$/i.test(u)) return u;
+  if(/box$/i.test(u)) return u.replace(/box$/i,'boxes');
+  return u+'s';
+}
+/** Same choices the server receives against: box (or other pack) and, for a
+ *  multi-bottle item, individual bottles. Keeps coffee concentrate at 4 even
+ *  if a cached catalog still says pack of 6. */
+function receiveChoices(sku){
+  sku=sku||{};
+  var opts=(sku.options||[]).map(function(o){
+    return { name:o.name, perBase:Number(o.perBase)||1, supplier:o.supplier||'', leadDays:Number(o.leadDays)||0 };
+  });
+  if(isCoffeeConcentrateName(sku.name)){
+    var pack=null;
+    for(var i=0;i<opts.length;i++) if(opts[i].perBase>1){ pack=opts[i]; break; }
+    if(pack){ pack.name='box of 4'; pack.perBase=4; }
+    else opts.unshift({ name:'box of 4', perBase:4, supplier:'', leadDays:0 });
+  }
+  var hasSingleBottle=opts.some(function(o){ return o.perBase===1 && isBottleUnitName(o.name); });
+  if(isBottleUnitName(sku.baseUnit) && opts.some(function(o){ return o.perBase>1; }) && !hasSingleBottle){
+    var src=opts[0]||{};
+    opts.push({ name:'bottle', perBase:1, supplier:src.supplier||'', leadDays:src.leadDays||0 });
+  }
+  if(!opts.length) opts.push({ name:sku.baseUnit||'unit', perBase:1, supplier:'', leadDays:0 });
+  return opts;
+}
+function choiceCopy(opt, sku){
+  var base=String((sku&&sku.baseUnit)||'unit');
+  if(opt.perBase>1 && isBottleUnitName(base)) return { title:'Box of '+opt.perBase, sub:opt.perBase+' bottles' };
+  if(opt.perBase===1 && isBottleUnitName(base)) return { title:'Individual bottles', sub:'1 bottle each' };
+  var sub = opt.perBase===1 ? ('1 '+base) : (opt.perBase+' '+pluralUnit(base));
+  return { title: opt.name || base, sub: sub };
+}
+function receiveHint(opt, sku, q){
+  if(!opt||!sku) return '';
+  var base=String(sku.baseUnit||'unit');
+  var added=Math.round((q||0)*opt.perBase*100)/100;
+  var bottles=isBottleUnitName(base);
+  var line;
+  if(opt.perBase>1 && bottles){
+    line = q>0
+      ? ((q===1?'1 box':(q+' boxes'))+' of '+opt.perBase+' = '+added+' bottles added')
+      : ('1 box = '+opt.perBase+' bottles');
+  } else if(opt.perBase>1){
+    var n=q>0?q:1;
+    var total=q>0?added:opt.perBase;
+    line = n+' × '+opt.name+' = '+total+' '+(total===1?base:pluralUnit(base))+(q>0?' added':'');
+  } else if(bottles){
+    line = q>0 ? ('= '+added+' bottle'+(added===1?'':'s')+' added') : 'Adds 1 bottle at a time';
+  } else if(q>0){
+    line = '= '+added+' '+(added===1?base:pluralUnit(base))+' added';
+  } else {
+    line = 'Counted in '+pluralUnit(base);
+  }
+  var extra=[];
+  if(opt.supplier) extra.push(opt.supplier);
+  if(opt.leadDays) extra.push('lead '+opt.leadDays+'d');
+  return extra.length ? (line+' · '+extra.join(' · ')) : line;
+}
 function mgrReceive(body){
   body.innerHTML='';
-  body.appendChild(el('<p class="sub" style="margin-top:0">Log a delivery that arrived at the warehouse. Stock goes up automatically.</p>'));
+  body.appendChild(el('<p class="sub" style="margin-top:0">Log a delivery that arrived at the warehouse. For anything that comes in a box of bottles, add a full box or single bottles.</p>'));
   var c=el('<div class="card"></div>');
   c.appendChild(el('<div class="hint" style="margin-top:0">Logged by <b>'+esc(APP.me.name)+'</b></div>'));
   c.appendChild(el('<label>Item</label><select id="rSku">'+skuOptions()+'</select>'));
-  c.appendChild(el('<label>Unit received</label><select id="rUnit"></select>'));
-  c.appendChild(el('<div class="row"><div><label>How many</label><input id="rQty" class="num" type="number" min="0" step="1" placeholder="0"></div></div>'));
+  c.appendChild(el('<label id="rUnitLbl">Add as</label><div class="unitpick" id="rUnits" role="group" aria-label="Add as"></div>'));
+  c.appendChild(el('<label id="rQtyLbl">How many</label><div class="qtyrow">'+
+    '<button type="button" class="step" id="rMinus" aria-label="Decrease">−</button>'+
+    '<input id="rQty" class="num" type="number" min="0" step="1" inputmode="numeric" placeholder="0">'+
+    '<button type="button" class="step" id="rPlus" aria-label="Increase">+</button></div>'));
   c.appendChild(el('<div class="hint" id="rHint"></div>'));
   c.appendChild(el('<label>Note (optional)</label><input id="rNote" placeholder="PO #, supplier, etc.">'));
   var btn=el('<button class="btn">Add to warehouse</button>'); c.appendChild(btn);
   body.appendChild(c);
+  var choice=0, choices=[];
+  function currentSku(){ return (APP.boot.skus||[]).filter(function(x){return x.id===val('rSku');})[0]; }
+  function qtyNoun(o,s){
+    if(o && s && o.perBase>1 && isBottleUnitName(s.baseUnit)) return 'How many boxes';
+    if(o && s && isBottleUnitName(s.baseUnit)) return 'How many bottles';
+    return 'How many';
+  }
   function refreshUnits(){
-    var s=APP.boot.skus.filter(function(x){return x.id===val('rSku');})[0];
-    document.getElementById('rUnit').innerHTML=s.options.map(function(o,idx){return '<option value="'+idx+'">'+esc(o.name)+' (×'+o.perBase+' '+esc(s.baseUnit)+')</option>';}).join('');
+    var s=currentSku();
+    choices = s ? receiveChoices(s) : [];
+    choice = 0;
+    var box=document.getElementById('rUnits');
+    var lbl=document.getElementById('rUnitLbl');
+    box.innerHTML='';
+    if(choices.length<2){
+      lbl.style.display='none';
+      box.style.display='none';
+    } else {
+      lbl.style.display='';
+      box.style.display='';
+      choices.forEach(function(o,idx){
+        var copy=choiceCopy(o,s);
+        var b=el('<button type="button"'+(idx===0?' class="on"':'')+' aria-pressed="'+(idx===0?'true':'false')+'"><span class="ut">'+esc(copy.title)+'</span><span class="us">'+esc(copy.sub)+'</span></button>');
+        b.onclick=function(){ choice=idx; paintChoice(); updateHint(); };
+        box.appendChild(b);
+      });
+    }
     updateHint();
   }
+  function paintChoice(){
+    var box=document.getElementById('rUnits'); if(!box) return;
+    var btns=box.querySelectorAll('button');
+    for(var i=0;i<btns.length;i++){
+      var on=i===choice;
+      btns[i].classList.toggle('on', on);
+      btns[i].setAttribute('aria-pressed', on?'true':'false');
+    }
+  }
   function updateHint(){
-    var s=APP.boot.skus.filter(function(x){return x.id===val('rSku');})[0];
-    var o=s.options[parseInt(val('rUnit')||0,10)]; var q=parseFloat(val('rQty'))||0;
-    document.getElementById('rHint').textContent= o ? ('= '+(q*o.perBase)+' '+s.baseUnit+' added · supplier '+(o.supplier||'—')+' · lead '+o.leadDays+'d') : '';
+    var s=currentSku();
+    var o=choices[choice]||choices[0];
+    var q=parseFloat(val('rQty'))||0;
+    var qtyLbl=document.getElementById('rQtyLbl');
+    if(qtyLbl) qtyLbl.textContent=qtyNoun(o,s);
+    var hint=document.getElementById('rHint');
+    if(hint) hint.textContent = o&&s ? receiveHint(o,s,q) : '';
   }
   document.getElementById('rSku').onchange=refreshUnits;
-  document.getElementById('rUnit').onchange=updateHint;
   document.getElementById('rQty').oninput=updateHint;
+  document.getElementById('rMinus').onclick=function(){
+    var q=parseFloat(val('rQty'))||0;
+    document.getElementById('rQty').value = q>1 ? String(q-1) : '';
+    updateHint();
+  };
+  document.getElementById('rPlus').onclick=function(){
+    var q=parseFloat(val('rQty'))||0;
+    document.getElementById('rQty').value = String(q+1);
+    updateHint();
+  };
   refreshUnits();
   btn.onclick=function(){
     var q=parseFloat(val('rQty'));
     if(!(q>0)) return toast('Enter a quantity',true);
-    var rsku=val('rSku'), runit=parseInt(val('rUnit'),10), rnote=val('rNote');
+    var rsku=val('rSku'), rnote=val('rNote'), runit=choice;
     loading('Saving…');
     call('recordReceipt',{skuId:rsku,optionIndex:runit,qty:q,byName:APP.me.name,note:rnote})
       .then(function(){toast('Added ✓');mgrOpen('receive');})
