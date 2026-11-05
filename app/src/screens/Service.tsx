@@ -6,6 +6,7 @@ import { loadService, type LocalVisit } from "../data";
 import { formatWhen, instantOnTorontoDay, torontoNow } from "../lib/dates";
 import { evaluateDue } from "../lib/due";
 import type { CompletionWrite } from "../lib/queue";
+import { TIMER_DONE_LABEL } from "../lib/buttonStyles";
 import { unfinishedRequired, type EndNotice } from "../lib/serviceFlow";
 import { enqueue, enqueueAndFlush, flushQueue, rememberVisit, stableKey } from "../lib/sync";
 import type { SnapItem } from "../lib/types";
@@ -360,8 +361,8 @@ export function ServicePage() {
               : `${String(Math.floor(milkLeft / 60000)).padStart(2, "0")}:${String(Math.floor((milkLeft % 60000) / 1000)).padStart(2, "0")}`}
           </p>
           {!milkDone ? (
-            <Button className="mt-3 bg-white text-stone-900" disabled={busy === "milk-done"} onClick={() => void finishMilk()}>
-              Mark cleaning done
+            <Button tone="quiet" className="mt-3" disabled={busy === "milk-done"} onClick={() => void finishMilk()}>
+              {TIMER_DONE_LABEL}
             </Button>
           ) : null}
         </div>

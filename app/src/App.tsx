@@ -21,6 +21,7 @@ import { SignInPage } from "./screens/SignIn";
 import { TimePage } from "./screens/Time";
 import { TrainingHome, TrainingModelPage } from "./screens/Training";
 import { PracticeBanner } from "./ui";
+import { UpdatePrompt } from "./updatePrompt";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
@@ -33,6 +34,7 @@ export function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
+          <UpdatePrompt />
           <Routes>
             {PreviewApp ? <Route path="/__preview/:screen" element={<Suspense fallback={null}><PreviewApp /></Suspense>} /> : null}
             <Route path="/signin" element={<SignInPage />} />

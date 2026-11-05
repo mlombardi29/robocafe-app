@@ -1,4 +1,5 @@
 import { useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { composeButtonClass, type ButtonTone } from "./lib/buttonStyles";
 
 export function Screen({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <div className={`mx-auto min-h-screen w-full max-w-[480px] px-4 pb-36 pt-4 ${className}`}>{children}</div>;
@@ -22,21 +23,10 @@ export function Title({ children, sub }: { children: ReactNode; sub?: string }) 
   );
 }
 
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { tone?: "primary" | "quiet" | "danger" };
+type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { tone?: ButtonTone };
 
 export function Button({ tone = "primary", className = "", ...props }: ButtonProps) {
-  const tones = {
-    primary: "bg-[var(--accent)] text-white",
-    quiet: "bg-white text-stone-800 ring-1 ring-stone-200",
-    danger: "bg-red-700 text-white",
-  };
-  return (
-    <button
-      type="button"
-      className={`min-h-12 rounded-2xl px-4 text-base font-semibold disabled:opacity-50 ${tones[tone]} ${className}`}
-      {...props}
-    />
-  );
+  return <button type="button" className={composeButtonClass(tone, className)} {...props} />;
 }
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
