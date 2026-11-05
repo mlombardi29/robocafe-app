@@ -1,6 +1,14 @@
 import { get, set } from "idb-keyval";
 import type { CompletionWrite } from "./queue";
+import { outcomeFromEndUpdate, queueAfterFailure } from "./serviceFlow";
 import { supabase } from "./supabase";
+
+export type FlushResult = {
+  ok: boolean;
+  error: string | null;
+  retry: boolean;
+  failedKind: SyncJob["kind"] | null;
+};
 
 export type SyncJob =
   | { kind: "completion"; write: CompletionWrite; stepKey: string }
@@ -38,27 +46,49 @@ export async function stableKey(sessionId: string, itemId: string): Promise<stri
   return created;
 }
 
-let flushing = false;
+const emptyFlush: FlushResult = { ok: true, error: null, retry: false, failedKind: null };
+let tail: Promise<void> = Promise.resolve();
 
-export async function flushQueue(): Promise<void> {
-  if (flushing) return;
-  flushing = true;
-  try {
-    const queue = await readQueue();
-    const remaining: SyncJob[] = [];
-    for (const job of queue) {
-      try {
-        await runJob(job);
-      } catch {
-        remaining.push(job, ...queue.slice(queue.indexOf(job) + 1));
-        break;
-      }
-    }
-    await set(QUEUE, remaining);
-  } finally {
-    flushing = false;
-  }
+function schedule(work: () => Promise<FlushResult>): Promise<FlushResult> {
+  const run = tail.then(work);
+  tail = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
 }
+
+export function flushQueue(): Promise<FlushResult> {
+  return schedule(() => runFlush());
+}
+
+/** Queue one save and flush after it, so the result belongs to this save. */
+export function enqueueAndFlush(job: SyncJob): Promise<FlushResult> {
+  return schedule(async () => {
+    await enqueue(job);
+    return runFlush();
+  });
+}
+
+async function runFlush(): Promise<FlushResult> {
+  const queue = await readQueue();
+  for (let index = 0; index < queue.length; index += 1) {
+    const job = queue[index];
+    if (!job) continue;
+    try {
+      await runJob(job);
+    } catch (err) {
+      const retry = !(err instanceof SyncRejected);
+      const message = err instanceof Error ? err.message : "Could not sync.";
+      await set(QUEUE, queueAfterFailure(queue, index, retry));
+      return { ok: false, error: message, retry, failedKind: job.kind };
+    }
+  }
+  await set(QUEUE, []);
+  return emptyFlush;
+}
+
+class SyncRejected extends Error {}
 
 async function runJob(job: SyncJob): Promise<void> {
   if (job.kind === "start") {
@@ -87,8 +117,16 @@ async function runJob(job: SyncJob): Promise<void> {
     return;
   }
   if (job.kind === "end") {
-    const { error } = await supabase.from("service_sessions").update({ end_at: job.end }).eq("id", job.id);
-    if (error) throw new Error(error.message);
+    const { data, error } = await supabase
+      .from("service_sessions")
+      .update({ end_at: job.end })
+      .eq("id", job.id)
+      .select("id");
+    const outcome = outcomeFromEndUpdate(data ?? null, error?.message ?? null);
+    if (!outcome.ok) {
+      if (outcome.retry) throw new Error(outcome.message);
+      throw new SyncRejected(outcome.message);
+    }
     return;
   }
   if (job.kind === "milk") {

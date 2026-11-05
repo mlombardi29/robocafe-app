@@ -1,12 +1,13 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useAuth } from "../auth";
 import { loadService, type LocalVisit } from "../data";
 import { formatWhen, instantOnTorontoDay, torontoNow } from "../lib/dates";
 import { evaluateDue } from "../lib/due";
 import type { CompletionWrite } from "../lib/queue";
-import { enqueue, flushQueue, rememberVisit, stableKey } from "../lib/sync";
+import { unfinishedRequired, type EndNotice } from "../lib/serviceFlow";
+import { enqueue, enqueueAndFlush, flushQueue, rememberVisit, stableKey } from "../lib/sync";
 import type { SnapItem } from "../lib/types";
 import { Button, CheckItem, ErrorText, Screen } from "../ui";
 
@@ -27,9 +28,14 @@ export function ServicePage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [override, setOverride] = useState(false);
+  const [pendingMilk, setPendingMilk] = useState<SnapItem | null>(null);
   const [reason, setReason] = useState("");
   const [estimate, setEstimate] = useState(false);
   const [estimateTime, setEstimateTime] = useState("09:00");
+  const [endNotice, setEndNotice] = useState<EndNotice | null>(null);
+  const [showBlocked, setShowBlocked] = useState(false);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const milkNoted = useRef<string | null>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -44,6 +50,25 @@ export function ServicePage() {
     setSessionId(query.data.session?.id ?? null);
     setMilkStart(query.data.session?.milk_clean_started_at ?? null);
     setMilkDone(query.data.session?.milk_clean_done_at ?? null);
+  }, [query.data]);
+
+  useEffect(() => {
+    const session = query.data?.session;
+    const stamp = session?.milk_clean_started_at;
+    if (!session || !stamp || !query.data?.snapshot) return;
+    const token = `${session.id}:${stamp}`;
+    if (milkNoted.current === token) return;
+    const item = query.data.snapshot.sections.flatMap((section) => section.items).find((step) => step.key === "start_milk_clean");
+    if (!item) return;
+    const already = query.data.completions.find((row) => row.itemId === item.id);
+    if (already?.state === "done" || already?.state === "not_needed") {
+      milkNoted.current = token;
+      return;
+    }
+    milkNoted.current = token;
+    void mark(item, "done", session.id);
+    // Once per open visit whose timer already started. mark is recreated every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query.data]);
 
   const snapshot = query.data?.snapshot;
@@ -94,6 +119,16 @@ export function ServicePage() {
     }))
     .filter((section) => section.items.length > 0);
 
+  const missingSteps = useMemo(
+    () =>
+      unfinishedRequired(
+        groups.flatMap((section) => section.items.map((entry) => entry.item)),
+        Object.fromEntries(Object.values(rows).map((row) => [row.itemId, row.state])),
+        milkStart,
+      ),
+    [groups, rows, milkStart],
+  );
+
   async function persist(next: Record<string, CompletionWrite>, visit: Partial<LocalVisit>) {
     await rememberVisit(siteId, {
       sessionId,
@@ -115,14 +150,13 @@ export function ServicePage() {
     return id;
   }
 
-  async function mark(item: SnapItem, state: "done" | "not_needed") {
-    if (!sessionId && !query.data?.session) {
+  async function mark(item: SnapItem, state: "done" | "not_needed", forcedSessionId?: string) {
+    const id = forcedSessionId ?? sessionId ?? query.data?.session?.id;
+    if (!id) {
       setError("Tap Start now first.");
       return;
     }
     setError("");
-    const id = sessionId ?? query.data?.session?.id;
-    if (!id) return;
     const prev = rows[item.id];
     const write: CompletionWrite = {
       sessionId: id,
@@ -134,8 +168,11 @@ export function ServicePage() {
       overrideReason: prev?.overrideReason ?? "",
       value: prev?.value ?? "",
     };
-    const next = { ...rows, [item.id]: write };
-    setRows(next);
+    let next: Record<string, CompletionWrite> = {};
+    setRows((current) => {
+      next = { ...current, [item.id]: write };
+      return next;
+    });
     setBusy(item.id);
     try {
       await persist(next, { sessionId: id });
@@ -163,21 +200,34 @@ export function ServicePage() {
 
   async function endNow() {
     const id = sessionId ?? query.data?.session?.id;
-    if (!id) return;
+    if (!id) {
+      setEndNotice({ kind: "error", iso: new Date().toISOString(), detail: "Tap Start now before ending the visit." });
+      return;
+    }
     setBusy("end");
+    setError("");
+    const end = new Date().toISOString();
     try {
-      const end = new Date().toISOString();
-      await enqueue({ kind: "end", id, end });
-      await flushQueue();
-      await queryClient.invalidateQueries({ queryKey: ["service", siteId] });
+      const result = await enqueueAndFlush({ kind: "end", id, end });
+      if (result.ok) setEndNotice({ kind: "saved", iso: end });
+      else if (result.retry) {
+        setEndNotice({ kind: "queued", iso: end, detail: result.error ?? "It will sync when you are online." });
+      } else {
+        setEndNotice({ kind: "error", iso: end, detail: result.error ?? "End time was not saved." });
+      }
+      if (result.ok) await queryClient.invalidateQueries({ queryKey: ["service", siteId] });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not stamp the end time.");
+      setEndNotice({
+        kind: "error",
+        iso: end,
+        detail: err instanceof Error ? err.message : "End time was not saved.",
+      });
     } finally {
       setBusy("");
     }
   }
 
-  async function startMilk(overrideReason: string | null) {
+  async function startMilk(item: SnapItem, overrideReason: string | null) {
     const id = await ensureSession(false);
     const blockers = groups.flatMap((section) => section.items).filter((entry) => entry.item.blocks_clean_start);
     const missing = blockers.filter((entry) => {
@@ -185,6 +235,7 @@ export function ServicePage() {
       return state !== "done" && state !== "not_needed";
     });
     if (missing.length > 0 && !overrideReason) {
+      setPendingMilk(item);
       setOverride(true);
       return;
     }
@@ -196,6 +247,7 @@ export function ServicePage() {
       await enqueue({ kind: "milk", id, action: "start", reason: overrideReason });
       await persist(rows, { sessionId: id, milkStartedAt: started });
       await flushQueue();
+      await mark(item, "done", id);
       setOverride(false);
       setReason("");
       await queryClient.invalidateQueries({ queryKey: ["service", siteId] });
@@ -218,21 +270,32 @@ export function ServicePage() {
     setBusy("");
   }
 
+  function focusStep(itemId: string) {
+    const card = document.getElementById(`step-${itemId}`);
+    if (!card) return;
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightId(itemId);
+    card.focus({ preventScroll: true });
+    window.setTimeout(() => {
+      setHighlightId((current) => (current === itemId ? null : current));
+    }, 2500);
+  }
+
   async function complete(withEstimate: boolean) {
     setBusy("complete");
     setError("");
     try {
-      const openRequired = groups
-        .flatMap((section) => section.items)
-        .filter((entry) => entry.item.required)
-        .filter((entry) => {
-          const state = rows[entry.item.id]?.state;
-          return state !== "done" && state !== "not_needed";
-        });
+      const openRequired = unfinishedRequired(
+        groups.flatMap((section) => section.items.map((entry) => entry.item)),
+        Object.fromEntries(Object.values(rows).map((row) => [row.itemId, row.state])),
+        milkStart,
+      );
       if (openRequired.length > 0) {
-        setError(`Still open: ${openRequired.map((entry) => entry.item.title).slice(0, 3).join(", ")}`);
+        setShowBlocked(true);
+        window.setTimeout(() => focusStep(openRequired[0].id), 0);
         return;
       }
+      setShowBlocked(false);
       let id = sessionId ?? query.data?.session?.id ?? null;
       let estimateIso: string | null = null;
       if (!query.data?.session?.start_at) {
@@ -283,7 +346,9 @@ export function ServicePage() {
         <p className="mt-2 text-sm text-stone-600">
           Started {formatWhen(query.data.session.start_at)}
           {query.data.session.start_estimated ? " (estimated)" : ""}
-          {query.data.session.end_at ? ` · Ended ${formatWhen(query.data.session.end_at)}` : ""}
+          {query.data.session.end_at || endNotice?.kind === "saved"
+            ? ` · Ended ${formatWhen(query.data.session.end_at ?? (endNotice?.kind === "saved" ? endNotice.iso : null))}`
+            : ""}
         </p>
       ) : null}
       {milkStart ? (
@@ -309,17 +374,36 @@ export function ServicePage() {
             <div className="grid gap-3">
               {section.items.map(({ item, due }) =>
                 item.key === "start_milk_clean" ? (
-                  <div key={item.id} className="rounded-3xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+                  <div
+                    key={item.id}
+                    id={`step-${item.id}`}
+                    tabIndex={-1}
+                    className={`scroll-mt-4 scroll-mb-40 rounded-3xl bg-white p-4 shadow-sm outline-none ring-1 ${highlightId === item.id ? "ring-2 ring-amber-500 ring-offset-2" : "ring-black/5"}`}
+                  >
                     <h3 className="text-lg font-semibold">{item.title}</h3>
                     {item.details ? <p className="mt-2 text-sm text-stone-700">{item.details}</p> : null}
                     <p className="mt-1 text-sm text-stone-500">About {minutes} minutes. The timer stays if you leave this page.</p>
-                    <Button className="mt-3 w-full" disabled={Boolean(milkStart) || submitted || busy === "milk"} onClick={() => void startMilk(null)}>
-                      {milkStart ? "Cleaning started" : "Start milk cleaning"}
-                    </Button>
+                    {milkStart && rows[item.id]?.state !== "not_needed" ? (
+                      <p className="mt-2 text-sm font-medium text-emerald-800">Counted as done because cleaning already started.</p>
+                    ) : null}
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <Button disabled={Boolean(milkStart) || submitted || busy === "milk"} onClick={() => void startMilk(item, null)}>
+                        {milkStart ? "Cleaning started" : "Start milk cleaning"}
+                      </Button>
+                      <Button
+                        tone={rows[item.id]?.state === "not_needed" ? "primary" : "quiet"}
+                        disabled={submitted || busy === item.id}
+                        onClick={() => void mark(item, "not_needed")}
+                      >
+                        Not needed
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <CheckItem
                     key={item.id}
+                    stepId={`step-${item.id}`}
+                    highlighted={highlightId === item.id}
                     title={item.title}
                     detail={due.detail}
                     howTo={item.details}
@@ -355,7 +439,23 @@ export function ServicePage() {
       ) : (
         <p className="mt-6 text-sm text-stone-600">Submitted. Times are locked. Use My time if something needs a correction.</p>
       )}
-      <ErrorText>{error}</ErrorText>
+      {showBlocked && missingSteps.length > 0 ? (
+        <div className="mt-3 grid gap-2" role="alert">
+          <p className="text-sm font-medium text-red-700">Still open. Tap a step to go to it.</p>
+          {missingSteps.map((step) => (
+            <button
+              key={step.id}
+              type="button"
+              className="min-h-12 rounded-2xl bg-red-50 px-3 text-left text-sm font-semibold text-red-800"
+              onClick={() => focusStep(step.id)}
+            >
+              {step.title}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <ErrorText>{error}</ErrorText>
+      )}
 
       {override ? (
         <div className="fixed inset-0 z-30 flex items-end bg-black/40 p-4">
@@ -365,7 +465,7 @@ export function ServicePage() {
             <textarea className="mt-3 min-h-24 w-full rounded-2xl border border-stone-200 p-3" value={reason} onChange={(event) => setReason(event.target.value)} />
             <div className="mt-3 grid grid-cols-2 gap-2">
               <Button tone="quiet" onClick={() => setOverride(false)}>Go back</Button>
-              <Button disabled={reason.trim().length < 3} onClick={() => void startMilk(reason.trim())}>Start anyway</Button>
+              <Button disabled={reason.trim().length < 3 || !pendingMilk} onClick={() => pendingMilk && void startMilk(pendingMilk, reason.trim())}>Start anyway</Button>
             </div>
           </div>
         </div>
@@ -385,14 +485,23 @@ export function ServicePage() {
         </div>
       ) : null}
 
-      <div className="fixed inset-x-0 bottom-16 z-20 mx-auto flex w-full max-w-[480px] gap-2 px-4">
+      <div className="fixed inset-x-0 bottom-16 z-20 mx-auto w-full max-w-[480px] px-4">
+        {endNotice ? (
+          <p className="mb-2 rounded-2xl bg-white px-3 py-2 text-sm font-semibold shadow-sm ring-1 ring-black/5" aria-live="polite">
+            {endNotice.kind === "saved" ? `End time saved · ${formatWhen(endNotice.iso)}` : null}
+            {endNotice.kind === "queued"
+              ? `Saved on this phone (${formatWhen(endNotice.iso)}). It will sync when you are online.`
+              : null}
+            {endNotice.kind === "error" ? endNotice.detail : null}
+          </p>
+        ) : null}
         {!query.data.session?.start_at ? (
           <Button className="w-full shadow-lg" disabled={busy === "start" || submitted} onClick={() => void startNow()}>
             Start now
           </Button>
         ) : (
           <Button className="w-full shadow-lg" disabled={busy === "end" || submitted} onClick={() => void endNow()}>
-            End now
+            {endNotice?.kind === "saved" ? `Ended ${formatWhen(endNotice.iso)}` : "End now"}
           </Button>
         )}
       </div>
