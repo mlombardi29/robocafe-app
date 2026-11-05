@@ -7,7 +7,7 @@
  *   SUPABASE_SERVICE_ROLE_KEY=... \
  *   ADMIN_FULL_NAME="Michael Lombardi" \
  *   ADMIN_GOES_BY="Michael" \
- *   ADMIN_EMAIL="michael@certainventures.ca" \
+ *   ADMIN_EMAIL="name@example.com" \
  *   ADMIN_PHONE="" \
  *   ADMIN_TEMP_PIN=... \
  *   npx tsx ../scripts/bootstrap-admin.ts

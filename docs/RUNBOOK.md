@@ -15,8 +15,9 @@ In the Supabase dashboard, open SQL Editor. Run these files **one at a time, in 
 2. `supabase/migrations/0002_rls_grants.sql`
 3. `supabase/migrations/0003_seed_content.sql`
 4. `supabase/migrations/0004_sandbox.sql`
+5. `supabase/migrations/0005_harden_definer_functions.sql`
 
-If a later file fails, stop. Do not re-run an earlier file that already succeeded.
+If a later file fails, stop. Do not re-run an earlier file that already succeeded. If 0001 through 0004 are already applied, run only `0005_harden_definer_functions.sql`.
 
 You should see models, three real sites, three PRACTICE sites, checklist rows, and quiz rows. You should not see any people.
 
@@ -52,7 +53,7 @@ SUPABASE_URL=https://ucvacwbmhutedwfffcoj.supabase.co \
 SUPABASE_SERVICE_ROLE_KEY='(from Project Settings → API, service_role)' \
 ADMIN_FULL_NAME='Michael Lombardi' \
 ADMIN_GOES_BY='Michael' \
-ADMIN_EMAIL='michael@certainventures.ca' \
+ADMIN_EMAIL='name@example.com' \
 ADMIN_TEMP_PIN='(say it, do not save it here)' \
 npx tsx ../scripts/bootstrap-admin.ts
 ```

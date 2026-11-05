@@ -32,7 +32,13 @@ async function main() {
       select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
     $$;
   `);
-  for (const file of ["0001_schema.sql", "0002_rls_grants.sql", "0003_seed_content.sql", "0004_sandbox.sql"]) {
+  for (const file of [
+    "0001_schema.sql",
+    "0002_rls_grants.sql",
+    "0003_seed_content.sql",
+    "0004_sandbox.sql",
+    "0005_harden_definer_functions.sql",
+  ]) {
     const sql = readFileSync(resolve(root, "supabase/migrations", file), "utf8");
     await db.exec(sql);
   }
@@ -192,6 +198,71 @@ async function main() {
   assert(opening.rows[0].opening_time == null, "UofT opening time was set");
   const people = await db.query<{ n: number }>("select count(*)::int as n from public.people");
   assert(people.rows[0].n === 4, "seed created people");
+
+  const helperExposed = await db.query<{ exposed: boolean }>(`
+    select bool_or(has_function_privilege('authenticated', p.oid, 'execute')) as exposed
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname in (
+        'current_person_id', 'is_active', 'is_admin', 'in_practice',
+        'can_see_site', 'can_write', 'toronto_date'
+      )
+  `);
+  assert(helperExposed.rows[0].exposed !== true, "a public helper is still executable by authenticated");
+
+  const policy = await db.query<{ qual: string }>(
+    "select qual from pg_policies where schemaname = 'public' and policyname = 'people_select'",
+  );
+  assert(policy.rows[0].qual.includes("private.is_admin"), "policies no longer call the private helper");
+
+  const mutable = await db.query<{ n: number }>(`
+    select count(*)::int as n
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where p.prosecdef
+      and n.nspname in ('public', 'private')
+      and not exists (
+        select 1
+        from unnest(coalesce(p.proconfig, array[]::text[])) cfg
+        where cfg like 'search_path=%'
+      )
+  `);
+  assert(mutable.rows[0].n === 0, "a security-definer function has no fixed search_path");
+
+  for (const sql of [
+    "select public.reset_sandbox()",
+    "select public.decide_correction('00000000-0000-4000-8000-000000000001', true, 'no')",
+    "select public.set_training_status('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002', 'solo', 0)",
+    "select public.void_session('00000000-0000-4000-8000-000000000001', 'no')",
+  ]) {
+    let blocked = false;
+    try {
+      await asUser(TECH, sql);
+    } catch (err) {
+      blocked = String(err).includes("Not allowed");
+      if (!blocked) throw err;
+    }
+    assert(blocked, `tech was allowed to run ${sql}`);
+  }
+
+  const traineeLive = await asUser<{ n: number }>(
+    TRAINEE,
+    "select count(*)::int as n from public.sites where is_sandbox = false",
+  );
+  assert(traineeLive.rows[0].n === 0, "trainee can read a live site");
+  const traineeWrite = await fails(
+    TRAINEE,
+    `insert into public.service_sessions (site_id, person_id, service_date, status, is_sandbox)
+     values ('${sinai}', '${TRAINEE}', current_date, 'open', false)`,
+  );
+  assert(traineeWrite, "trainee wrote a live visit");
+
+  const stillWorks = await asUser<{ name: string }>(TECH, "select name from public.sites");
+  assert(
+    stillWorks.rows.some((row) => row.name === "Mount Sinai Hospital"),
+    "revoking helper RPCs broke row level security",
+  );
 
   console.log("RLS checks passed");
   await db.close();

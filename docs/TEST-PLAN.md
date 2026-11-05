@@ -25,6 +25,9 @@ Vitest covers:
 - `start_session` five times inserts one row
 - replaying a completion inserts one row
 - a tech cannot change a submitted start time
+- a tech cannot call `reset_sandbox`, `decide_correction`, `set_training_status`, or `void_session`
+- public helpers (`is_admin`, `can_write`, and the rest) are not executable by `authenticated`
+- a trainee cannot read or insert a live site row
 - the arm sensor row is `pending_validation` and UofT `opening_time` is null
 
 ## Manual, on a phone

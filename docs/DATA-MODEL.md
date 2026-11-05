@@ -6,6 +6,7 @@ Migrations:
 2. `supabase/migrations/0002_rls_grants.sql` — explicit grants and row level security
 3. `supabase/migrations/0003_seed_content.sql` — models, real sites, checklists, draft quiz
 4. `supabase/migrations/0004_sandbox.sql` — practice sites and `reset_sandbox()`
+5. `supabase/migrations/0005_harden_definer_functions.sql` — move policy helpers out of the public API, keep admin checks inside admin functions, lock search_path
 
 The hosted project does not expose tables until a grant exists. `anon` has no table grants. `auth_pins` and `login_attempts` have no grants for `anon` or `authenticated`. Edge functions use the service role.
 
