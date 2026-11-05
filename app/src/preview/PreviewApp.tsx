@@ -4,6 +4,7 @@ import { AddPersonPage } from "../screens/Admin";
 import type { SiteRow } from "../lib/types";
 import { timerDoneButtonClass } from "../lib/buttonStyles";
 import { FRESH_OFFLINE, assessFreshStart } from "../lib/freshPractice";
+import { MILK_LOCK_NOT_NEEDED_OK } from "../lib/milkLock";
 import { Button, CheckItem, FreshPracticeDialog, MilkStepCard, PinPad, PracticeBanner, Screen, Title } from "../ui";
 
 const sites: SiteRow[] = [
@@ -149,8 +150,9 @@ function ChecklistPreview({ showOpen }: { showOpen: boolean }) {
           title="Wipe the Cameo"
           detail={null}
           placeholder={null}
-          locked={showOpen}
-          disabled={showOpen}
+          doneLocked={showOpen}
+          skipLocked={false}
+          lockMessage={showOpen ? MILK_LOCK_NOT_NEEDED_OK : null}
         />
       </div>
       <div className="mt-3 grid gap-2" role="alert">

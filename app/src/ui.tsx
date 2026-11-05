@@ -110,6 +110,9 @@ export function CheckItem({
   overdue,
   due,
   locked,
+  doneLocked,
+  skipLocked,
+  lockMessage,
   state,
   note,
   onDone,
@@ -128,6 +131,9 @@ export function CheckItem({
   overdue?: boolean;
   due?: boolean;
   locked?: boolean;
+  doneLocked?: boolean;
+  skipLocked?: boolean;
+  lockMessage?: string | null;
   state?: string | null;
   note?: string;
   onDone?: () => void;
@@ -146,6 +152,9 @@ export function CheckItem({
   const doneSelected = state === "done";
   const skipSelected = state === "not_needed";
   const savedNote = Boolean(note?.trim());
+  const blockDone = Boolean(doneLocked || locked);
+  const blockSkip = Boolean(skipLocked || locked);
+  const lockText = lockMessage ?? (blockDone || blockSkip ? "Locked while milk cleaning runs." : null);
   return (
     <article id={stepId} tabIndex={-1} className={stepCardClass(Boolean(highlighted), Boolean(overdue))}>
       <div className="flex items-start justify-between gap-2">
@@ -161,12 +170,12 @@ export function CheckItem({
         </p>
       ) : null}
       {detail ? <p className="mt-1 text-sm leading-snug text-stone-700">{detail}</p> : null}
-      {locked ? <p className="mt-1 text-sm font-medium text-stone-500">Locked while milk cleaning runs.</p> : null}
+      {lockText ? <p className="mt-1 text-sm font-medium text-stone-500">{lockText}</p> : null}
       <div className={actionRowClass}>
         <Button
           tone={doneSelected ? "primary" : "quiet"}
           className={actionButtonClass}
-          disabled={disabled || locked}
+          disabled={disabled || blockDone}
           aria-pressed={doneSelected}
           onClick={onDone}
         >
@@ -175,7 +184,7 @@ export function CheckItem({
         <Button
           tone={skipSelected ? "primary" : "quiet"}
           className={actionButtonClass}
-          disabled={disabled || locked}
+          disabled={disabled || blockSkip}
           aria-pressed={skipSelected}
           onClick={onSkip}
         >
@@ -211,7 +220,7 @@ export function CheckItem({
           className={noteFieldClass}
           aria-label={`Note for ${title}`}
           value={note ?? ""}
-          disabled={disabled || locked}
+          disabled={disabled || blockDone || blockSkip}
           onChange={(event) => onNote?.(event.target.value)}
         />
       ) : null}

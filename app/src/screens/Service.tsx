@@ -7,6 +7,7 @@ import { inPractice } from "../lib/access";
 import { formatWhen, instantOnTorontoDay, torontoNow } from "../lib/dates";
 import { evaluateDue } from "../lib/due";
 import { offerFreshStart } from "../lib/freshPractice";
+import { milkCleanRunning, milkStepLocks } from "../lib/milkLock";
 import type { CompletionWrite } from "../lib/queue";
 import { TIMER_DONE_LABEL } from "../lib/buttonStyles";
 import { checklistCardsClass, checklistStackClass } from "../lib/checklistLayout";
@@ -61,7 +62,7 @@ export function ServicePage() {
   const snapshot = query.data?.snapshot;
   const minutes = snapshot?.milk_clean_minutes ?? query.data?.site.models?.milk_clean_minutes ?? 0;
   const milkEnds = milkStart ? new Date(milkStart).getTime() + minutes * 60_000 : null;
-  const milkRunning = Boolean(milkStart && !milkDone && milkEnds && now < milkEnds);
+  const milkRunning = milkCleanRunning(milkStart, milkDone, minutes, now);
   const milkLeft = milkEnds ? Math.max(0, milkEnds - now) : 0;
 
   const settings = useMemo(() => {
@@ -410,8 +411,12 @@ export function ServicePage() {
           <section key={section.id}>
             <h2 className="mb-1.5 text-sm font-bold uppercase tracking-wide text-stone-500">{section.title}</h2>
             <div className={checklistCardsClass}>
-              {section.items.map(({ item, due }) =>
-                item.key === "start_milk_clean" ? (
+              {section.items.map(({ item, due }) => {
+                const locks = milkStepLocks(
+                  { key: item.key, lockedDuringClean: item.locked_during_clean },
+                  milkRunning,
+                );
+                return item.key === "start_milk_clean" ? (
                   <MilkStepCard
                     key={item.id}
                     stepId={`step-${item.id}`}
@@ -438,7 +443,9 @@ export function ServicePage() {
                     placeholder={due.placeholder}
                     overdue={due.overdue}
                     due={due.due}
-                    locked={item.locked_during_clean && milkRunning}
+                    doneLocked={locks.doneLocked}
+                    skipLocked={locks.notNeededLocked}
+                    lockMessage={locks.message}
                     state={rows[item.id]?.state}
                     note={rows[item.id]?.note}
                     disabled={!started || submitted || busy === item.id}
@@ -453,8 +460,8 @@ export function ServicePage() {
                       void persist(next, {}).then(() => enqueue({ kind: "completion", write, stepKey: item.key })).then(() => flushQueue());
                     }}
                   />
-                ),
-              )}
+                );
+              })}
             </div>
           </section>
         ))}

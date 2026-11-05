@@ -17,8 +17,9 @@ In the Supabase dashboard, open SQL Editor. Run these files **one at a time, in 
 4. `supabase/migrations/0004_sandbox.sql`
 5. `supabase/migrations/0005_harden_definer_functions.sql`
 6. `supabase/migrations/0006_fresh_practice.sql`
+7. `supabase/migrations/0007_milk_lock_not_needed.sql`
 
-If a later file fails, stop. Do not re-run an earlier file that already succeeded. If 0001 through 0005 are already applied, run only `0006_fresh_practice.sql`. It adds `start_fresh_practice` and does not delete rows or change last-done dates. No edge function redeploy is required for this file.
+If a later file fails, stop. Do not re-run an earlier file that already succeeded. If 0001 through 0005 are already applied, run `0006_fresh_practice.sql`, then `0007_milk_lock_not_needed.sql`. `0006` adds `start_fresh_practice` and does not delete rows or change last-done dates. `0007` rejects Done on timer-locked steps while milk cleaning is running, and still allows Not needed on Wipe the Cameo. The phone already does this before `0007` is applied. No edge function redeploy is required for these files.
 
 You should see models, three real sites, three PRACTICE sites, checklist rows, and quiz rows. You should not see any people.
 

@@ -39,6 +39,7 @@ async function main() {
     "0004_sandbox.sql",
     "0005_harden_definer_functions.sql",
     "0006_fresh_practice.sql",
+    "0007_milk_lock_not_needed.sql",
   ]) {
     const sql = readFileSync(resolve(root, "supabase/migrations", file), "utf8");
     await db.exec(sql);
@@ -452,6 +453,79 @@ async function main() {
     stillWorks.rows.some((row) => row.name === "Mount Sinai Hospital"),
     "revoking helper RPCs broke row level security",
   );
+
+  const wipe = await db.query<{ id: string }>(
+    `select i.id from public.checklist_items i
+     join public.checklist_sections s on s.id = i.section_id
+     join public.checklist_templates t on t.id = s.template_id
+     join public.models m on m.id = t.model_id
+     where m.code = 's35' and i.key = 'wipe_cameo' limit 1`,
+  );
+  const beans = await db.query<{ id: string }>(
+    `select i.id from public.checklist_items i
+     join public.checklist_sections s on s.id = i.section_id
+     join public.checklist_templates t on t.id = s.template_id
+     join public.models m on m.id = t.model_id
+     where m.code = 's35' and i.key = 'fill_beans' limit 1`,
+  );
+  const lockVisit = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1";
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${TECH}', true)`);
+    await tx.query(`select public.start_session($1::uuid, $2::uuid, '2026-11-14T15:00:00Z')`, [lockVisit, sinai]);
+  });
+  await db.exec(`update public.service_sessions set milk_clean_started_at = now() where id = '${lockVisit}'`);
+
+  async function saveStep(itemId: string, state: string, rev: number, key: string) {
+    return asUser(
+      TECH,
+      `select public.save_completion('${lockVisit}', '${itemId}', '${state}', null, '', null, ${rev}, '${key}', 'step')`,
+    );
+  }
+  async function saveFails(itemId: string, state: string, rev: number, key: string, text: string) {
+    try {
+      await saveStep(itemId, state, rev, key);
+      return false;
+    } catch (err) {
+      const message = String(err);
+      if (!message.includes(text)) throw err;
+      return true;
+    }
+  }
+
+  assert(
+    await saveFails(wipe.rows[0].id, "done", 1, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2", "Done unlocks"),
+    "Wipe the Cameo accepted Done while cleaning was running",
+  );
+  await saveStep(wipe.rows[0].id, "not_needed", 2, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3");
+  const skipped = await db.query<{ state: string }>(
+    `select state from public.service_item_completions where session_id = '${lockVisit}' and item_id = '${wipe.rows[0].id}'`,
+  );
+  assert(skipped.rows[0].state === "not_needed", "Not needed was not saved on Wipe the Cameo");
+  assert(
+    await saveFails(wipe.rows[0].id, "done", 3, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3", "Done unlocks"),
+    "Wipe the Cameo could switch to Done while cleaning was running",
+  );
+  assert(
+    await saveFails(beans.rows[0].id, "not_needed", 1, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb4", "stays locked"),
+    "Fill beans accepted Not needed while cleaning was running",
+  );
+  assert(
+    await saveFails(beans.rows[0].id, "done", 1, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb5", "stays locked"),
+    "Fill beans accepted Done while cleaning was running",
+  );
+
+  await db.exec(`update public.service_sessions set milk_clean_done_at = now() where id = '${lockVisit}'`);
+  await saveStep(wipe.rows[0].id, "done", 4, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3");
+  await saveStep(beans.rows[0].id, "done", 2, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb5");
+  const after = await db.query<{ key: string; state: string }>(
+    `select i.key, c.state
+     from public.service_item_completions c
+     join public.checklist_items i on i.id = c.item_id
+     where c.session_id = '${lockVisit}'
+     order by i.key`,
+  );
+  assert(after.rows.find((row) => row.key === "wipe_cameo")?.state === "done", "Done stayed locked after cleaning finished");
+  assert(after.rows.find((row) => row.key === "fill_beans")?.state === "done", "Fill beans stayed locked after cleaning finished");
 
   console.log("RLS checks passed");
   await db.close();
