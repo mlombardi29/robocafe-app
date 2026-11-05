@@ -6,11 +6,11 @@ Mobile app for Certain Ventures service visits. The old Robo Café app stays at 
 
 ```bash
 cd app
-cp .env.example .env
-# For local Supabase, put the URL and anon key printed by `supabase start` into .env.
 npm install
 npm run dev
 ```
+
+`npm run build` uses `app/.env.production` (the public hosted URL and anon key). For a local Supabase, copy `.env.example` to `.env` and fill in the URL and anon key printed by `supabase start`. A variable already set in the shell overrides both files.
 
 Scripts: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`.
 

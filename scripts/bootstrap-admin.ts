@@ -2,17 +2,18 @@
  * Create the first admin. Run by a developer with the service role key in the
  * environment. Do not commit the key or the temporary PIN.
  *
- *   cd app
+ * From the repository root (app dependencies must already be installed):
+ *
  *   SUPABASE_URL=https://ucvacwbmhutedwfffcoj.supabase.co \
  *   SUPABASE_SERVICE_ROLE_KEY=... \
- *   ADMIN_FULL_NAME="Michael Lombardi" \
- *   ADMIN_GOES_BY="Michael" \
+ *   ADMIN_FULL_NAME="Full Name" \
+ *   ADMIN_GOES_BY="Name" \
  *   ADMIN_EMAIL="name@example.com" \
  *   ADMIN_PHONE="" \
  *   ADMIN_TEMP_PIN=... \
- *   npx tsx ../scripts/bootstrap-admin.ts
+ *   npx tsx scripts/bootstrap-admin.ts
  *
- * Run it again for Kajsa. The temporary PIN is only printed as "set", never echoed.
+ * Run it again for each admin. The temporary PIN is only printed as "set", never echoed.
  */
 import { createRequire } from "node:module";
 import { pinError } from "../supabase/functions/_shared/pinPolicy.ts";
@@ -34,6 +35,7 @@ function fail(message: string): never {
   process.exit(1);
 }
 
+async function main() {
 if (!url || !key) fail("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in the environment.");
 if (!fullName || !goesBy || !email.includes("@")) fail("Set ADMIN_FULL_NAME, ADMIN_GOES_BY, and ADMIN_EMAIL.");
 const problem = pinError(tempPin);
@@ -88,3 +90,8 @@ const { error: pinSaveError } = await supabase.from("auth_pins").insert({
 if (pinSaveError) fail(pinSaveError.message);
 
 console.log(`Admin ${goesBy} is ready. Temporary PIN is set and must be changed at first sign-in.`);
+}
+
+main().catch((err: unknown) => {
+  fail(err instanceof Error ? err.message : "Could not create the admin.");
+});

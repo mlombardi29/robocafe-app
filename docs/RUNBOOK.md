@@ -47,15 +47,16 @@ Hosted functions receive `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERV
 
 Use a temporary PIN you will say out loud. Do not put it in the repo, in Slack, or in the command history if you can avoid it. A PIN is 4 to 6 digits, not 1234, 12345, 123456, or the same digit repeated.
 
+From the repository root (`npm install` inside `app/` must already have been run):
+
 ```bash
-cd app
 SUPABASE_URL=https://ucvacwbmhutedwfffcoj.supabase.co \
 SUPABASE_SERVICE_ROLE_KEY='(from Project Settings → API, service_role)' \
 ADMIN_FULL_NAME='Full Name' \
 ADMIN_GOES_BY='Name' \
 ADMIN_EMAIL='name@example.com' \
 ADMIN_TEMP_PIN='(say it, do not save it here)' \
-npx tsx ../scripts/bootstrap-admin.ts
+npx tsx scripts/bootstrap-admin.ts
 ```
 
 `name@example.com` is a placeholder. Run the command once per admin, with that person's real name and email in the environment (Michael, then Kajsa). Each admin is linked to the three real sites. The first sign-in asks for a new PIN.
@@ -75,12 +76,9 @@ Team: KioskOps. Site settings:
 | Publish directory | `dist` (relative to `app`, so the site publishes `app/dist`) |
 | Node | 20 |
 
-`netlify.toml` in the repo root already sets the base directory, the build, the publish folder, the SPA redirect, and `noindex`. You still choose the production branch in the Netlify UI. Do **not** set the production branch to `main`. `main` is the old GitHub Pages app.
+`netlify.toml` at the repo root already sets the base directory (`app`), the build command (`npm ci && npm run build`), the publish directory (`dist`, relative to `app`), the SPA redirect, and `noindex`. Connecting the repo is enough for those. You still choose the production branch in the Netlify UI. Set it to **`kioskops-v1`**. Do **not** set it to `main`. `main` is the old GitHub Pages app.
 
-Environment variables (all deploy contexts):
-
-- `VITE_SUPABASE_URL` = `https://ucvacwbmhutedwfffcoj.supabase.co`
-- `VITE_SUPABASE_ANON_KEY` = the anon key (added when you have it)
+You do not need to add Supabase env vars. The production build reads the public project URL and the anon key from `app/.env.production`. That key is the anon role only. The service role key stays out of the repo and out of Netlify. If you later set `VITE_SUPABASE_URL` or `VITE_SUPABASE_ANON_KEY` in Netlify, those values override the file.
 
 Trigger a deploy of `kioskops-v1`. The test address is the site's `*.netlify.app` URL. It is unlisted (`noindex`) and every screen needs a PIN. Netlify password protection is a paid feature and is not used.
 

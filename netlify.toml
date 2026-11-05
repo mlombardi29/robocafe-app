@@ -1,5 +1,7 @@
 # Private test site. In Netlify: production branch = kioskops-v1 (not main).
 # main keeps serving the old app on GitHub Pages.
+# The public Supabase URL and anon key are in app/.env.production.
+# Env vars already set in Netlify override that file. Do not put the service role key here.
 [build]
   base = "app"
   command = "npm ci && npm run build"
