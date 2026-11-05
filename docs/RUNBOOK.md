@@ -51,14 +51,14 @@ Use a temporary PIN you will say out loud. Do not put it in the repo, in Slack, 
 cd app
 SUPABASE_URL=https://ucvacwbmhutedwfffcoj.supabase.co \
 SUPABASE_SERVICE_ROLE_KEY='(from Project Settings → API, service_role)' \
-ADMIN_FULL_NAME='Michael Lombardi' \
-ADMIN_GOES_BY='Michael' \
+ADMIN_FULL_NAME='Full Name' \
+ADMIN_GOES_BY='Name' \
 ADMIN_EMAIL='name@example.com' \
 ADMIN_TEMP_PIN='(say it, do not save it here)' \
 npx tsx ../scripts/bootstrap-admin.ts
 ```
 
-Run the same command again with Kajsa's name, goes-by, and email. Each admin is linked to the three real sites. The first sign-in asks for a new PIN.
+`name@example.com` is a placeholder. Run the command once per admin, with that person's real name and email in the environment (Michael, then Kajsa). Each admin is linked to the three real sites. The first sign-in asks for a new PIN.
 
 The service role key is a secret. If it lands in a shell history or a screenshot, rotate it in the dashboard.
 
