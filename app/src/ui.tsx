@@ -1,5 +1,6 @@
 import { useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { composeButtonClass, type ButtonTone } from "./lib/buttonStyles";
+import { actionButtonClass, actionRowClass, disclosureClass, noteFieldClass, stepCardClass } from "./lib/checklistLayout";
 
 export function Screen({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <div className={`mx-auto min-h-screen w-full max-w-[480px] px-4 pb-36 pt-4 ${className}`}>{children}</div>;
@@ -117,6 +118,8 @@ export function CheckItem({
   disabled,
   stepId,
   highlighted,
+  initialNoteOpen = false,
+  initialDetailsOpen = false,
 }: {
   title: string;
   detail: string | null;
@@ -133,52 +136,160 @@ export function CheckItem({
   disabled?: boolean;
   stepId?: string;
   highlighted?: boolean;
+  initialNoteOpen?: boolean;
+  initialDetailsOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const ring = highlighted ? "ring-2 ring-amber-500 ring-offset-2" : overdue ? "ring-red-300" : "ring-black/5";
+  const [noteOpen, setNoteOpen] = useState(initialNoteOpen);
+  const [detailsOpen, setDetailsOpen] = useState(initialDetailsOpen);
+  const noteId = stepId ? `${stepId}-note` : undefined;
+  const detailsId = stepId ? `${stepId}-details` : undefined;
+  const doneSelected = state === "done";
+  const skipSelected = state === "not_needed";
+  const savedNote = Boolean(note?.trim());
   return (
-    <article
-      id={stepId}
-      tabIndex={-1}
-      className={`scroll-mt-4 scroll-mb-40 rounded-3xl bg-white p-4 shadow-sm outline-none ring-1 ${ring}`}
-    >
-      <div className="flex items-start justify-between gap-3">
+    <article id={stepId} tabIndex={-1} className={stepCardClass(Boolean(highlighted), Boolean(overdue))}>
+      <div className="flex items-start justify-between gap-2">
         <h3 className="text-lg font-semibold leading-snug">{title}</h3>
-        {overdue ? <span className="shrink-0 rounded-full bg-red-100 px-2 py-1 text-xs font-bold text-red-800">Overdue</span> : null}
-        {!overdue && due === false ? <span className="shrink-0 rounded-full bg-stone-100 px-2 py-1 text-xs font-semibold text-stone-600">Not due</span> : null}
+        {overdue ? <span className="mt-0.5 shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-800">Overdue</span> : null}
+        {!overdue && due === false ? (
+          <span className="mt-0.5 shrink-0 rounded-full bg-stone-100 px-2 py-0.5 text-xs font-semibold text-stone-600">Not due</span>
+        ) : null}
       </div>
       {placeholder ? (
-        <p className="mt-2 rounded-2xl bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950">
+        <p className="mt-1 rounded-xl bg-amber-50 px-2.5 py-1.5 text-sm font-medium leading-snug text-amber-950">
           Criteria pending. {placeholder}
         </p>
       ) : null}
-      {detail ? <p className="mt-2 text-sm text-stone-700">{detail}</p> : null}
-      {howTo ? (
-        <details className="mt-2">
-          <summary className="min-h-12 cursor-pointer py-2 text-sm font-semibold text-[var(--accent)]">Details</summary>
-          <p className="pb-2 text-sm leading-relaxed text-stone-700">{howTo}</p>
-        </details>
-      ) : null}
-      {locked ? <p className="mt-2 text-sm font-medium text-stone-500">Locked while milk cleaning runs.</p> : null}
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <Button tone={state === "done" ? "primary" : "quiet"} disabled={disabled || locked} onClick={onDone}>
+      {detail ? <p className="mt-1 text-sm leading-snug text-stone-700">{detail}</p> : null}
+      {locked ? <p className="mt-1 text-sm font-medium text-stone-500">Locked while milk cleaning runs.</p> : null}
+      <div className={actionRowClass}>
+        <Button
+          tone={doneSelected ? "primary" : "quiet"}
+          className={actionButtonClass}
+          disabled={disabled || locked}
+          aria-pressed={doneSelected}
+          onClick={onDone}
+        >
           Done
         </Button>
-        <Button tone={state === "not_needed" ? "primary" : "quiet"} disabled={disabled || locked} onClick={onSkip}>
+        <Button
+          tone={skipSelected ? "primary" : "quiet"}
+          className={actionButtonClass}
+          disabled={disabled || locked}
+          aria-pressed={skipSelected}
+          onClick={onSkip}
+        >
           Not needed
         </Button>
+        <button
+          type="button"
+          className={disclosureClass}
+          aria-expanded={noteOpen}
+          aria-controls={noteId}
+          aria-label={noteOpen ? "Hide note" : savedNote ? "Note, saved" : "Note"}
+          onClick={() => setNoteOpen((value) => !value)}
+        >
+          {noteOpen ? "Hide note" : "Note"}
+          {!noteOpen && savedNote ? <span className="ml-2 inline-block h-2 w-2 rounded-full bg-[var(--accent)]" aria-hidden="true" /> : null}
+        </button>
+        {howTo ? (
+          <button
+            type="button"
+            className={disclosureClass}
+            aria-expanded={detailsOpen}
+            aria-controls={detailsId}
+            onClick={() => setDetailsOpen((value) => !value)}
+          >
+            {detailsOpen ? "Hide details" : "Details"}
+          </button>
+        ) : null}
       </div>
-      <button type="button" className="mt-3 min-h-12 text-sm font-semibold text-[var(--accent)]" onClick={() => setOpen((value) => !value)}>
-        {open ? "Hide note" : "Note"}
-      </button>
-      {open ? (
+      {noteOpen ? (
         <textarea
-          className={`${inputClass} mt-2 min-h-24 py-3`}
+          id={noteId}
+          rows={2}
+          className={noteFieldClass}
+          aria-label={`Note for ${title}`}
           value={note ?? ""}
           disabled={disabled || locked}
           onChange={(event) => onNote?.(event.target.value)}
         />
       ) : null}
+      {detailsOpen && howTo ? (
+        <p id={detailsId} className="mt-1 text-sm leading-relaxed text-stone-700">
+          {howTo}
+        </p>
+      ) : null}
     </article>
+  );
+}
+
+export function MilkStepCard({
+  stepId,
+  highlighted,
+  title,
+  details,
+  minutes,
+  started,
+  countedDone,
+  notNeeded,
+  startDisabled,
+  skipDisabled,
+  onStart,
+  onSkip,
+  initialDetailsOpen = false,
+}: {
+  stepId?: string;
+  highlighted?: boolean;
+  title: string;
+  details?: string | null;
+  minutes: number;
+  started: boolean;
+  countedDone: boolean;
+  notNeeded: boolean;
+  startDisabled?: boolean;
+  skipDisabled?: boolean;
+  onStart?: () => void;
+  onSkip?: () => void;
+  initialDetailsOpen?: boolean;
+}) {
+  const [detailsOpen, setDetailsOpen] = useState(initialDetailsOpen);
+  const detailsId = stepId ? `${stepId}-details` : undefined;
+  return (
+    <div id={stepId} tabIndex={-1} className={stepCardClass(Boolean(highlighted))}>
+      <h3 className="text-lg font-semibold leading-snug">{title}</h3>
+      <p className="mt-1 text-sm leading-snug text-stone-500">About {minutes} minutes. The timer stays if you leave this page.</p>
+      {countedDone ? <p className="mt-1 text-sm font-medium text-emerald-800">Counted as done because cleaning already started.</p> : null}
+      <div className={actionRowClass}>
+        <Button className="min-w-[12rem] flex-[1.6] !px-3" disabled={startDisabled} aria-pressed={started} onClick={onStart}>
+          {started ? "Cleaning started" : "Start milk cleaning"}
+        </Button>
+        <Button
+          tone={notNeeded ? "primary" : "quiet"}
+          className={actionButtonClass}
+          disabled={skipDisabled}
+          aria-pressed={notNeeded}
+          onClick={onSkip}
+        >
+          Not needed
+        </Button>
+        {details ? (
+          <button
+            type="button"
+            className={disclosureClass}
+            aria-expanded={detailsOpen}
+            aria-controls={detailsId}
+            onClick={() => setDetailsOpen((value) => !value)}
+          >
+            {detailsOpen ? "Hide details" : "Details"}
+          </button>
+        ) : null}
+      </div>
+      {detailsOpen && details ? (
+        <p id={detailsId} className="mt-1 text-sm leading-relaxed text-stone-700">
+          {details}
+        </p>
+      ) : null}
+    </div>
   );
 }

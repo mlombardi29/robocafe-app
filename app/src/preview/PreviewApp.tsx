@@ -1,8 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { AddPersonPage } from "../screens/Admin";
 import type { SiteRow } from "../lib/types";
-import { CheckItem, PinPad, PracticeBanner, Screen, Title } from "../ui";
+import { timerDoneButtonClass } from "../lib/buttonStyles";
+import { CheckItem, MilkStepCard, PinPad, PracticeBanner, Screen, Title } from "../ui";
 
 const sites: SiteRow[] = [
   {
@@ -34,7 +35,7 @@ const sites: SiteRow[] = [
 export default function PreviewApp() {
   const { screen = "login" } = useParams();
   useEffect(() => {
-    document.documentElement.dataset.mode = screen === "checklist" || screen === "training" ? "practice" : "live";
+    document.documentElement.dataset.mode = screen === "checklist" || screen === "checklist-open" || screen === "training" ? "practice" : "live";
   }, [screen]);
 
   if (screen === "login") {
@@ -61,39 +62,8 @@ export default function PreviewApp() {
     );
   }
 
-  if (screen === "checklist") {
-    return (
-      <Screen>
-        <PracticeBanner show />
-        <p className="text-sm font-semibold text-[var(--accent)]">Home</p>
-        <h1 className="mt-2 text-3xl font-semibold">PRACTICE Sinai</h1>
-        <p className="text-stone-600">PRACTICE – Sinai (3.5)</p>
-        <div className="mt-4 rounded-3xl bg-stone-900 px-4 py-4 text-white">
-          <p className="text-sm uppercase tracking-wide text-stone-300">Milk cleaning</p>
-          <p className="text-3xl font-semibold">12:40</p>
-        </div>
-        <div className="mt-5 grid gap-3 pb-20">
-          <CheckItem
-            title="Empty pucks, if needed"
-            detail="Overdue. It has been 2 or more days since it was emptied."
-            placeholder={null}
-            overdue
-            onDone={() => undefined}
-            onSkip={() => undefined}
-          />
-          <CheckItem
-            title="Arm sensor check"
-            detail={null}
-            placeholder="Pass/fail criteria are being confirmed with KioCafe (Albert Kim). For now, note what you see."
-            onDone={() => undefined}
-            onSkip={() => undefined}
-          />
-        </div>
-        <div className="fixed inset-x-0 bottom-4 mx-auto w-full max-w-[480px] px-4">
-          <button type="button" className="min-h-12 w-full rounded-2xl bg-[var(--accent)] font-semibold text-white">End now</button>
-        </div>
-      </Screen>
-    );
+  if (screen === "checklist" || screen === "checklist-open") {
+    return <ChecklistPreview showOpen={screen === "checklist-open"} />;
   }
 
   if (screen === "training") {
@@ -116,4 +86,92 @@ export default function PreviewApp() {
   }
 
   return <AddPersonPage preview previewSites={sites} />;
+}
+
+function ChecklistPreview({ showOpen }: { showOpen: boolean }) {
+  const [highlight, setHighlight] = useState(showOpen ? "step-pucks" : "");
+  return (
+    <Screen>
+      <PracticeBanner show />
+      <p className="text-sm font-semibold text-[var(--accent)]">Home</p>
+      <h1 className="mt-1 text-3xl font-semibold">PRACTICE Sinai</h1>
+      <p className="text-stone-600">PRACTICE – Sinai (3.5)</p>
+      <div className="mt-3 rounded-2xl bg-stone-900 px-3 py-3 text-white">
+        <p className="text-sm uppercase tracking-wide text-stone-300">Milk cleaning</p>
+        <p className="text-3xl font-semibold" aria-live="polite">12:40</p>
+        <button type="button" className={timerDoneButtonClass()}>Mark cleaning done</button>
+      </div>
+      <div className="mt-4 grid gap-2">
+        <MilkStepCard
+          stepId="step-milk"
+          title="Start milk module cleaning"
+          minutes={18}
+          started={showOpen}
+          countedDone={showOpen}
+          notNeeded={false}
+          startDisabled={showOpen}
+          details="Cameo menu button (top middle) → Clean → follow the screen. Leave the module alone until the timer finishes."
+          initialDetailsOpen={showOpen}
+        />
+        <CheckItem
+          stepId="step-sign-in"
+          title="Sign in to KC Manager: scan your QR code at the kiosk and confirm the site name on the screen"
+          detail={null}
+          placeholder={null}
+          howTo="Hold the phone steady. If the camera misses the code, type the site name from the kiosk bezel."
+          state="done"
+          initialDetailsOpen={showOpen}
+        />
+        <CheckItem
+          stepId="step-pucks"
+          title="Empty pucks, if needed"
+          detail="Overdue. It has been 2 or more days since it was emptied."
+          placeholder={null}
+          overdue
+          highlighted={highlight === "step-pucks"}
+        />
+        <CheckItem
+          stepId="step-sensor"
+          title="Arm sensor check"
+          detail={null}
+          placeholder="Pass/fail criteria are being confirmed with KioCafe (Albert Kim). For now, note what you see."
+          note={showOpen ? "Left sensor blinked twice, then stayed green." : ""}
+          initialNoteOpen={showOpen}
+        />
+        <CheckItem
+          stepId="step-wipe"
+          title="Wipe the Cameo"
+          detail={null}
+          placeholder={null}
+          locked={showOpen}
+          disabled={showOpen}
+        />
+      </div>
+      <div className="mt-3 grid gap-2" role="alert">
+        <p className="text-sm font-medium text-red-700">Still open. Tap a step to go to it.</p>
+        <button
+          type="button"
+          className="min-h-12 rounded-2xl bg-red-50 px-3 text-left text-base font-semibold text-red-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+          onClick={() => {
+            setHighlight("step-pucks");
+            const card = document.getElementById("step-pucks");
+            card?.scrollIntoView({ behavior: "auto", block: "center" });
+            card?.focus({ preventScroll: true });
+          }}
+        >
+          Empty pucks, if needed
+        </button>
+      </div>
+      <div className="fixed inset-x-0 bottom-16 z-20 mx-auto w-full max-w-[480px] px-4">
+        <button type="button" className="min-h-12 w-full rounded-2xl bg-[var(--accent)] text-base font-semibold text-white shadow-lg">End now</button>
+      </div>
+      <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-black/5 bg-[var(--bg)]">
+        <div className="mx-auto grid max-w-[480px] grid-cols-3 text-center text-sm font-semibold">
+          <span className="flex min-h-14 items-center justify-center">Home</span>
+          <span className="flex min-h-14 items-center justify-center">Training</span>
+          <span className="flex min-h-14 items-center justify-center">My time</span>
+        </div>
+      </nav>
+    </Screen>
+  );
 }

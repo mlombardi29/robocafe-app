@@ -7,7 +7,7 @@ const toneClass: Record<ButtonTone, string> = {
 };
 
 export function composeButtonClass(tone: ButtonTone, extra = ""): string {
-  return `min-h-12 rounded-2xl px-4 text-base font-semibold disabled:opacity-50 ${toneClass[tone]} ${extra}`.trim();
+  return `min-h-12 rounded-2xl px-4 text-base font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] ${toneClass[tone]} ${extra}`.trim();
 }
 
 /**

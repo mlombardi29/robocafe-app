@@ -7,10 +7,11 @@ import { formatWhen, instantOnTorontoDay, torontoNow } from "../lib/dates";
 import { evaluateDue } from "../lib/due";
 import type { CompletionWrite } from "../lib/queue";
 import { TIMER_DONE_LABEL } from "../lib/buttonStyles";
+import { checklistCardsClass, checklistStackClass } from "../lib/checklistLayout";
 import { unfinishedRequired, type EndNotice } from "../lib/serviceFlow";
 import { enqueue, enqueueAndFlush, flushQueue, rememberVisit, stableKey } from "../lib/sync";
 import type { SnapItem } from "../lib/types";
-import { Button, CheckItem, ErrorText, Screen } from "../ui";
+import { Button, CheckItem, ErrorText, MilkStepCard, Screen } from "../ui";
 
 export function ServicePage() {
   const { siteId = "" } = useParams();
@@ -353,7 +354,7 @@ export function ServicePage() {
         </p>
       ) : null}
       {milkStart ? (
-        <div className="mt-4 rounded-3xl bg-stone-900 px-4 py-4 text-white">
+        <div className="mt-3 rounded-2xl bg-stone-900 px-3 py-3 text-white">
           <p className="text-sm uppercase tracking-wide text-stone-300">Milk cleaning</p>
           <p className="text-3xl font-semibold">
             {milkDone || milkLeft === 0
@@ -368,38 +369,28 @@ export function ServicePage() {
         </div>
       ) : null}
 
-      <div className="mt-5 grid gap-5">
+      <div className={checklistStackClass}>
         {groups.map((section) => (
           <section key={section.id}>
-            <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-stone-500">{section.title}</h2>
-            <div className="grid gap-3">
+            <h2 className="mb-1.5 text-sm font-bold uppercase tracking-wide text-stone-500">{section.title}</h2>
+            <div className={checklistCardsClass}>
               {section.items.map(({ item, due }) =>
                 item.key === "start_milk_clean" ? (
-                  <div
+                  <MilkStepCard
                     key={item.id}
-                    id={`step-${item.id}`}
-                    tabIndex={-1}
-                    className={`scroll-mt-4 scroll-mb-40 rounded-3xl bg-white p-4 shadow-sm outline-none ring-1 ${highlightId === item.id ? "ring-2 ring-amber-500 ring-offset-2" : "ring-black/5"}`}
-                  >
-                    <h3 className="text-lg font-semibold">{item.title}</h3>
-                    {item.details ? <p className="mt-2 text-sm text-stone-700">{item.details}</p> : null}
-                    <p className="mt-1 text-sm text-stone-500">About {minutes} minutes. The timer stays if you leave this page.</p>
-                    {milkStart && rows[item.id]?.state !== "not_needed" ? (
-                      <p className="mt-2 text-sm font-medium text-emerald-800">Counted as done because cleaning already started.</p>
-                    ) : null}
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      <Button disabled={Boolean(milkStart) || submitted || busy === "milk"} onClick={() => void startMilk(item, null)}>
-                        {milkStart ? "Cleaning started" : "Start milk cleaning"}
-                      </Button>
-                      <Button
-                        tone={rows[item.id]?.state === "not_needed" ? "primary" : "quiet"}
-                        disabled={submitted || busy === item.id}
-                        onClick={() => void mark(item, "not_needed")}
-                      >
-                        Not needed
-                      </Button>
-                    </div>
-                  </div>
+                    stepId={`step-${item.id}`}
+                    highlighted={highlightId === item.id}
+                    title={item.title}
+                    details={item.details}
+                    minutes={minutes}
+                    started={Boolean(milkStart)}
+                    countedDone={Boolean(milkStart) && rows[item.id]?.state !== "not_needed"}
+                    notNeeded={rows[item.id]?.state === "not_needed"}
+                    startDisabled={Boolean(milkStart) || submitted || busy === "milk"}
+                    skipDisabled={submitted || busy === item.id}
+                    onStart={() => void startMilk(item, null)}
+                    onSkip={() => void mark(item, "not_needed")}
+                  />
                 ) : (
                   <CheckItem
                     key={item.id}
@@ -434,7 +425,7 @@ export function ServicePage() {
       </div>
 
       {!submitted ? (
-        <Button className="mt-6 w-full" disabled={busy === "complete"} onClick={() => void complete(false)}>
+        <Button className="mt-4 w-full" disabled={busy === "complete"} onClick={() => void complete(false)}>
           Complete service
         </Button>
       ) : (
@@ -447,7 +438,7 @@ export function ServicePage() {
             <button
               key={step.id}
               type="button"
-              className="min-h-12 rounded-2xl bg-red-50 px-3 text-left text-sm font-semibold text-red-800"
+              className="min-h-12 rounded-2xl bg-red-50 px-3 text-left text-base font-semibold text-red-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700"
               onClick={() => focusStep(step.id)}
             >
               {step.title}
