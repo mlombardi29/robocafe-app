@@ -1,23 +1,24 @@
-/** Allow the local app and the private Netlify test site. Echo the request origin. */
+import { preflightHeaders } from "./corsPolicy.ts";
 
-export function corsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get("origin") ?? "";
-  const extra = (Deno.env.get("ALLOWED_ORIGIN") ?? "")
+function extraOrigins(): string[] {
+  const raw = typeof Deno === "undefined" ? "" : Deno.env.get("ALLOWED_ORIGIN") ?? "";
+  return raw
     .split(",")
     .map((part) => part.trim())
     .filter(Boolean);
-  const allowed =
-    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
-    /^https:\/\/[a-z0-9-]+\.netlify\.app$/i.test(origin) ||
-    extra.includes(origin);
+}
 
-  const headers: Record<string, string> = {
-    "access-control-allow-headers": "authorization, apikey, content-type",
-    "access-control-allow-methods": "GET, POST, OPTIONS",
-    vary: "origin",
-  };
-  if (allowed && origin) headers["access-control-allow-origin"] = origin;
-  return headers;
+export function corsHeaders(req: Request): Record<string, string> {
+  return preflightHeaders({
+    origin: req.headers.get("origin"),
+    requestHeaders: req.headers.get("access-control-request-headers"),
+    extraOrigins: extraOrigins(),
+  });
+}
+
+/** Empty 204. Do not pass a JSON body: status 204 forbids one and the constructor throws. */
+export function preflight(req: Request): Response {
+  return new Response(null, { status: 204, headers: corsHeaders(req) });
 }
 
 export function json(req: Request, status: number, body: unknown): Response {

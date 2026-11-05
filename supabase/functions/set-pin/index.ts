@@ -1,10 +1,10 @@
 import bcrypt from "npm:bcryptjs@2.4.3";
-import { json } from "../_shared/cors.ts";
+import { json, preflight } from "../_shared/cors.ts";
 import { pinError } from "../_shared/pinPolicy.ts";
 import { anonClient, serviceClient } from "../_shared/supabase.ts";
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: json(req, 204, {}).headers });
+  if (req.method === "OPTIONS") return preflight(req);
   if (req.method !== "POST") return json(req, 405, { error: "Method not allowed." });
 
   const header = req.headers.get("authorization") ?? "";
