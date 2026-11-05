@@ -1,0 +1,249 @@
+# DRAFT for Michael to review. Questions use only the signed-off servicing text.
+draft: true
+pass_percent: 80
+models:
+  s35:
+    - prompt: Why do beans, pucks, and cleaning balls come before you start milk cleaning?
+      choices:
+        - So the visit is shorter on paper
+        - Touching the Cameo (bean lid, puck bin, or the top for cleaning balls) aborts the cleaning and it has to restart
+        - Those steps only work during the cleaning
+        - The milk tubes have to be on the bags first
+      answer: 1
+      explanation: Touching the Cameo during the cleaning aborts it. Do the prep first. The cleaning is about 18 minutes.
+    - prompt: How long is the Cameo milk cleaning at Sinai?
+      choices:
+        - About 9 minutes
+        - About 18 minutes
+        - About 48 minutes
+        - Until the bag is empty
+      answer: 1
+      explanation: Sinai 3.5 and RBC Series 5 are about 18 minutes. UofT is about 9.
+    - prompt: What should you do once the cleaning has started?
+      choices:
+        - Stand and watch the Cameo the whole time
+        - Be as productive as possible, and aim to finish the other tasks close to when the cleaning is done
+        - Lift the bean lid so you can refill during the cycle
+        - Exit maintenance mode right away
+      answer: 1
+      explanation: Use the cleaning time to do the other tasks. Finish close to when it is done.
+    - prompt: During milk cleaning, what is true about the milk?
+      choices:
+        - Do not change bags until the cleaning is finished
+        - You can change milk bags and top up milk, but do not touch the tubes
+        - Pull the tubes out and rinse them
+        - Oat milk is not used at Sinai
+      answer: 1
+      explanation: The tubes are in the hot water and Everclean container. You can change bags and top up. Don't touch the tubes.
+    - prompt: What happens if the three powder spouts are left facing up?
+      choices:
+        - The drinks are sweeter
+        - Powder drinks come out as plain hot water
+        - The Cameo will not start
+        - The door will not close
+      answer: 1
+      explanation: All three spouts go back to down-facing, or powder drinks come out as hot water.
+    - prompt: When do you have the test drink?
+      choices:
+        - Before maintenance mode
+        - During milk cleaning
+        - Last, after you exit maintenance mode
+        - Whenever the line is short
+      answer: 2
+      explanation: The test drink is the last thing before you leave, after maintenance mode is off.
+    - prompt: What is true about the service doors?
+      choices:
+        - The space is the same while servicing and while a drink is made
+        - When a drink is made, the door slides down and there is less space at the top. Don't stack items into the door path
+        - Door clearance is only a 2.2 step
+        - Stack cups high so they are easy to reach
+      answer: 1
+      explanation: The door slides down to the customer opening. A blocked door takes the kiosk out of service and can break the door.
+    - prompt: How do you wipe the robot claw?
+      choices:
+        - Scrub with a dry pad
+        - Very hot water on a towel, press lightly. Don't scrub and don't push
+        - Skip it unless someone complains
+        - Only after arm calibration, with firm pressure
+      answer: 1
+      explanation: The arm and claw are very sensitive to pressure and easy to knock off calibration.
+    - prompt: When are arm calibration and the arm sensor check done?
+      choices:
+        - Every visit, after maintenance mode
+        - Weekly, early in the visit, before maintenance mode
+        - Only on show days
+        - Monthly, during milk cleaning
+      answer: 1
+      explanation: They are weekly and cannot be done in maintenance mode, so they come first.
+    - prompt: What do you do on the arm sensor check for now?
+      choices:
+        - Fail the visit if you are unsure
+        - Pass it when the location sensors stay solid green
+        - The pass/fail criteria are not confirmed yet. Note what you see
+        - Skip the step until next season
+      answer: 2
+      explanation: Albert Kim at KioCafe has not confirmed the pass/fail criteria. Do not invent a pass. Note what you see.
+
+  s22:
+    - prompt: How long is the UofT milk-module cleaning?
+      choices:
+        - About 9 minutes
+        - About 18 minutes
+        - About 48 minutes
+        - It has no timed cleaning
+      answer: 0
+      explanation: The 2.2 milk module is about 9 minutes. The Cameo sites are about 18.
+    - prompt: What has to happen before you start the milk-module cleaning?
+      choices:
+        - A test drink
+        - The kiosk is in maintenance mode
+        - Arm calibration
+        - The grey-water clasp is closed
+      answer: 1
+      explanation: Maintenance mode comes before the cleaning. Don't touch the module mid-cycle.
+    - prompt: During the cleaning, what may you do with the milk?
+      choices:
+        - Change the bag and top up 2% milk, and do not touch the tubes
+        - Change the bag only after the cleaning ends
+        - Top up oat milk
+        - Rinse the tubes in the sink
+      answer: 0
+      explanation: You can change the bag and top up during the cleaning. UofT is 2% only. Don't touch the tubes.
+    - prompt: Where do the milk tubes sit in the bag?
+      choices:
+        - Both tubes touch the bottom of the bag
+        - The suction tube is about 2 cm above the bag bottom. The sensor tube is about 4 cm above the bag bottom. Neither touches the bottom
+        - The sensor tube sits on the bottom and the suction tube floats
+        - Tube height does not matter on the 2.2
+      answer: 1
+      explanation: Suction tube 2 cm above the bottom. Sensor tube about 4 cm above the bottom. Neither touches the bottom.
+    - prompt: What happens if the three powder spouts are left facing up?
+      choices:
+        - Nothing changes
+        - Powder drinks come out as plain hot water
+        - The milk module stops
+        - Syrup keeps pouring
+      answer: 1
+      explanation: All three spouts go back to down-facing.
+    - prompt: What is different about syrup cleaning at UofT?
+      choices:
+        - Skip syrup cleaning
+        - Move the cup holder out of the way
+        - Park a robotic arm
+        - Do it twice
+      answer: 1
+      explanation: At UofT, move the cup holder out of the way. Syrup cleaning is once per visit.
+    - prompt: How often is the scale calibration check?
+      choices:
+        - Weekly
+        - Every visit
+        - Only on Mondays
+        - There is no scale check
+      answer: 1
+      explanation: The scale calibration check is every visit at UofT.
+    - prompt: When do you have the test drink?
+      choices:
+        - First, to see what is broken
+        - During the milk cleaning
+        - Last, after you exit maintenance mode
+        - Only if a customer asks
+      answer: 2
+      explanation: The test drink is the last thing before you leave, after maintenance mode is off.
+    - prompt: Which of these is not a UofT step?
+      choices:
+        - Coffee concentrate
+        - Service-door clearance
+        - Cups and lids
+        - Glass and surfaces
+      answer: 1
+      explanation: No door close-up check, claw, or Cameo items at UofT. No grey water. It drains to a pipe.
+    - prompt: What should you do during the 9 minutes?
+      choices:
+        - Wait beside the module
+        - Be as productive as possible, and aim to finish the other tasks close to when the cleaning is done
+        - Open the module to speed it up
+        - Leave and come back tomorrow
+      answer: 1
+      explanation: Use the cleaning time. Finish the other tasks close to when it is done.
+
+  s5:
+    - prompt: How long is the Cameo milk cleaning at RBC?
+      choices:
+        - About 9 minutes
+        - About 18 minutes
+        - Only for the length of the show
+        - There is no milk cleaning on show days
+      answer: 1
+      explanation: RBC Series 5 uses the Cameo. The cleaning is about 18 minutes.
+    - prompt: When is the milk bag changed at RBC?
+      choices:
+        - Every show, no matter how fresh the bag is
+        - When the bag has been in use 4 days, the same rule as the other sites
+        - Only at the start of the season
+        - Never. RBC has no milk bags
+      answer: 1
+      explanation: Days since the fresh bag, not every show. Same 4-day rule.
+    - prompt: Before you bring the grey-water hose back in, the clasp must be
+      choices:
+        - Parallel to the hose (open)
+        - Perpendicular to the hose (closed)
+        - Removed
+        - Pointed at the drain
+      answer: 1
+      explanation: Perpendicular means closed. If you leave it open, the next drink's grey water floods inside the kiosk.
+    - prompt: Why do beans, pucks, and cleaning balls come before milk cleaning?
+      choices:
+        - They are optional
+        - Touching the Cameo during the cleaning aborts it
+        - They can only be done in maintenance mode after the cleaning
+        - The show cannot start until the puck bin is full
+      answer: 1
+      explanation: Bean lid, puck bin, and the top for cleaning balls abort the cleaning if you touch them mid-cycle.
+    - prompt: What happens if the three powder spouts are left facing up?
+      choices:
+        - Powder drinks come out as plain hot water
+        - The hose leaks
+        - The claw loses calibration
+        - Nothing
+      answer: 0
+      explanation: All three spouts go back to down-facing.
+    - prompt: How do you wipe the robot claw?
+      choices:
+        - Scrub hard so the show looks clean
+        - Very hot water on a towel, press lightly. Don't scrub and don't push
+        - Skip it on show days
+        - Only with a dry brush
+      answer: 1
+      explanation: The arm and claw are very sensitive to pressure.
+    - prompt: What is true about the service doors?
+      choices:
+        - RBC has no door check
+        - When a drink is made, the door slides down and there is less space at the top. Don't stack items into the door path
+        - Stack stock in the door path so it stays dry
+        - The doors are only checked monthly
+      answer: 1
+      explanation: The close-up check applies at RBC. A blocked door takes the kiosk out of service and can break the door.
+    - prompt: When are arm calibration and the arm sensor check done?
+      choices:
+        - Weekly, before maintenance mode
+        - Every show, during milk cleaning
+        - Only in the off season
+        - After the test drink
+      answer: 0
+      explanation: Weekly, early, before maintenance mode. The arm sensor pass/fail is not confirmed yet. Note what you see.
+    - prompt: What should you do on the arm sensor check for now?
+      choices:
+        - Treat solid green sensors as a confirmed pass
+        - The pass/fail criteria are not confirmed yet. Note what you see
+        - Skip it because RBC is seasonal
+        - Fail the kiosk if you see a laser
+      answer: 1
+      explanation: Waiting on Albert Kim. Do not invent pass/fail criteria.
+    - prompt: When do you have the test drink?
+      choices:
+        - Before the show, as the last step, after maintenance mode is off
+        - While the Cameo is cleaning
+        - Before maintenance mode
+        - Only if there is a lineup
+      answer: 0
+      explanation: The test drink is the last thing before you leave, after you exit maintenance mode.
