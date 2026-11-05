@@ -1,6 +1,6 @@
 code: s35
 name: Series 3.5 E
-milk_clean_minutes: 18
+milk_clean_minutes: 11
 sections:
   - phase: before_maint
     title: Before maintenance mode

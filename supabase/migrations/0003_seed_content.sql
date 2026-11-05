@@ -3,7 +3,7 @@
 -- opening_time is null on purpose: the UofT Monday red flag stays off until an opening time is known.
 
 insert into public.models (code, name, milk_clean_minutes) values
-  ('s35', 'Series 3.5 E', 18),
+  ('s35', 'Series 3.5 E', 11),
   ('s22', 'Series 2.2', 9),
   ('s5', 'Series 5 (Lite Gen 5.2)', 18);
 
@@ -1088,11 +1088,11 @@ join public.models m on m.id = t.model_id
 where m.code = 's5' and t.version = 1 and s.position = 6;
 
 insert into public.quiz_questions (model_id, position, prompt, choices, answer_index, explanation, draft)
-select m.id, 1, 'Why do beans, pucks, and cleaning balls come before you start milk cleaning?', '["So the visit is shorter on paper","Touching the Cameo (bean lid, puck bin, or the top for cleaning balls) aborts the cleaning and it has to restart","Those steps only work during the cleaning","The milk tubes have to be on the bags first"]'::jsonb, 1, 'Touching the Cameo during the cleaning aborts it. Do the prep first. The cleaning is about 18 minutes.', true
+select m.id, 1, 'Why do beans, pucks, and cleaning balls come before you start milk cleaning?', '["So the visit is shorter on paper","Touching the Cameo (bean lid, puck bin, or the top for cleaning balls) aborts the cleaning and it has to restart","Those steps only work during the cleaning","The milk tubes have to be on the bags first"]'::jsonb, 1, 'Touching the Cameo during the cleaning aborts it. Do the prep first. The cleaning is about 11 minutes.', true
 from public.models m where m.code = 's35';
 
 insert into public.quiz_questions (model_id, position, prompt, choices, answer_index, explanation, draft)
-select m.id, 2, 'How long is the Cameo milk cleaning at Sinai?', '["About 9 minutes","About 18 minutes","About 48 minutes","Until the bag is empty"]'::jsonb, 1, 'Sinai 3.5 and RBC Series 5 are about 18 minutes. UofT is about 9.', true
+select m.id, 2, 'How long is the Cameo milk cleaning at Sinai?', '["About 9 minutes","About 11 minutes","About 48 minutes","Until the bag is empty"]'::jsonb, 1, 'Sinai Series 3.5 is about 11 minutes. RBC Series 5 is about 18. UofT is about 9.', true
 from public.models m where m.code = 's35';
 
 insert into public.quiz_questions (model_id, position, prompt, choices, answer_index, explanation, draft)
@@ -1128,7 +1128,7 @@ select m.id, 10, 'What do you do on the arm sensor check for now?', '["Fail the 
 from public.models m where m.code = 's35';
 
 insert into public.quiz_questions (model_id, position, prompt, choices, answer_index, explanation, draft)
-select m.id, 1, 'How long is the UofT milk-module cleaning?', '["About 9 minutes","About 18 minutes","About 48 minutes","It has no timed cleaning"]'::jsonb, 0, 'The 2.2 milk module is about 9 minutes. The Cameo sites are about 18.', true
+select m.id, 1, 'How long is the UofT milk-module cleaning?', '["About 9 minutes","About 18 minutes","About 48 minutes","It has no timed cleaning"]'::jsonb, 0, 'The 2.2 milk module is about 9 minutes. Series 3.5 is about 11. Series 5 is about 18.', true
 from public.models m where m.code = 's22';
 
 insert into public.quiz_questions (model_id, position, prompt, choices, answer_index, explanation, draft)

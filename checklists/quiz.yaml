@@ -10,15 +10,15 @@ models:
         - Those steps only work during the cleaning
         - The milk tubes have to be on the bags first
       answer: 1
-      explanation: Touching the Cameo during the cleaning aborts it. Do the prep first. The cleaning is about 18 minutes.
+      explanation: Touching the Cameo during the cleaning aborts it. Do the prep first. The cleaning is about 11 minutes.
     - prompt: How long is the Cameo milk cleaning at Sinai?
       choices:
         - About 9 minutes
-        - About 18 minutes
+        - About 11 minutes
         - About 48 minutes
         - Until the bag is empty
       answer: 1
-      explanation: Sinai 3.5 and RBC Series 5 are about 18 minutes. UofT is about 9.
+      explanation: Sinai Series 3.5 is about 11 minutes. RBC Series 5 is about 18. UofT is about 9.
     - prompt: What should you do once the cleaning has started?
       choices:
         - Stand and watch the Cameo the whole time
@@ -92,7 +92,7 @@ models:
         - About 48 minutes
         - It has no timed cleaning
       answer: 0
-      explanation: The 2.2 milk module is about 9 minutes. The Cameo sites are about 18.
+      explanation: The 2.2 milk module is about 9 minutes. Series 3.5 is about 11. Series 5 is about 18.
     - prompt: What has to happen before you start the milk-module cleaning?
       choices:
         - A test drink

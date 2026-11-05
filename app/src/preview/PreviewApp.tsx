@@ -78,7 +78,7 @@ export default function PreviewApp() {
         <section className="rounded-3xl bg-white p-4 shadow-sm ring-1 ring-black/5">
           <h2 className="font-semibold">Why</h2>
           <p className="mt-2 text-sm leading-relaxed text-stone-700">
-            Prep comes before milk cleaning because touching the Cameo aborts the cleaning. It is about 18 minutes.
+            Prep comes before milk cleaning because touching the Cameo aborts the cleaning. It is about 11 minutes.
             Turn all three powder spouts back down, or powder drinks come out as hot water.
           </p>
         </section>
@@ -111,7 +111,7 @@ function ChecklistPreview({ showOpen }: { showOpen: boolean }) {
         <MilkStepCard
           stepId="step-milk"
           title="Start milk module cleaning"
-          minutes={18}
+          minutes={11}
           started={showOpen}
           countedDone={showOpen}
           notNeeded={false}
