@@ -1,4 +1,10 @@
 import { get, set } from "idb-keyval";
+import {
+  assessFreshStart,
+  freshStartErrorMessage,
+  queuedVisitId,
+  withoutRetiredVisit,
+} from "./freshPractice";
 import type { CompletionWrite } from "./queue";
 import { outcomeFromEndUpdate, queueAfterFailure } from "./serviceFlow";
 import { supabase } from "./supabase";
@@ -49,13 +55,55 @@ export async function stableKey(sessionId: string, itemId: string): Promise<stri
 const emptyFlush: FlushResult = { ok: true, error: null, retry: false, failedKind: null };
 let tail: Promise<void> = Promise.resolve();
 
-function schedule(work: () => Promise<FlushResult>): Promise<FlushResult> {
+function schedule<T>(work: () => Promise<T>): Promise<T> {
   const run = tail.then(work);
   tail = run.then(
     () => undefined,
     () => undefined,
   );
   return run;
+}
+
+export type FreshStartResult = {
+  ok: boolean;
+  message: string;
+  sessionId: string | null;
+};
+
+/** Sync first. On success, set the old practice visit aside and drop only its queued saves. */
+export function startFreshPractice(retiredId: string, newId: string, start: string): Promise<FreshStartResult> {
+  return schedule(() => runFreshPractice(retiredId, newId, start));
+}
+
+async function runFreshPractice(retiredId: string, newId: string, start: string): Promise<FreshStartResult> {
+  const online = typeof navigator === "undefined" ? true : navigator.onLine;
+  if (!online) {
+    return { ok: false, message: assessFreshStart(false, false, 0).message, sessionId: null };
+  }
+  const first = await runFlush();
+  let retiredLeft = (await readQueue()).filter((job) => queuedVisitId(job) === retiredId).length;
+  if (first.ok && retiredLeft > 0) {
+    const second = await runFlush();
+    retiredLeft = (await readQueue()).filter((job) => queuedVisitId(job) === retiredId).length;
+    const gate = assessFreshStart(true, second.ok, retiredLeft);
+    if (!gate.proceed) return { ok: false, message: gate.message, sessionId: null };
+  } else {
+    const gate = assessFreshStart(true, first.ok, retiredLeft);
+    if (!gate.proceed) return { ok: false, message: gate.message, sessionId: null };
+  }
+
+  const { data, error } = await supabase.rpc("start_fresh_practice", {
+    p_session: retiredId,
+    p_new_id: newId,
+    p_start: start,
+  });
+  if (error) {
+    return { ok: false, message: freshStartErrorMessage(error.message, error.code), sessionId: null };
+  }
+  const sessionId = data && typeof data === "object" && "id" in data && typeof data.id === "string" ? data.id : newId;
+  const queued = await readQueue();
+  await set(QUEUE, withoutRetiredVisit(queued, retiredId));
+  return { ok: true, message: "", sessionId };
 }
 
 export function flushQueue(): Promise<FlushResult> {

@@ -16,8 +16,9 @@ In the Supabase dashboard, open SQL Editor. Run these files **one at a time, in 
 3. `supabase/migrations/0003_seed_content.sql`
 4. `supabase/migrations/0004_sandbox.sql`
 5. `supabase/migrations/0005_harden_definer_functions.sql`
+6. `supabase/migrations/0006_fresh_practice.sql`
 
-If a later file fails, stop. Do not re-run an earlier file that already succeeded. If 0001 through 0004 are already applied, run only `0005_harden_definer_functions.sql`.
+If a later file fails, stop. Do not re-run an earlier file that already succeeded. If 0001 through 0005 are already applied, run only `0006_fresh_practice.sql`. It adds `start_fresh_practice` and does not delete rows or change last-done dates. No edge function redeploy is required for this file.
 
 You should see models, three real sites, three PRACTICE sites, checklist rows, and quiz rows. You should not see any people.
 

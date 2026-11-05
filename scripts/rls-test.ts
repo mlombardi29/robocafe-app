@@ -38,6 +38,7 @@ async function main() {
     "0003_seed_content.sql",
     "0004_sandbox.sql",
     "0005_harden_definer_functions.sql",
+    "0006_fresh_practice.sql",
   ]) {
     const sql = readFileSync(resolve(root, "supabase/migrations", file), "utf8");
     await db.exec(sql);
@@ -257,6 +258,194 @@ async function main() {
      values ('${sinai}', '${TRAINEE}', current_date, 'open', false)`,
   );
   assert(traineeWrite, "trainee wrote a live visit");
+
+  const practiceOpen = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1";
+  const practiceNew = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2";
+  const practiceReplay = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3";
+  const practiceDone = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4";
+  const traineeOpen = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa5";
+  const traineeNew = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa6";
+  const liveDoneAt = "2026-01-15T12:00:00Z";
+  const practiceDoneAt = "2026-02-15T12:00:00Z";
+
+  await db.exec(`update public.people set mode = 'practice' where id = '${TECH}'`);
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${TECH}', true)`);
+    await tx.query(`select public.start_session($1::uuid, $2::uuid, '2026-11-10T15:00:00Z')`, [
+      practiceOpen,
+      practiceSinai,
+    ]);
+    await tx.query(
+      `select public.save_completion($1,$2,'done','','kept',null,1,$3,'gloves')`,
+      [practiceOpen, item.rows[0].id, "88888888-8888-4888-8888-888888888888"],
+    );
+  });
+  await db.exec(`
+    update public.service_sessions
+      set milk_clean_started_at = '2026-11-10T15:05:00Z'
+      where id = '${practiceOpen}';
+    insert into public.site_item_state (site_id, item_id, last_done_at, is_sandbox)
+    values
+      ('${sinai}', '${item.rows[0].id}', '${liveDoneAt}', false),
+      ('${practiceSinai}', '${item.rows[0].id}', '${practiceDoneAt}', true)
+    on conflict (site_id, item_id) do update
+      set last_done_at = excluded.last_done_at;
+  `);
+  const beforeCounts = await db.query<{ sessions: number; completions: number }>(`
+    select
+      (select count(*)::int from public.service_sessions) as sessions,
+      (select count(*)::int from public.service_item_completions where session_id = '${practiceOpen}') as completions
+  `);
+
+  await db.exec(`update public.people set mode = 'live' where id = '${TECH}'`);
+  let liveModeBlocked = false;
+  try {
+    await asUser(
+      TECH,
+      `select public.start_fresh_practice('${practiceOpen}', '${practiceNew}', '2026-11-11T15:00:00Z')`,
+    );
+  } catch (err) {
+    liveModeBlocked = String(err).includes("Practice mode");
+    if (!liveModeBlocked) throw err;
+  }
+  assert(liveModeBlocked, "live mode set aside a practice visit");
+  const stillOpen = await db.query<{ status: string }>(
+    `select status from public.service_sessions where id = '${practiceOpen}'`,
+  );
+  assert(stillOpen.rows[0].status === "open", "a refused fresh start changed the practice visit");
+
+  await db.exec(`update public.people set mode = 'practice' where id in ('${TECH}', '${OTHER}')`);
+  let otherBlocked = false;
+  try {
+    await asUser(
+      OTHER,
+      `select public.start_fresh_practice('${practiceOpen}', '${practiceReplay}', '2026-11-11T15:00:00Z')`,
+    );
+  } catch (err) {
+    otherBlocked = String(err).includes("Not allowed");
+    if (!otherBlocked) throw err;
+  }
+  assert(otherBlocked, "another person set aside a practice visit");
+
+  const started = await asUser<{ id: string; status: string; milk_clean_started_at: string | null }>(
+    TECH,
+    `select value->>'id' as id, value->>'status' as status, value->>'milk_clean_started_at' as milk_clean_started_at
+     from (select public.start_fresh_practice('${practiceOpen}', '${practiceNew}', '2026-11-11T16:00:00Z') as value) s`,
+  );
+  assert(started.rows[0].id === practiceNew, "fresh start did not return the new visit");
+  assert(started.rows[0].status === "open", "fresh visit is not open");
+  assert(started.rows[0].milk_clean_started_at == null, "fresh visit kept the old milk timer");
+
+  const afterFresh = await db.query<{
+    old_status: string;
+    old_completions: number;
+    new_completions: number;
+    opens: number;
+    sessions: number;
+    live_done: string;
+    practice_done: string;
+  }>(`
+    select
+      (select status from public.service_sessions where id = '${practiceOpen}') as old_status,
+      (select count(*)::int from public.service_item_completions where session_id = '${practiceOpen}') as old_completions,
+      (select count(*)::int from public.service_item_completions where session_id = '${practiceNew}') as new_completions,
+      (select count(*)::int from public.service_sessions where person_id = '${TECH}' and site_id = '${practiceSinai}' and status = 'open') as opens,
+      (select count(*)::int from public.service_sessions) as sessions,
+      (select last_done_at from public.site_item_state where site_id = '${sinai}' and item_id = '${item.rows[0].id}')::text as live_done,
+      (select last_done_at from public.site_item_state where site_id = '${practiceSinai}' and item_id = '${item.rows[0].id}')::text as practice_done
+  `);
+  assert(afterFresh.rows[0].old_status === "voided", "old practice attempt was not kept");
+  assert(afterFresh.rows[0].old_completions === beforeCounts.rows[0].completions, "old taps were deleted");
+  assert(afterFresh.rows[0].new_completions === 0, "fresh visit carried taps");
+  assert(afterFresh.rows[0].opens === 1, "fresh start left more than one open visit");
+  assert(afterFresh.rows[0].sessions === beforeCounts.rows[0].sessions + 1, "fresh start deleted a visit");
+  assert(String(afterFresh.rows[0].live_done).startsWith("2026-01-15"), "live last-done changed");
+  assert(String(afterFresh.rows[0].practice_done).startsWith("2026-02-15"), "practice last-done changed");
+
+  const replay = await asUser<{ id: string }>(
+    TECH,
+    `select public.start_fresh_practice('${practiceOpen}', '${practiceReplay}', '2026-11-11T17:00:00Z')->>'id' as id`,
+  );
+  assert(replay.rows[0].id === practiceNew, "a second tap created another visit");
+  const opensAfterReplay = await db.query<{ n: number }>(
+    `select count(*)::int as n from public.service_sessions where person_id = '${TECH}' and site_id = '${practiceSinai}' and status = 'open'`,
+  );
+  assert(opensAfterReplay.rows[0].n === 1, "replaying fresh start opened a second visit");
+
+  await db.exec(
+    `update public.service_sessions set status = 'completed', submitted_at = now() where id = '${practiceNew}'`,
+  );
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${TECH}', true)`);
+    await tx.query(`select public.start_session($1::uuid, $2::uuid, '2026-11-12T15:00:00Z')`, [
+      practiceDone,
+      practiceSinai,
+    ]);
+  });
+  await db.exec(
+    `update public.service_sessions set status = 'completed', submitted_at = now() where id = '${practiceDone}'`,
+  );
+  let finishedBlocked = false;
+  try {
+    await asUser(
+      TECH,
+      `select public.start_fresh_practice('${practiceDone}', '${practiceReplay}', '2026-11-12T18:00:00Z')`,
+    );
+  } catch (err) {
+    finishedBlocked = String(err).includes("already finished");
+    if (!finishedBlocked) throw err;
+  }
+  assert(finishedBlocked, "a finished practice visit was set aside");
+
+  let liveBlocked = false;
+  try {
+    await asUser(
+      TECH,
+      `select public.start_fresh_practice('66666666-6666-4666-8666-666666666666', '${practiceReplay}', '2026-11-12T18:00:00Z')`,
+    );
+  } catch (err) {
+    liveBlocked = String(err).includes("Live visits");
+    if (!liveBlocked) throw err;
+  }
+  assert(liveBlocked, "a live visit was set aside");
+  const liveStatus = await db.query<{ status: string }>(
+    "select status from public.service_sessions where id = '66666666-6666-4666-8666-666666666666'",
+  );
+  assert(liveStatus.rows[0].status === "completed", "the live visit status changed");
+
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${TRAINEE}', true)`);
+    await tx.query(`select public.start_session($1::uuid, $2::uuid, '2026-11-13T15:00:00Z')`, [
+      traineeOpen,
+      practiceSinai,
+    ]);
+  });
+  const traineeFresh = await asUser<{ id: string }>(
+    TRAINEE,
+    `select public.start_fresh_practice('${traineeOpen}', '${traineeNew}', '2026-11-13T16:00:00Z')->>'id' as id`,
+  );
+  assert(traineeFresh.rows[0].id === traineeNew, "a trainee could not start a fresh practice visit");
+  let traineeLiveBlocked = false;
+  try {
+    await asUser(
+      TRAINEE,
+      `select public.start_fresh_practice('66666666-6666-4666-8666-666666666666', '${practiceReplay}', '2026-11-13T17:00:00Z')`,
+    );
+  } catch (err) {
+    traineeLiveBlocked = String(err).includes("Not allowed") || String(err).includes("Live visits");
+    if (!traineeLiveBlocked) throw err;
+  }
+  assert(traineeLiveBlocked, "a trainee changed a live visit");
+
+  const freshPriv = await db.query<{ anon_can: boolean; auth_can: boolean }>(`
+    select
+      has_function_privilege('anon', 'public.start_fresh_practice(uuid, uuid, timestamptz)', 'execute') as anon_can,
+      has_function_privilege('authenticated', 'public.start_fresh_practice(uuid, uuid, timestamptz)', 'execute') as auth_can
+  `);
+  assert(freshPriv.rows[0].anon_can !== true, "anon can call start_fresh_practice");
+  assert(freshPriv.rows[0].auth_can === true, "a signed-in person cannot call start_fresh_practice");
+
+  await db.exec(`update public.people set mode = 'live' where id in ('${TECH}', '${OTHER}')`);
 
   const stillWorks = await asUser<{ name: string }>(TECH, "select name from public.sites");
   assert(

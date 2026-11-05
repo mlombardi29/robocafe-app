@@ -3,7 +3,8 @@ import { useParams } from "react-router-dom";
 import { AddPersonPage } from "../screens/Admin";
 import type { SiteRow } from "../lib/types";
 import { timerDoneButtonClass } from "../lib/buttonStyles";
-import { CheckItem, MilkStepCard, PinPad, PracticeBanner, Screen, Title } from "../ui";
+import { FRESH_OFFLINE, assessFreshStart } from "../lib/freshPractice";
+import { Button, CheckItem, FreshPracticeDialog, MilkStepCard, PinPad, PracticeBanner, Screen, Title } from "../ui";
 
 const sites: SiteRow[] = [
   {
@@ -90,13 +91,18 @@ export default function PreviewApp() {
 
 function ChecklistPreview({ showOpen }: { showOpen: boolean }) {
   const [highlight, setHighlight] = useState(showOpen ? "step-pucks" : "");
+  const [freshAsk, setFreshAsk] = useState(false);
+  const [freshError, setFreshError] = useState("");
   return (
     <Screen>
       <PracticeBanner show />
       <p className="text-sm font-semibold text-[var(--accent)]">Home</p>
       <h1 className="mt-1 text-3xl font-semibold">PRACTICE Sinai</h1>
-      <p className="text-stone-600">PRACTICE – Sinai (3.5)</p>
-      <div className="mt-3 rounded-2xl bg-stone-900 px-3 py-3 text-white">
+        <p className="text-stone-600">PRACTICE – Sinai (3.5)</p>
+        <Button tone="quiet" className="mt-3 w-full" onClick={() => { setFreshError(""); setFreshAsk(true); }}>
+          Start a fresh practice visit
+        </Button>
+        <div className="mt-3 rounded-2xl bg-stone-900 px-3 py-3 text-white">
         <p className="text-sm uppercase tracking-wide text-stone-300">Milk cleaning</p>
         <p className="text-3xl font-semibold" aria-live="polite">12:40</p>
         <button type="button" className={timerDoneButtonClass()}>Mark cleaning done</button>
@@ -162,6 +168,17 @@ function ChecklistPreview({ showOpen }: { showOpen: boolean }) {
           Empty pucks, if needed
         </button>
       </div>
+      {freshAsk ? (
+        <FreshPracticeDialog
+          error={freshError}
+          busy={false}
+          onClose={() => { setFreshAsk(false); setFreshError(""); }}
+          onConfirm={() => {
+            const gate = assessFreshStart(false, true, 0);
+            setFreshError(gate.message || FRESH_OFFLINE);
+          }}
+        />
+      ) : null}
       <div className="fixed inset-x-0 bottom-16 z-20 mx-auto w-full max-w-[480px] px-4">
         <button type="button" className="min-h-12 w-full rounded-2xl bg-[var(--accent)] text-base font-semibold text-white shadow-lg">End now</button>
       </div>

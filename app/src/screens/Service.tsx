@@ -3,15 +3,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useAuth } from "../auth";
 import { loadService, type LocalVisit } from "../data";
+import { inPractice } from "../lib/access";
 import { formatWhen, instantOnTorontoDay, torontoNow } from "../lib/dates";
 import { evaluateDue } from "../lib/due";
+import { offerFreshStart } from "../lib/freshPractice";
 import type { CompletionWrite } from "../lib/queue";
 import { TIMER_DONE_LABEL } from "../lib/buttonStyles";
 import { checklistCardsClass, checklistStackClass } from "../lib/checklistLayout";
 import { unfinishedRequired, type EndNotice } from "../lib/serviceFlow";
-import { enqueue, enqueueAndFlush, flushQueue, rememberVisit, stableKey } from "../lib/sync";
+import { enqueue, enqueueAndFlush, flushQueue, rememberVisit, stableKey, startFreshPractice } from "../lib/sync";
 import type { SnapItem } from "../lib/types";
-import { Button, CheckItem, ErrorText, MilkStepCard, Screen } from "../ui";
+import { Button, CheckItem, ErrorText, FreshPracticeDialog, MilkStepCard, Screen } from "../ui";
 
 export function ServicePage() {
   const { siteId = "" } = useParams();
@@ -37,7 +39,9 @@ export function ServicePage() {
   const [endNotice, setEndNotice] = useState<EndNotice | null>(null);
   const [showBlocked, setShowBlocked] = useState(false);
   const [highlightId, setHighlightId] = useState<string | null>(null);
-  const milkNoted = useRef<string | null>(null);
+  const [freshAsk, setFreshAsk] = useState(false);
+  const [freshError, setFreshError] = useState("");
+  const freshNewId = useRef<string | null>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -52,25 +56,6 @@ export function ServicePage() {
     setSessionId(query.data.session?.id ?? null);
     setMilkStart(query.data.session?.milk_clean_started_at ?? null);
     setMilkDone(query.data.session?.milk_clean_done_at ?? null);
-  }, [query.data]);
-
-  useEffect(() => {
-    const session = query.data?.session;
-    const stamp = session?.milk_clean_started_at;
-    if (!session || !stamp || !query.data?.snapshot) return;
-    const token = `${session.id}:${stamp}`;
-    if (milkNoted.current === token) return;
-    const item = query.data.snapshot.sections.flatMap((section) => section.items).find((step) => step.key === "start_milk_clean");
-    if (!item) return;
-    const already = query.data.completions.find((row) => row.itemId === item.id);
-    if (already?.state === "done" || already?.state === "not_needed") {
-      milkNoted.current = token;
-      return;
-    }
-    milkNoted.current = token;
-    void mark(item, "done", session.id);
-    // Once per open visit whose timer already started. mark is recreated every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query.data]);
 
   const snapshot = query.data?.snapshot;
@@ -272,6 +257,48 @@ export function ServicePage() {
     setBusy("");
   }
 
+  function askFresh() {
+    if (busy === "fresh") return;
+    freshNewId.current = crypto.randomUUID();
+    setFreshError("");
+    setFreshAsk(true);
+  }
+
+  async function confirmFresh() {
+    const retired = query.data?.session?.id;
+    const newId = freshNewId.current;
+    if (!retired || !newId || busy === "fresh") return;
+    setBusy("fresh");
+    setFreshError("");
+    let adopted: string | null = null;
+    try {
+      const result = await startFreshPractice(retired, newId, new Date().toISOString());
+      if (!result.ok || !result.sessionId) {
+        setFreshError(result.message || "Could not start a fresh practice visit. This visit was not changed.");
+        return;
+      }
+      adopted = result.sessionId;
+      await rememberVisit(siteId, {
+        sessionId: result.sessionId,
+        completions: [],
+        milkStartedAt: null,
+        milkDoneAt: null,
+      });
+      setRows({});
+      setMilkStart(null);
+      setMilkDone(null);
+      setSessionId(result.sessionId);
+      setShowBlocked(false);
+      setEndNotice(null);
+      setFreshAsk(false);
+    } catch (err) {
+      setFreshError(err instanceof Error ? err.message : "Could not start a fresh practice visit. This visit was not changed.");
+    } finally {
+      if (adopted) await queryClient.invalidateQueries({ queryKey: ["service", siteId] });
+      setBusy("");
+    }
+  }
+
   function focusStep(itemId: string) {
     const card = document.getElementById(`step-${itemId}`);
     if (!card) return;
@@ -352,6 +379,15 @@ export function ServicePage() {
             ? ` · Ended ${formatWhen(query.data.session.end_at ?? (endNotice?.kind === "saved" ? endNotice.iso : null))}`
             : ""}
         </p>
+      ) : null}
+      {offerFreshStart(
+        Boolean(profile && inPractice(profile.role, profile.mode)),
+        Boolean(query.data.site.is_sandbox),
+        Boolean(query.data.session?.id) && !submitted,
+      ) ? (
+        <Button tone="quiet" className="mt-3 w-full" disabled={busy === "fresh"} onClick={askFresh}>
+          Start a fresh practice visit
+        </Button>
       ) : null}
       {milkStart ? (
         <div className="mt-3 rounded-2xl bg-stone-900 px-3 py-3 text-white">
@@ -448,6 +484,19 @@ export function ServicePage() {
       ) : (
         <ErrorText>{error}</ErrorText>
       )}
+
+      {freshAsk ? (
+        <FreshPracticeDialog
+          error={freshError}
+          busy={busy === "fresh"}
+          onClose={() => {
+            if (busy === "fresh") return;
+            setFreshAsk(false);
+            setFreshError("");
+          }}
+          onConfirm={() => void confirmFresh()}
+        />
+      ) : null}
 
       {override ? (
         <div className="fixed inset-0 z-30 flex items-end bg-black/40 p-4">

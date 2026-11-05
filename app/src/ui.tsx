@@ -224,6 +224,36 @@ export function CheckItem({
   );
 }
 
+export function FreshPracticeDialog({
+  error,
+  busy,
+  onClose,
+  onConfirm,
+}: {
+  error: string;
+  busy: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-30 flex items-end bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="fresh-practice-title">
+      <div className="mx-auto w-full max-w-[480px] rounded-3xl bg-white p-4">
+        <h2 id="fresh-practice-title" className="text-xl font-semibold">Start a fresh practice visit?</h2>
+        <p className="mt-2 text-sm leading-relaxed text-stone-600">
+          The current practice attempt is kept. A new empty visit starts, with no ticks and a new milk timer. Live visits are not changed.
+        </p>
+        {error ? (
+          <p className="mt-3 text-sm font-medium text-red-700" role="alert">{error}</p>
+        ) : null}
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <Button tone="quiet" disabled={busy} onClick={onClose}>Go back</Button>
+          <Button disabled={busy} onClick={onConfirm}>{busy ? "Starting…" : "Start fresh"}</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function MilkStepCard({
   stepId,
   highlighted,

@@ -15,7 +15,7 @@ Vitest covers:
 - Start idempotency (same id five times is one visit) and completion replay
 - Due engine: every visit, every N days, weekly / biweekly / monthly, thresholds, milk bag, puck bin, arm-sensor placeholder, UofT Monday flag off when opening time is blank
 
-`scripts/rls-test.ts` loads the four migrations into an in-process Postgres (no hosted database) and checks:
+`scripts/rls-test.ts` loads the migrations into an in-process Postgres (no hosted database) and checks:
 
 - `anon` cannot read tables
 - `auth_pins` is not readable by a signed-in user
@@ -28,6 +28,8 @@ Vitest covers:
 - a tech cannot call `reset_sandbox`, `decide_correction`, `set_training_status`, or `void_session`
 - public helpers (`is_admin`, `can_write`, and the rest) are not executable by `authenticated`
 - a trainee cannot read or insert a live site row
+- a fresh practice start keeps the old attempt, starts an empty visit, and does not change live or practice last-done dates
+- live mode, another person, a trainee, and a finished or live visit cannot use that start to change the wrong row
 - the arm sensor row is `pending_validation` and UofT `opening_time` is null
 
 ## Manual, on a phone
