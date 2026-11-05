@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { formatTorontoTime } from "./dates";
 import { addDays, evaluateDue, previousMwf, visitStatus, type DueItem } from "./due";
 
 const today = "2026-11-09";
@@ -175,8 +176,25 @@ describe("visitStatus", () => {
     expect(late.lateForShow).toBe(true);
   });
 
+  it("replaces Due today after a visit was completed today", () => {
+    const status = visitStatus({
+      ...base,
+      cadence: "daily",
+      weekday: 4,
+      completedTodayTime: "6:20 PM",
+    });
+    expect(status.due).toBe(false);
+    expect(status.label).toBe("Completed today 6:20 PM");
+  });
+
   it("keeps an inactive site off the due list", () => {
     expect(visitStatus({ ...base, cadence: "show_days", active: false }).label).toBe("Offline for the season");
+  });
+});
+
+describe("Toronto clock", () => {
+  it("formats 23:23Z in November as 6:23 PM", () => {
+    expect(formatTorontoTime("2026-11-05T23:23:38Z")).toBe("6:23 PM");
   });
 });
 

@@ -43,3 +43,16 @@ export function reduceCompletions(writes: CompletionWrite[]): CompletionWrite[] 
 export function mergeCompletions(server: CompletionWrite[], local: CompletionWrite[]): CompletionWrite[] {
   return reduceCompletions([...server, ...local]);
 }
+
+/**
+ * Taps belong to one visit. A new visit must not inherit another visit's saved taps.
+ * With no server visit yet, keep only the on-phone draft for its own session id.
+ */
+export function completionsForOpenVisit(
+  local: { sessionId: string | null; completions: CompletionWrite[] } | null | undefined,
+  serverSessionId: string | null,
+): CompletionWrite[] {
+  if (!local?.sessionId) return [];
+  if (serverSessionId && local.sessionId !== serverSessionId) return [];
+  return local.completions.filter((row) => row.sessionId === local.sessionId);
+}

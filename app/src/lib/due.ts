@@ -113,6 +113,8 @@ export type VisitInput = {
   startedToday: boolean;
   completedDates: string[];
   previousServiceDate: string | null;
+  /** Toronto time already formatted, when this site has a completed visit today. */
+  completedTodayTime?: string | null;
 };
 
 export type VisitStatus = {
@@ -141,6 +143,16 @@ export function visitStatus(input: VisitInput): VisitStatus {
       beforeOpening: false,
       lateForShow: false,
       label: "Offline for the season",
+    };
+  }
+
+  if (input.completedTodayTime) {
+    return {
+      due: false,
+      missed: false,
+      beforeOpening: false,
+      lateForShow: false,
+      label: `Completed today ${input.completedTodayTime}`,
     };
   }
 

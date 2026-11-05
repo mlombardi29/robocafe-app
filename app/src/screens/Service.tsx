@@ -1,23 +1,24 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth";
 import { loadService, type LocalVisit } from "../data";
 import { inPractice } from "../lib/access";
-import { formatWhen, instantOnTorontoDay, torontoNow } from "../lib/dates";
+import { formatTorontoTime, formatWhen, instantOnTorontoDay, torontoNow } from "../lib/dates";
 import { evaluateDue } from "../lib/due";
 import { offerFreshStart } from "../lib/freshPractice";
 import { milkCleanRunning, milkStepLocks } from "../lib/milkLock";
 import type { CompletionWrite } from "../lib/queue";
 import { TIMER_DONE_LABEL } from "../lib/buttonStyles";
 import { checklistCardsClass, checklistStackClass } from "../lib/checklistLayout";
-import { unfinishedRequired, type EndNotice } from "../lib/serviceFlow";
-import { enqueue, enqueueAndFlush, flushQueue, rememberVisit, stableKey, startFreshPractice } from "../lib/sync";
+import { CLOCK_OUT_SAVED, COMPLETE_QUEUED, completeFollowUp, unfinishedRequired, type EndNotice } from "../lib/serviceFlow";
+import { enqueue, enqueueAndFlush, flushQueue, forgetVisit, rememberVisit, stableKey, startFreshPractice } from "../lib/sync";
 import type { SnapItem } from "../lib/types";
 import { Button, CheckItem, ErrorText, FreshPracticeDialog, MilkStepCard, Screen } from "../ui";
 
 export function ServicePage() {
   const { siteId = "" } = useParams();
+  const navigate = useNavigate();
   const { profile } = useAuth();
   const queryClient = useQueryClient();
   const query = useQuery({
@@ -118,22 +119,38 @@ export function ServicePage() {
   );
 
   async function persist(next: Record<string, CompletionWrite>, visit: Partial<LocalVisit>) {
+    const sid = visit.sessionId !== undefined ? visit.sessionId : sessionId;
+    const completions = sid ? Object.values(next).filter((row) => row.sessionId === sid) : [];
+    const rest: Partial<LocalVisit> = { ...visit };
+    delete rest.completions;
     await rememberVisit(siteId, {
-      sessionId,
-      completions: Object.values(next),
       milkStartedAt: milkStart,
       milkDoneAt: milkDone,
-      ...visit,
+      ...rest,
+      sessionId: sid,
+      completions,
     });
+  }
+
+  function rowsForSession(id: string, source: Record<string, CompletionWrite> = rows) {
+    const kept: Record<string, CompletionWrite> = {};
+    for (const [key, row] of Object.entries(source)) {
+      if (row.sessionId === id) kept[key] = row;
+    }
+    return kept;
   }
 
   async function ensureSession(estimated = false, at?: string): Promise<string> {
     if (sessionId && query.data?.session) return sessionId;
     const id = sessionId ?? crypto.randomUUID();
     const start = at ?? new Date().toISOString();
+    const kept = rowsForSession(id);
+    setRows(kept);
     setSessionId(id);
+    setMilkStart(null);
+    setMilkDone(null);
     await enqueue({ kind: "start", id, siteId, start, estimated });
-    await persist(rows, { sessionId: id });
+    await persist(kept, { sessionId: id, milkStartedAt: null, milkDoneAt: null });
     await flushQueue();
     return id;
   }
@@ -219,7 +236,8 @@ export function ServicePage() {
     const id = await ensureSession(false);
     const blockers = groups.flatMap((section) => section.items).filter((entry) => entry.item.blocks_clean_start);
     const missing = blockers.filter((entry) => {
-      const state = rows[entry.item.id]?.state;
+      const row = rows[entry.item.id];
+      const state = row?.sessionId === id ? row.state : undefined;
       return state !== "done" && state !== "not_needed";
     });
     if (missing.length > 0 && !overrideReason) {
@@ -230,11 +248,15 @@ export function ServicePage() {
     setBusy("milk");
     setError("");
     try {
+      const result = await enqueueAndFlush({ kind: "milk", id, action: "start", reason: overrideReason });
+      if (!result.ok) {
+        setError(result.error ?? "Could not start milk cleaning.");
+        if (!result.retry) await flushQueue();
+        return;
+      }
       const started = new Date().toISOString();
       setMilkStart(started);
-      await enqueue({ kind: "milk", id, action: "start", reason: overrideReason });
-      await persist(rows, { sessionId: id, milkStartedAt: started });
-      await flushQueue();
+      await persist(rowsForSession(id), { sessionId: id, milkStartedAt: started });
       await mark(item, "done", id);
       setOverride(false);
       setReason("");
@@ -337,10 +359,16 @@ export function ServicePage() {
         id = await ensureSession(true, estimateIso);
       }
       if (!id) return;
-      await enqueue({ kind: "complete", id, end: null, estimate: estimateIso });
-      await flushQueue();
+      const result = await enqueueAndFlush({ kind: "complete", id, end: null, estimate: estimateIso });
       setEstimate(false);
+      if (completeFollowUp(result) !== "home") {
+        setError(result.retry ? COMPLETE_QUEUED : result.error ?? "Could not complete the visit. This visit is still open.");
+        return;
+      }
+      await forgetVisit(siteId);
+      await queryClient.invalidateQueries({ queryKey: ["recent"] });
       await queryClient.invalidateQueries({ queryKey: ["service", siteId] });
+      navigate("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not complete the visit.");
     } finally {
@@ -535,8 +563,8 @@ export function ServicePage() {
 
       <div className="fixed inset-x-0 bottom-16 z-20 mx-auto w-full max-w-[480px] px-4">
         {endNotice ? (
-          <p className="mb-2 rounded-2xl bg-white px-3 py-2 text-sm font-semibold shadow-sm ring-1 ring-black/5" aria-live="polite">
-            {endNotice.kind === "saved" ? `End time saved · ${formatWhen(endNotice.iso)}` : null}
+          <p className="mb-2 rounded-2xl bg-amber-100 px-3 py-3 text-base font-semibold text-stone-900 shadow-sm ring-1 ring-amber-300" aria-live="polite">
+            {endNotice.kind === "saved" ? `Clock-out saved at ${formatTorontoTime(endNotice.iso)}. ${CLOCK_OUT_SAVED}` : null}
             {endNotice.kind === "queued"
               ? `Saved on this phone (${formatWhen(endNotice.iso)}). It will sync when you are online.`
               : null}
@@ -549,7 +577,7 @@ export function ServicePage() {
           </Button>
         ) : (
           <Button className="w-full shadow-lg" disabled={busy === "end" || submitted} onClick={() => void endNow()}>
-            {endNotice?.kind === "saved" ? `Ended ${formatWhen(endNotice.iso)}` : "End now"}
+            {endNotice?.kind === "saved" ? "Clock-out saved" : "End now"}
           </Button>
         )}
       </div>

@@ -47,6 +47,22 @@ export function outcomeFromEndUpdate(
   return { ok: true, retry: false, message: "" };
 }
 
+export const COMPLETE_QUEUED =
+  "Saved on this phone. It will sync when you are online. This visit is still open.";
+
+export const CLOCK_OUT_SAVED = "This visit is still open.";
+
+/** A server rejection must not sit at the front of the queue. A dropped connection should. */
+export function retriesSyncError(code: string | null | undefined, message: string): boolean {
+  if (code && (/^P\d{4}$/.test(code) || /^23\d{3}$/.test(code))) return false;
+  if (/finish the prep steps first/i.test(message)) return false;
+  return true;
+}
+
+export function completeFollowUp(result: { ok: boolean; retry: boolean }): "home" | "stay" {
+  return result.ok ? "home" : "stay";
+}
+
 /** Retryable failures stay queued. A zero-row end update is dropped so it is not retried forever. */
 export function queueAfterFailure<T>(queue: T[], failedIndex: number, retry: boolean): T[] {
   if (failedIndex < 0) return queue;

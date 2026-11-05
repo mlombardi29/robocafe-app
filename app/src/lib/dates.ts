@@ -51,6 +51,16 @@ export function instantOnTorontoDay(day: string, hhmm: string): string {
   return new Date(anchor).toISOString();
 }
 
+/** Clock time in Toronto, such as 6:20 PM. */
+export function formatTorontoTime(iso: string | null): string {
+  if (!iso) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Toronto",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
+
 export function formatWhen(iso: string | null): string {
   if (!iso) return "Not set";
   const date = new Date(iso);

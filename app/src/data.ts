@@ -1,6 +1,6 @@
 import { supabase } from "./lib/supabase";
 import type { CompletionWrite } from "./lib/queue";
-import { mergeCompletions } from "./lib/queue";
+import { completionsForOpenVisit, mergeCompletions } from "./lib/queue";
 import { recallVisit } from "./lib/sync";
 import type { SessionRow, SiteRow, Snapshot, SnapItem, SnapSection } from "./lib/types";
 
@@ -124,7 +124,7 @@ export async function loadService(siteId: string, personId: string) {
     }));
   }
   const local = await recallVisit<LocalVisit>(siteId);
-  const localWrites = local && (!session || local.sessionId === session.id) ? local.completions : [];
+  const localWrites = completionsForOpenVisit(local, session?.id ?? null);
   return {
     site: normalized,
     session,

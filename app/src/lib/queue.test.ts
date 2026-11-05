@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergeCompletions, reduceCompletions, reduceStarts, type CompletionWrite } from "./queue";
+import { completionsForOpenVisit, mergeCompletions, reduceCompletions, reduceStarts, type CompletionWrite } from "./queue";
 
 const write = (partial: Partial<CompletionWrite>): CompletionWrite => ({
   sessionId: "session-1",
@@ -42,6 +42,16 @@ describe("idempotent saves", () => {
     ]);
     expect(rows[0]?.state).toBe("done");
     expect(rows[0]?.clientRev).toBe(3);
+  });
+
+  it("does not apply taps saved for a different visit", () => {
+    const oldTap = write({ sessionId: "finished-visit", state: "done" });
+    const draft = write({ sessionId: "offline-draft", state: "not_needed" });
+    expect(completionsForOpenVisit({ sessionId: "finished-visit", completions: [oldTap] }, "new-visit")).toEqual([]);
+    expect(completionsForOpenVisit({ sessionId: "offline-draft", completions: [draft] }, null)).toEqual([draft]);
+    expect(completionsForOpenVisit({ sessionId: "new-visit", completions: [oldTap, write({ sessionId: "new-visit" })] }, "new-visit")).toEqual([
+      write({ sessionId: "new-visit" }),
+    ]);
   });
 
   it("merges the phone queue over the server when the phone is newer", () => {

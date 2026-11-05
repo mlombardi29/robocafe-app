@@ -1,4 +1,4 @@
-import { get, set } from "idb-keyval";
+import { del, get, set } from "idb-keyval";
 import {
   assessFreshStart,
   freshStartErrorMessage,
@@ -6,7 +6,7 @@ import {
   withoutRetiredVisit,
 } from "./freshPractice";
 import type { CompletionWrite } from "./queue";
-import { outcomeFromEndUpdate, queueAfterFailure } from "./serviceFlow";
+import { outcomeFromEndUpdate, queueAfterFailure, retriesSyncError } from "./serviceFlow";
 import { supabase } from "./supabase";
 
 export type FlushResult = {
@@ -41,6 +41,10 @@ export async function rememberVisit(siteId: string, value: unknown): Promise<voi
 
 export async function recallVisit<T>(siteId: string): Promise<T | undefined> {
   return get<T>(`kioskops-visit:${siteId}`);
+}
+
+export async function forgetVisit(siteId: string): Promise<void> {
+  await del(`kioskops-visit:${siteId}`);
 }
 
 export async function stableKey(sessionId: string, itemId: string): Promise<string> {
@@ -183,7 +187,10 @@ async function runJob(job: SyncJob): Promise<void> {
       p_action: job.action,
       p_override_reason: job.reason,
     });
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (!retriesSyncError(error.code, error.message)) throw new SyncRejected(error.message);
+      throw new Error(error.message);
+    }
     return;
   }
   const { error } = await supabase.rpc("complete_session", {

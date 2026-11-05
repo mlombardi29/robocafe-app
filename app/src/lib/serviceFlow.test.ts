@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  CLOCK_OUT_SAVED,
+  COMPLETE_QUEUED,
+  completeFollowUp,
   endNotice,
   outcomeFromEndUpdate,
   queueAfterFailure,
+  retriesSyncError,
   stepSatisfied,
   unfinishedRequired,
   type RequiredStep,
@@ -71,5 +75,22 @@ describe("end now result", () => {
 
   it("drops a rejected end update but keeps later jobs", () => {
     expect(queueAfterFailure(["end", "later"], 0, false)).toEqual(["later"]);
+  });
+});
+
+describe("complete and milk cleaning sync", () => {
+  it("goes home only after the server accepts Complete service", () => {
+    expect(completeFollowUp({ ok: true, retry: false })).toBe("home");
+    expect(completeFollowUp({ ok: false, retry: true })).toBe("stay");
+    expect(COMPLETE_QUEUED).toMatch(/still open/i);
+  });
+
+  it("does not retry a rejected milk-cleaning start", () => {
+    expect(retriesSyncError("P0001", "Finish the prep steps first, or give a reason to start anyway.")).toBe(false);
+    expect(retriesSyncError(undefined, "Failed to fetch")).toBe(true);
+  });
+
+  it("says a clock-out leaves the visit open", () => {
+    expect(CLOCK_OUT_SAVED).toMatch(/still open/i);
   });
 });

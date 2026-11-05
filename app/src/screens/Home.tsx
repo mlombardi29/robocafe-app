@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth";
 import { loadRecentSessions, loadShowDays, loadSites } from "../data";
-import { torontoNow } from "../lib/dates";
+import { formatTorontoTime, torontoNow } from "../lib/dates";
 import { addDays, parseClock, previousMwf, visitStatus } from "../lib/due";
 import { inPractice } from "../lib/access";
 import { supabase } from "../lib/supabase";
@@ -56,6 +56,10 @@ export function HomePage() {
         {visible.map((site) => {
           const siteSessions = (sessions.data ?? []).filter((row) => row.site_id === site.id);
           const completed = siteSessions.filter((row) => row.status === "completed").map((row) => row.service_date);
+          const completedToday = siteSessions
+            .filter((row) => row.status === "completed" && row.service_date === clock.today)
+            .sort((a, b) => String(b.end_at ?? b.submitted_at ?? "").localeCompare(String(a.end_at ?? a.submitted_at ?? "")));
+          const completedTodayTime = formatTorontoTime(completedToday[0]?.end_at ?? completedToday[0]?.submitted_at ?? null);
           const show = (shows.data ?? []).find((row) => row.site_id === site.id && row.date === clock.today);
           const previous =
             site.cadence === "daily" ? addDays(clock.today, -1) : site.cadence === "mwf" ? previousMwf(clock.today) : null;
@@ -70,6 +74,7 @@ export function HomePage() {
             startedToday: siteSessions.some((row) => row.service_date === clock.today && row.start_at),
             completedDates: completed,
             previousServiceDate: previous,
+            completedTodayTime: completedTodayTime || null,
           });
           return (
             <Link key={site.id} to={`/service/${site.id}`} className="block rounded-3xl bg-white p-5 shadow-sm ring-1 ring-black/5">
