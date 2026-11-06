@@ -29,10 +29,8 @@ export async function readQueue(): Promise<SyncJob[]> {
   return (await get<SyncJob[]>(QUEUE)) ?? [];
 }
 
-export async function enqueue(job: SyncJob): Promise<void> {
-  const queue = await readQueue();
-  queue.push(job);
-  await set(QUEUE, queue);
+export function enqueue(job: SyncJob): Promise<void> {
+  return exclusive(() => appendJob(job));
 }
 
 export async function rememberVisit(siteId: string, value: unknown): Promise<void> {
@@ -57,15 +55,22 @@ export async function stableKey(sessionId: string, itemId: string): Promise<stri
 }
 
 const emptyFlush: FlushResult = { ok: true, error: null, retry: false, failedKind: null };
-let tail: Promise<void> = Promise.resolve();
+let chain: Promise<void> = Promise.resolve();
 
-function schedule<T>(work: () => Promise<T>): Promise<T> {
-  const run = tail.then(work);
-  tail = run.then(
+/** One queue read-modify-write at a time, so two taps cannot erase each other. */
+function exclusive<T>(work: () => Promise<T>): Promise<T> {
+  const run = chain.then(work, work);
+  chain = run.then(
     () => undefined,
     () => undefined,
   );
   return run;
+}
+
+async function appendJob(job: SyncJob): Promise<void> {
+  const queue = await readQueue();
+  queue.push(job);
+  await set(QUEUE, queue);
 }
 
 export type FreshStartResult = {
@@ -76,7 +81,7 @@ export type FreshStartResult = {
 
 /** Sync first. On success, set the old practice visit aside and drop only its queued saves. */
 export function startFreshPractice(retiredId: string, newId: string, start: string): Promise<FreshStartResult> {
-  return schedule(() => runFreshPractice(retiredId, newId, start));
+  return exclusive(() => runFreshPractice(retiredId, newId, start));
 }
 
 async function runFreshPractice(retiredId: string, newId: string, start: string): Promise<FreshStartResult> {
@@ -111,13 +116,13 @@ async function runFreshPractice(retiredId: string, newId: string, start: string)
 }
 
 export function flushQueue(): Promise<FlushResult> {
-  return schedule(() => runFlush());
+  return exclusive(() => runFlush());
 }
 
 /** Queue one save and flush after it, so the result belongs to this save. */
 export function enqueueAndFlush(job: SyncJob): Promise<FlushResult> {
-  return schedule(async () => {
-    await enqueue(job);
+  return exclusive(async () => {
+    await appendJob(job);
     return runFlush();
   });
 }

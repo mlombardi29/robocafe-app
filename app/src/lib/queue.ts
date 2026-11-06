@@ -44,6 +44,38 @@ export function mergeCompletions(server: CompletionWrite[], local: CompletionWri
   return reduceCompletions([...server, ...local]);
 }
 
+/** Phone taps the server does not have yet. A newer revision is sent again. An older one is not. */
+export function unsyncedCompletions(server: CompletionWrite[], local: CompletionWrite[]): CompletionWrite[] {
+  const saved = new Map(server.map((row) => [`${row.sessionId}:${row.itemId}`, row]));
+  return local.filter((row) => {
+    const previous = saved.get(`${row.sessionId}:${row.itemId}`);
+    if (!previous) return true;
+    return row.clientRev > previous.clientRev;
+  });
+}
+
+/** Skip a tap that is already waiting in the sync queue at the same revision. */
+export function completionsNotQueued(pending: CompletionWrite[], queuedItemRevs: string[]): CompletionWrite[] {
+  const waiting = new Set(queuedItemRevs);
+  return pending.filter((row) => !waiting.has(`${row.sessionId}:${row.itemId}:${row.clientRev}`));
+}
+
+/**
+ * Local milk times show after a reload only for this visit, and only when the server has none.
+ * A server time always wins. A different visit's local timer is ignored.
+ */
+export function mergedMilkTimes(
+  server: { sessionId: string | null; startedAt: string | null; doneAt: string | null },
+  local: { sessionId: string | null; startedAt: string | null; doneAt: string | null } | null,
+): { startedAt: string | null; doneAt: string | null } {
+  const sameVisit = Boolean(local?.sessionId && server.sessionId && local.sessionId === server.sessionId);
+  const localVisit = sameVisit ? local : server.sessionId ? null : local;
+  return {
+    startedAt: server.startedAt ?? localVisit?.startedAt ?? null,
+    doneAt: server.doneAt ?? localVisit?.doneAt ?? null,
+  };
+}
+
 /**
  * Taps belong to one visit. A new visit must not inherit another visit's saved taps.
  * With no server visit yet, keep only the on-phone draft for its own session id.

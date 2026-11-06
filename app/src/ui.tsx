@@ -274,6 +274,7 @@ export function MilkStepCard({
   notNeeded,
   startDisabled,
   skipDisabled,
+  guidance,
   onStart,
   onSkip,
   initialDetailsOpen = false,
@@ -288,6 +289,7 @@ export function MilkStepCard({
   notNeeded: boolean;
   startDisabled?: boolean;
   skipDisabled?: boolean;
+  guidance?: string | null;
   onStart?: () => void;
   onSkip?: () => void;
   initialDetailsOpen?: boolean;
@@ -297,7 +299,8 @@ export function MilkStepCard({
   return (
     <div id={stepId} tabIndex={-1} className={stepCardClass(Boolean(highlighted))}>
       <h3 className="text-lg font-semibold leading-snug">{title}</h3>
-      <p className="mt-1 text-sm leading-snug text-stone-500">About {minutes} minutes. The timer stays if you leave this page.</p>
+      <p className="mt-1 text-sm leading-snug text-stone-500">About {minutes} minutes. The timer starts when you tap Start, and it stays if you leave this page.</p>
+      {guidance ? <p className="mt-1 text-sm leading-snug text-stone-600">{guidance}</p> : null}
       {countedDone ? <p className="mt-1 text-sm font-medium text-emerald-800">Counted as done because cleaning already started.</p> : null}
       <div className={actionRowClass}>
         <Button className="min-w-[12rem] flex-[1.6] !px-3" disabled={startDisabled} aria-pressed={started} onClick={onStart}>

@@ -99,8 +99,8 @@ describe("complete and milk cleaning sync", () => {
     expect(COMPLETE_QUEUED).toMatch(/still open/i);
   });
 
-  it("does not retry a rejected milk-cleaning start", () => {
-    expect(retriesSyncError("P0001", "Finish the prep steps first, or give a reason to start anyway.")).toBe(false);
+  it("does not retry a rejected milk-cleaning save, and does retry a dropped connection", () => {
+    expect(retriesSyncError("P0001", "Start milk cleaning before marking it done.")).toBe(false);
     expect(retriesSyncError(undefined, "Failed to fetch")).toBe(true);
   });
 

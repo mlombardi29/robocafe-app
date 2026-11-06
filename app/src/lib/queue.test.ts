@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { completionsForOpenVisit, mergeCompletions, reduceCompletions, reduceStarts, type CompletionWrite } from "./queue";
+import {
+  completionsForOpenVisit,
+  completionsNotQueued,
+  mergeCompletions,
+  mergedMilkTimes,
+  reduceCompletions,
+  reduceStarts,
+  unsyncedCompletions,
+  type CompletionWrite,
+} from "./queue";
 
 const write = (partial: Partial<CompletionWrite>): CompletionWrite => ({
   sessionId: "session-1",
@@ -61,5 +70,25 @@ describe("idempotent saves", () => {
     );
     expect(merged).toHaveLength(1);
     expect(merged[0]?.note).toBe("phone");
+  });
+
+  it("sends a phone tap the server never stored, and skips one the server already has", () => {
+    const local = [write({ itemId: "prep", state: "done" }), write({ itemId: "gloves", clientRev: 2, state: "not_needed" })];
+    const server = [write({ itemId: "gloves", clientRev: 2, state: "not_needed" })];
+    expect(unsyncedCompletions(server, local).map((row) => row.itemId)).toEqual(["prep"]);
+    expect(completionsNotQueued(local, ["session-1:prep:1"]).map((row) => row.itemId)).toEqual(["gloves"]);
+  });
+
+  it("keeps an offline milk timer after reload, and trusts the server when it has one", () => {
+    const local = { sessionId: "visit", startedAt: "2026-11-06T16:00:00Z", doneAt: null };
+    expect(mergedMilkTimes({ sessionId: "visit", startedAt: null, doneAt: null }, local)).toEqual({
+      startedAt: "2026-11-06T16:00:00Z",
+      doneAt: null,
+    });
+    expect(mergedMilkTimes({ sessionId: "visit", startedAt: "2026-11-06T16:05:00Z", doneAt: null }, local).startedAt).toBe("2026-11-06T16:05:00Z");
+    expect(mergedMilkTimes({ sessionId: "other", startedAt: null, doneAt: null }, local)).toEqual({
+      startedAt: null,
+      doneAt: null,
+    });
   });
 });

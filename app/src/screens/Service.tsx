@@ -8,14 +8,25 @@ import { formatTorontoTime, formatWhen, instantOnTorontoDay, torontoNow } from "
 import { evaluateDue } from "../lib/due";
 import { offerFreshStart } from "../lib/freshPractice";
 import { milkCleanRunning, milkStepLocks } from "../lib/milkLock";
-import type { CompletionWrite } from "../lib/queue";
 import { TIMER_DONE_LABEL } from "../lib/buttonStyles";
 import { checklistCardsClass, checklistStackClass } from "../lib/checklistLayout";
+import { completionsNotQueued, unsyncedCompletions, type CompletionWrite } from "../lib/queue";
 import { CLOCK_OUT_SAVED, COMPLETE_QUEUED, SUCCESS_TOAST_MS, completeFollowUp, successToast, unfinishedRequired, visibleEndNotice, type EndNotice } from "../lib/serviceFlow";
-import { enqueue, enqueueAndFlush, flushQueue, forgetVisit, rememberVisit, stableKey, startFreshPractice } from "../lib/sync";
+import { enqueue, enqueueAndFlush, flushQueue, forgetVisit, readQueue, rememberVisit, stableKey, startFreshPractice } from "../lib/sync";
 import { supabase } from "../lib/supabase";
-import type { SnapItem } from "../lib/types";
+import type { SnapItem, Snapshot } from "../lib/types";
 import { Button, CheckItem, ErrorText, FreshPracticeDialog, MilkStepCard, Screen } from "../ui";
+
+async function sendPendingCompletions(pending: CompletionWrite[], snapshot: Snapshot | null): Promise<{ ok: boolean; retry: boolean; error: string | null }> {
+  const queued = await readQueue();
+  const waiting = queued.flatMap((job) => (job.kind === "completion" ? [`${job.write.sessionId}:${job.write.itemId}:${job.write.clientRev}`] : []));
+  const todo = completionsNotQueued(pending, waiting);
+  const items = snapshot?.sections.flatMap((section) => section.items) ?? [];
+  for (const write of todo) {
+    await enqueue({ kind: "completion", write, stepKey: items.find((item) => item.id === write.itemId)?.key ?? "" });
+  }
+  return flushQueue();
+}
 
 export function ServicePage() {
   const { siteId = "" } = useParams();
@@ -34,9 +45,6 @@ export function ServicePage() {
   const [now, setNow] = useState(Date.now());
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
-  const [override, setOverride] = useState(false);
-  const [pendingMilk, setPendingMilk] = useState<SnapItem | null>(null);
-  const [reason, setReason] = useState("");
   const [estimate, setEstimate] = useState(false);
   const [estimateTime, setEstimateTime] = useState("09:00");
   const [endNotice, setEndNotice] = useState<EndNotice | null>(null);
@@ -50,7 +58,7 @@ export function ServicePage() {
   const [closedNote, setClosedNote] = useState("");
   const freshNewId = useRef<string | null>(null);
   const dialogOpen = useRef(false);
-  dialogOpen.current = leaveAsk || override || estimate || freshAsk;
+  dialogOpen.current = leaveAsk || estimate || freshAsk;
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -69,9 +77,32 @@ export function ServicePage() {
     for (const row of query.data.completions) map[row.itemId] = row;
     setRows(map);
     setSessionId(query.data.session?.id ?? null);
-    setMilkStart(query.data.session?.milk_clean_started_at ?? null);
-    setMilkDone(query.data.session?.milk_clean_done_at ?? null);
+    setMilkStart(query.data.milkStartedAt);
+    setMilkDone(query.data.milkDoneAt);
   }, [query.data]);
+
+  const pendingKey = (query.data?.pendingWrites ?? []).map((row) => `${row.sessionId}:${row.itemId}:${row.clientRev}`).join("|");
+  const pendingRef = useRef(query.data?.pendingWrites ?? []);
+  const snapshotRef = useRef(query.data?.snapshot ?? null);
+  pendingRef.current = query.data?.pendingWrites ?? [];
+  snapshotRef.current = query.data?.snapshot ?? null;
+  useEffect(() => {
+    const pending = pendingRef.current;
+    if (pending.length === 0) return;
+    let stopped = false;
+    void (async () => {
+      const result = await sendPendingCompletions(pending, snapshotRef.current);
+      if (stopped) return;
+      if (!result.ok) {
+        setError(result.retry ? "Saved on this phone. It will sync when you are online." : result.error ?? "Could not sync this step.");
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ["service", siteId] });
+    })();
+    return () => {
+      stopped = true;
+    };
+  }, [pendingKey, queryClient, siteId]);
 
   const snapshot = query.data?.snapshot;
   const minutes = snapshot?.milk_clean_minutes ?? query.data?.site.models?.milk_clean_minutes ?? 0;
@@ -273,34 +304,29 @@ export function ServicePage() {
     await queryClient.invalidateQueries({ queryKey: ["service", siteId] });
   }
 
-  async function startMilk(item: SnapItem, overrideReason: string | null) {
+  async function startMilk(item: SnapItem) {
     const id = await ensureSession(false);
-    const blockers = groups.flatMap((section) => section.items).filter((entry) => entry.item.blocks_clean_start);
-    const missing = blockers.filter((entry) => {
-      const row = rows[entry.item.id];
-      const state = row?.sessionId === id ? row.state : undefined;
-      return state !== "done" && state !== "not_needed";
-    });
-    if (missing.length > 0 && !overrideReason) {
-      setPendingMilk(item);
-      setOverride(true);
-      return;
-    }
     setBusy("milk");
     setError("");
     try {
-      const result = await enqueueAndFlush({ kind: "milk", id, action: "start", reason: overrideReason });
-      if (!result.ok) {
+      const caughtUp = await sendPendingCompletions(
+        unsyncedCompletions(query.data?.serverCompletions ?? [], Object.values(rows).filter((row) => row.sessionId === id)),
+        snapshot ?? null,
+      );
+      if (!caughtUp.ok && !caughtUp.retry) {
+        setError(caughtUp.error ?? "Could not sync the steps already tapped.");
+        return;
+      }
+      const result = await enqueueAndFlush({ kind: "milk", id, action: "start", reason: null });
+      if (!result.ok && !result.retry) {
         setError(result.error ?? "Could not start milk cleaning.");
-        if (!result.retry) await flushQueue();
         return;
       }
       const started = new Date().toISOString();
       setMilkStart(started);
       await persist(rowsForSession(id), { sessionId: id, milkStartedAt: started });
       await mark(item, "done", id);
-      setOverride(false);
-      setReason("");
+      if (!result.ok) setError("Saved on this phone. It will sync when you are online.");
       await queryClient.invalidateQueries({ queryKey: ["service", siteId] });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start milk cleaning.");
@@ -311,13 +337,22 @@ export function ServicePage() {
 
   async function finishMilk() {
     const id = sessionId ?? query.data?.session?.id;
-    if (!id) return;
+    if (!id || !milkStart) {
+      setError("Start milk cleaning before marking it done.");
+      return;
+    }
     setBusy("milk-done");
+    setError("");
     const doneAt = new Date().toISOString();
+    const result = await enqueueAndFlush({ kind: "milk", id, action: "done", reason: null });
+    if (!result.ok && !result.retry) {
+      setError(result.error ?? "Could not record that milk cleaning finished.");
+      setBusy("");
+      return;
+    }
     setMilkDone(doneAt);
-    await enqueue({ kind: "milk", id, action: "done", reason: null });
     await persist(rows, { milkDoneAt: doneAt });
-    await flushQueue();
+    if (!result.ok) setError("Saved on this phone. It will sync when you are online.");
     setBusy("");
   }
 
@@ -388,6 +423,14 @@ export function ServicePage() {
         window.setTimeout(() => focusStep(openRequired[0].id), 0);
         return;
       }
+      const caughtUp = await sendPendingCompletions(
+        unsyncedCompletions(query.data?.serverCompletions ?? [], Object.values(rows)),
+        snapshot ?? null,
+      );
+      if (!caughtUp.ok) {
+        setError(caughtUp.retry ? "Saved on this phone. It will sync when you are online. This visit is still open." : caughtUp.error ?? "Could not sync the steps already tapped.");
+        return;
+      }
       setShowBlocked(false);
       let id = sessionId ?? query.data?.session?.id ?? null;
       let estimateIso: string | null = null;
@@ -435,7 +478,15 @@ export function ServicePage() {
 
   const started = Boolean(query.data.session?.start_at || sessionId);
   const submitted = Boolean(query.data.session?.submitted_at);
-  const toast = visibleEndNotice(endNotice, leaveAsk || override || estimate || freshAsk);
+  const toast = visibleEndNotice(endNotice, leaveAsk || estimate || freshAsk);
+  const recommendedFirst = groups
+    .flatMap((section) => section.items)
+    .filter((entry) => entry.item.blocks_clean_start)
+    .filter((entry) => {
+      const state = rows[entry.item.id]?.state;
+      return state !== "done" && state !== "not_needed";
+    })
+    .map((entry) => entry.item.title);
 
   return (
     <Screen>
@@ -516,7 +567,8 @@ export function ServicePage() {
                     notNeeded={rows[item.id]?.state === "not_needed"}
                     startDisabled={Boolean(milkStart) || submitted || busy === "milk"}
                     skipDisabled={submitted || busy === item.id}
-                    onStart={() => void startMilk(item, null)}
+                    guidance={recommendedFirst.length > 0 ? `Recommended first, not required: ${recommendedFirst.join(", ")}.` : null}
+                    onStart={() => void startMilk(item)}
                     onSkip={() => void mark(item, "not_needed")}
                   />
                 ) : (
@@ -586,20 +638,6 @@ export function ServicePage() {
           }}
           onConfirm={() => void confirmFresh()}
         />
-      ) : null}
-
-      {override ? (
-        <div className="fixed inset-0 z-40 flex items-end bg-black/40 p-4" role="dialog" aria-modal="true">
-          <div className="mx-auto w-full max-w-[480px] rounded-3xl bg-white p-4">
-            <h2 className="text-xl font-semibold">Prep is not finished</h2>
-            <p className="mt-2 text-sm text-stone-600">Finish those steps, or start anyway and say why.</p>
-            <textarea className="mt-3 min-h-24 w-full rounded-2xl border border-stone-200 p-3" value={reason} onChange={(event) => setReason(event.target.value)} />
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <Button tone="quiet" onClick={() => setOverride(false)}>Go back</Button>
-              <Button disabled={reason.trim().length < 3 || !pendingMilk} onClick={() => pendingMilk && void startMilk(pendingMilk, reason.trim())}>Start anyway</Button>
-            </div>
-          </div>
-        </div>
       ) : null}
 
       {leaveAsk ? (

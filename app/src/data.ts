@@ -1,6 +1,6 @@
 import { supabase } from "./lib/supabase";
 import type { CompletionWrite } from "./lib/queue";
-import { completionsForOpenVisit, mergeCompletions } from "./lib/queue";
+import { completionsForOpenVisit, mergeCompletions, mergedMilkTimes, unsyncedCompletions } from "./lib/queue";
 import { recallVisit } from "./lib/sync";
 import type { SessionRow, SiteRow, Snapshot, SnapItem, SnapSection } from "./lib/types";
 
@@ -124,6 +124,16 @@ export async function loadService(siteId: string, personId: string) {
   }
   const local = await recallVisit<LocalVisit>(siteId);
   const localWrites = completionsForOpenVisit(local, session?.id ?? null);
+  const milk = mergedMilkTimes(
+    {
+      sessionId: session?.id ?? null,
+      startedAt: session?.milk_clean_started_at ?? null,
+      doneAt: session?.milk_clean_done_at ?? null,
+    },
+    local
+      ? { sessionId: local.sessionId, startedAt: local.milkStartedAt, doneAt: local.milkDoneAt }
+      : null,
+  );
   return {
     site: normalized,
     session,
@@ -131,5 +141,9 @@ export async function loadService(siteId: string, personId: string) {
     settings: settings ?? [],
     state: state ?? [],
     completions: mergeCompletions(serverWrites, localWrites),
+    serverCompletions: serverWrites,
+    pendingWrites: unsyncedCompletions(serverWrites, localWrites),
+    milkStartedAt: milk.startedAt,
+    milkDoneAt: milk.doneAt,
   };
 }
