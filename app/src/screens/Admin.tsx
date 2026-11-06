@@ -33,8 +33,15 @@ const sections: { title: string; links: [string, string][] }[] = [
     ],
   },
   {
+    title: "Payroll",
+    links: [["/admin/payroll", "Last week's pay"]],
+  },
+  {
     title: "Inventory",
-    links: [["/admin/checklist", "Order thresholds"]],
+    links: [
+      ["/admin/checklist", "Order thresholds"],
+      ["/inventory", "Stock"],
+    ],
   },
   {
     title: "Locations",

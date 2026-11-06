@@ -39,7 +39,11 @@ export function HomePage() {
   return (
     <Screen>
       <Title sub={clock.today}>Today</Title>
-      <Link to="/history" className="mb-4 inline-block text-base font-semibold text-[var(--accent)]">Past visits</Link>
+      <div className="mb-4 flex gap-4">
+        <Link to="/history" className="text-base font-semibold text-[var(--accent)]">Past visits</Link>
+        {profile && profile.role !== "visitor" ? <Link to="/pay" className="text-base font-semibold text-[var(--accent)]">Your pay</Link> : null}
+        {profile && profile.role !== "visitor" ? <Link to="/inventory" className="text-base font-semibold text-[var(--accent)]">Stock</Link> : null}
+      </div>
       <Card className="mb-4">
         <div className="flex items-center justify-between gap-3">
           <div>

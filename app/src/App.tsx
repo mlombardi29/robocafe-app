@@ -18,6 +18,8 @@ import {
   TraineesPage,
 } from "./screens/Admin";
 import { HistoryPage, HistoryVisitPage } from "./screens/History";
+import { InventoryPage } from "./screens/Inventory";
+import { PayRatesPage, PayrollPage, TechPayPage } from "./screens/Payroll";
 import { HomePage } from "./screens/Home";
 import { ServicePage } from "./screens/Service";
 import { SetPinPage } from "./screens/SetPin";
@@ -50,6 +52,8 @@ export function App() {
                 <Route path="/history" element={<HistoryPage />} />
                 <Route path="/history/:sessionId" element={<HistoryVisitPage />} />
                 <Route path="/time" element={<TimePage />} />
+                <Route path="/pay" element={<TechPayPage />} />
+                <Route path="/inventory" element={<InventoryPage />} />
                 <Route path="/training" element={<TrainingHome />} />
                 <Route path="/training/:code" element={<TrainingModelPage />} />
                 <Route path="/training/:code/quiz" element={<QuizPage />} />
@@ -60,6 +64,8 @@ export function App() {
                 <Route path="/admin/trainees" element={<AdminOnly><TraineesPage /></AdminOnly>} />
                 <Route path="/admin/shows" element={<AdminOnly><ShowsPage /></AdminOnly>} />
                 <Route path="/admin/checklist" element={<AdminOnly><ChecklistPage /></AdminOnly>} />
+                <Route path="/admin/payroll" element={<AdminOnly><PayrollPage /></AdminOnly>} />
+                <Route path="/admin/payroll/rates" element={<AdminOnly><PayRatesPage /></AdminOnly>} />
                 <Route path="/admin/practice" element={<AdminOnly><PracticeResetPage /></AdminOnly>} />
                 <Route path="/admin/offboarding" element={<AdminOnly><OffboardingPage /></AdminOnly>} />
                 <Route path="/admin/access" element={<AdminOnly><AccessPage /></AdminOnly>} />
