@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useAuth } from "../auth";
 import { loadSites } from "../data";
 import { correctionGlance } from "../lib/correctionGlance";
+import { thresholdDetail } from "../lib/due";
 import { offboardingTitles } from "../lib/offboarding";
 import { supabase } from "../lib/supabase";
 import type { Role, SiteRow } from "../lib/types";
@@ -538,6 +539,18 @@ export function ChecklistPage() {
   });
   const sites = useQuery({ queryKey: ["sites-admin"], queryFn: loadSites });
   const [itemId, setItemId] = useState<string | null>(null);
+  const settings = useQuery({
+    queryKey: ["item-settings", itemId],
+    enabled: Boolean(itemId),
+    queryFn: async () => {
+      const { data, error: queryError } = await supabase
+        .from("site_item_settings")
+        .select("site_id, threshold_value, threshold_unit")
+        .eq("item_id", itemId!);
+      if (queryError) throw new Error(queryError.message);
+      return data ?? [];
+    },
+  });
   const item = (items.data ?? []).find((row) => row.id === itemId);
 
   async function saveItem(patch: Record<string, unknown>) {
@@ -555,12 +568,13 @@ export function ChecklistPage() {
       { onConflict: "site_id,item_id" },
     );
     if (upsertError) setError(upsertError.message);
+    else await queryClient.invalidateQueries({ queryKey: ["item-settings", item.id] });
   }
 
   return (
     <Screen>
       <Link to="/admin" className="text-sm font-semibold text-[var(--accent)]">Admin</Link>
-      <Title sub="Leave every number blank until it is approved. Blank means “Check. Fill if low.”">Order thresholds</Title>
+      <Title sub="The sentence under each site is what techs see. A blank number with no instruction says Check. Fill if low.">Order thresholds</Title>
       {item ? (
         <Card>
           <Field label="Title"><input className={inputClass} defaultValue={item.title} onBlur={(event) => void saveItem({ title: event.target.value })} /></Field>
@@ -583,14 +597,27 @@ export function ChecklistPage() {
             </select>
           </Field>
           {item.cadence_type === "below_threshold" ? (
-            <div className="grid gap-2">
-              <p className="text-sm font-medium">Per-site fill level. Leave blank until a number is approved. Blank means “Check. Fill if low.”</p>
-              {(sites.data ?? []).filter((site) => !site.is_sandbox).map((site) => (
-                <label key={site.id} className="block text-sm">
-                  {site.short_name}
-                  <input className={`${inputClass} mt-1`} inputMode="decimal" placeholder="Blank" onBlur={(event) => void saveThreshold(site.id, event.target.value)} />
-                </label>
-              ))}
+            <div className="grid gap-3">
+              <p className="text-sm font-medium">Per-site fill level. Saving a number does not change the stored instruction.</p>
+              {(sites.data ?? []).map((site) => {
+                const saved = (settings.data ?? []).find((row) => row.site_id === site.id);
+                const value = saved?.threshold_value ?? null;
+                const unit = saved?.threshold_unit ?? null;
+                return (
+                  <label key={site.id} className="block text-sm">
+                    {site.short_name}
+                    <input
+                      key={`${item.id}-${site.id}-${value ?? "blank"}`}
+                      className={`${inputClass} mt-1`}
+                      inputMode="decimal"
+                      placeholder="Blank"
+                      defaultValue={value ?? ""}
+                      onBlur={(event) => void saveThreshold(site.id, event.target.value)}
+                    />
+                    <span className="mt-1 block text-stone-600">{thresholdDetail(value, unit)}</span>
+                  </label>
+                );
+              })}
             </div>
           ) : null}
           <Button className="mt-3" tone="quiet" onClick={() => setItemId(null)}>Back to the list</Button>

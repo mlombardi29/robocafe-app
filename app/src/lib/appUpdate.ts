@@ -1,6 +1,6 @@
 import type { FlushResult } from "./sync";
 
-export const UI_BUILD = "ui-2026-11-06-corr";
+export const UI_BUILD = "ui-2026-11-06-thresh";
 
 export type PromptState = {
   available: boolean;

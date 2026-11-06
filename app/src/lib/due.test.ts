@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatTorontoTime } from "./dates";
-import { addDays, evaluateDue, previousMwf, visitStatus, type DueItem } from "./due";
+import { addDays, evaluateDue, previousMwf, thresholdDetail, visitStatus, type DueItem } from "./due";
 
 const today = "2026-11-09";
 
@@ -53,6 +53,10 @@ describe("evaluateDue", () => {
     );
     expect(set.detail).toBe("Check. Fill only if below 250 cups.");
     expect(set.show).toBe(true);
+    expect(thresholdDetail(50, "% full")).toBe("Check. Fill only if below half.");
+    expect(thresholdDetail(67, "% full")).toBe("Check. Fill only if below two-thirds.");
+    expect(thresholdDetail(3, "days of stock")).toBe("Check. Fill only if below 3 days of stock.");
+    expect(thresholdDetail(null, "Fill cups and lids to the top every visit")).toBe("Check. Fill cups and lids to the top every visit");
   });
 
   it("shows check-and-decide steps", () => {

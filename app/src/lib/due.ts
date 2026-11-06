@@ -25,6 +25,16 @@ export type DueResult = {
   daysSince: number | null;
 };
 
+/** What a tech should read for a fill step. Does not invent a number. */
+export function thresholdDetail(value: number | null, unit: string | null): string {
+  const label = unit?.trim() ?? "";
+  if (value == null) return label ? `Check. ${label}` : "Check. Fill if low.";
+  const amount = Number(value);
+  if (amount === 50 && label.includes("%")) return "Check. Fill only if below half.";
+  if (amount === 67 && label.includes("%")) return "Check. Fill only if below two-thirds.";
+  return `Check. Fill only if below ${amount}${label ? ` ${label}` : ""}.`;
+}
+
 export const ARM_SENSOR_PLACEHOLDER =
   "Pass/fail criteria are being confirmed with KioCafe (Albert Kim). For now, note what you see.";
 
@@ -86,11 +96,7 @@ export function evaluateDue(item: DueItem, lastDoneAt: string | null, today: str
   }
 
   if (item.cadenceType === "below_threshold") {
-    const detail =
-      item.thresholdValue == null
-        ? "Check. Fill if low."
-        : `Check. Fill only if below ${item.thresholdValue}${item.thresholdUnit ? ` ${item.thresholdUnit}` : ""}.`;
-    return { show: true, due: true, overdue: false, detail, placeholder, daysSince: since };
+    return { show: true, due: true, overdue: false, detail: thresholdDetail(item.thresholdValue, item.thresholdUnit), placeholder, daysSince: since };
   }
 
   if (item.cadenceType === "check_decide") {
