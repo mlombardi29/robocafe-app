@@ -97,15 +97,15 @@ models:
       choices:
         - A test drink
         - The kiosk is in maintenance mode
-        - Arm calibration
-        - The grey-water clasp is closed
+        - Scale calibration check
+        - Exit maintenance mode
       answer: 1
       explanation: Maintenance mode comes before the cleaning. Don't touch the module mid-cycle.
     - prompt: During the cleaning, what may you do with the milk?
       choices:
         - Change the bag and top up 2% milk, and do not touch the tubes
         - Change the bag only after the cleaning ends
-        - Top up oat milk
+        - Top up coffee concentrate and skip the milk
         - Rinse the tubes in the sink
       answer: 0
       explanation: You can change the bag and top up during the cleaning. UofT is 2% only. Don't touch the tubes.
@@ -129,7 +129,7 @@ models:
       choices:
         - Skip syrup cleaning
         - Move the cup holder out of the way
-        - Park a robotic arm
+        - Turn all three powder spouts down
         - Do it twice
       answer: 1
       explanation: At UofT, move the cup holder out of the way. Syrup cleaning is once per visit.

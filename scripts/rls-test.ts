@@ -40,6 +40,7 @@ async function main() {
     "0005_harden_definer_functions.sql",
     "0006_fresh_practice.sql",
     "0007_milk_lock_not_needed.sql",
+    "0008_phase1_batches.sql",
   ]) {
     const sql = readFileSync(resolve(root, "supabase/migrations", file), "utf8");
     await db.exec(sql);
@@ -526,6 +527,78 @@ async function main() {
   );
   assert(after.rows.find((row) => row.key === "wipe_cameo")?.state === "done", "Done stayed locked after cleaning finished");
   assert(after.rows.find((row) => row.key === "fill_beans")?.state === "done", "Fill beans stayed locked after cleaning finished");
+
+  const openSinai = await db.query<{ id: string }>(
+    `select id from public.service_sessions where person_id = '${TECH}' and site_id = '${sinai}' and status = 'open' limit 1`,
+  );
+  const abandonVisit = openSinai.rows[0].id;
+  let abandonOther = false;
+  try {
+    await asUser(OTHER, `select public.abandon_visit('${abandonVisit}', 'I cannot finish')`);
+  } catch (err) {
+    abandonOther = String(err).includes("Not allowed");
+    if (!abandonOther) throw err;
+  }
+  assert(abandonOther, "another person closed a live visit");
+  let shortReason = false;
+  try {
+    await asUser(TECH, `select public.abandon_visit('${abandonVisit}', 'no')`);
+  } catch (err) {
+    shortReason = String(err).includes("why");
+    if (!shortReason) throw err;
+  }
+  assert(shortReason, "a short reason closed a visit");
+  await asUser(TECH, `select public.abandon_visit('${abandonVisit}', 'Machine is down')`);
+  const abandoned = await db.query<{ status: string }>(
+    `select status from public.service_sessions where id = '${abandonVisit}'`,
+  );
+  assert(abandoned.rows[0].status === "voided", "can't-finish did not close the visit");
+  const replacement = "cccccccc-cccc-4ccc-8ccc-ccccccccccc2";
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${TECH}', true)`);
+    await tx.query(`select public.start_session($1::uuid, $2::uuid, '2026-11-15T18:00:00Z')`, [replacement, sinai]);
+  });
+  const reopened = await db.query<{ n: number }>(
+    `select count(*)::int as n from public.service_sessions where id = '${replacement}' and status = 'open'`,
+  );
+  assert(reopened.rows[0].n === 1, "a new visit could not start after can't-finish");
+
+  let techReset = false;
+  try {
+    await asUser(TECH, `select public.reset_person_sandbox('${TECH}')`);
+  } catch (err) {
+    techReset = String(err).includes("Not allowed");
+    if (!techReset) throw err;
+  }
+  assert(techReset, "a tech reset practice data");
+
+  await db.exec(`update public.people set mode = 'practice' where id = '${TECH}'`);
+  const practiceOnly = "cccccccc-cccc-4ccc-8ccc-ccccccccccc3";
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${TECH}', true)`);
+    await tx.query(`select public.start_session($1::uuid, $2::uuid, '2026-11-16T15:00:00Z')`, [practiceOnly, practiceSinai]);
+  });
+  await db.exec(`update public.people set mode = 'live' where id = '${ADMIN}'`);
+  await asUser(ADMIN, `select public.reset_person_sandbox('${TECH}')`);
+  const practiceLeft = await db.query<{ n: number }>(
+    `select count(*)::int as n from public.service_sessions where id = '${practiceOnly}'`,
+  );
+  const liveLeft = await db.query<{ n: number }>(
+    `select count(*)::int as n from public.service_sessions where id = '${replacement}'`,
+  );
+  assert(practiceLeft.rows[0].n === 0, "per-person reset left the practice visit");
+  assert(liveLeft.rows[0].n === 1, "per-person reset removed a live visit");
+
+  let techAsset = false;
+  try {
+    await asUser(
+      TECH,
+      `insert into public.person_access_items (person_id, site_id, kind) values ('${TECH}', '${sinai}', 'key_card')`,
+    );
+  } catch {
+    techAsset = true;
+  }
+  assert(techAsset, "a tech inserted a held key");
 
   console.log("RLS checks passed");
   await db.close();

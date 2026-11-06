@@ -1,11 +1,20 @@
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
 import { useAuth } from "../auth";
-import { formatWhen } from "../lib/dates";
+import { formatTorontoTime, instantOnTorontoDay, torontoNow } from "../lib/dates";
+import { durationLabel, durationMinutes, inRange, rangeBounds, type RangeKey } from "../lib/timeRange";
 import { supabase } from "../lib/supabase";
 import { Button, Card, ErrorText, Field, Screen, Title, inputClass } from "../ui";
 
 const SIX_HOURS = 6 * 60 * 60 * 1000;
+const RANGES: { key: RangeKey; label: string }[] = [
+  { key: "this-week", label: "This week" },
+  { key: "past-week", label: "Past week" },
+  { key: "this-month", label: "This month" },
+  { key: "past-month", label: "Past month" },
+  { key: "past-year", label: "Past year" },
+  { key: "custom", label: "Custom" },
+];
 
 type Session = {
   id: string;
@@ -14,18 +23,25 @@ type Session = {
   end_at: string | null;
   submitted_at: string | null;
   status: string;
+  site_id: string;
   sites: { short_name: string } | { short_name: string }[] | null;
 };
 
 export function TimePage() {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
+  const today = torontoNow().today;
   const [openId, setOpenId] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  const [date, setDate] = useState("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [range, setRange] = useState<RangeKey>("this-month");
+  const [customFrom, setCustomFrom] = useState(today);
+  const [customTo, setCustomTo] = useState(today);
+  const [siteId, setSiteId] = useState("all");
 
   const query = useQuery({
     queryKey: ["my-time", profile?.id],
@@ -33,7 +49,7 @@ export function TimePage() {
     queryFn: async () => {
       const { data, error: queryError } = await supabase
         .from("service_sessions")
-        .select("id, service_date, start_at, end_at, submitted_at, status, sites(short_name)")
+        .select("id, site_id, service_date, start_at, end_at, submitted_at, status, sites(short_name)")
         .eq("person_id", profile!.id)
         .eq("status", "completed")
         .order("service_date", { ascending: false });
@@ -42,6 +58,30 @@ export function TimePage() {
     },
   });
 
+  const bounds = rangeBounds(range, today, customFrom, customTo);
+  const sites = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const row of query.data ?? []) {
+      const site = Array.isArray(row.sites) ? row.sites[0] : row.sites;
+      map.set(row.site_id, site?.short_name ?? "Visit");
+    }
+    return [...map.entries()];
+  }, [query.data]);
+
+  const visible = (query.data ?? []).filter((row) => {
+    if (siteId !== "all" && row.site_id !== siteId) return false;
+    return inRange(row.service_date, bounds.from, bounds.to);
+  });
+
+  const groups = useMemo(() => {
+    const map = new Map<string, Session[]>();
+    for (const row of visible) {
+      const key = row.service_date.slice(0, 7);
+      map.set(key, [...(map.get(key) ?? []), row]);
+    }
+    return [...map.entries()];
+  }, [visible]);
+
   async function send() {
     if (!openId || reason.trim().length < 3) {
       setError("Say what should change.");
@@ -49,13 +89,12 @@ export function TimePage() {
     }
     setBusy(true);
     setError("");
-    const day = query.data?.find((row) => row.id === openId)?.service_date;
     const { error: insertError } = await supabase.from("time_corrections").insert({
       session_id: openId,
       requested_by: profile!.id,
       reason: reason.trim(),
-      requested_start: start && day ? new Date(`${day}T${start}`).toISOString() : null,
-      requested_end: end && day ? new Date(`${day}T${end}`).toISOString() : null,
+      requested_start: date && start ? instantOnTorontoDay(date, start) : null,
+      requested_end: date && end ? instantOnTorontoDay(date, end) : null,
       idempotency_key: crypto.randomUUID(),
     });
     setBusy(false);
@@ -71,42 +110,81 @@ export function TimePage() {
   return (
     <Screen>
       <Title sub="Submitted times stay locked. Ask an admin to change one.">My time</Title>
-      <div className="grid gap-3">
-        {(query.data ?? []).map((row) => {
-          const site = Array.isArray(row.sites) ? row.sites[0] : row.sites;
-          const long =
-            row.start_at && row.end_at && new Date(row.end_at).getTime() - new Date(row.start_at).getTime() > SIX_HOURS;
+      <label className="mb-3 block text-sm font-medium text-stone-600">
+        Location
+        <select className={`${inputClass} mt-1`} value={siteId} onChange={(event) => setSiteId(event.target.value)}>
+          <option value="all">All locations</option>
+          {sites.map(([id, name]) => (
+            <option key={id} value={id}>{name}</option>
+          ))}
+        </select>
+      </label>
+      <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
+        {RANGES.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            className={`min-h-11 shrink-0 rounded-2xl px-3 text-base font-semibold ${range === item.key ? "bg-[var(--accent)] text-white" : "bg-white ring-1 ring-stone-200"}`}
+            onClick={() => setRange(item.key)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      {range === "custom" ? (
+        <div className="mb-4 grid grid-cols-2 gap-2">
+          <input className={inputClass} type="date" value={customFrom} onChange={(event) => setCustomFrom(event.target.value)} />
+          <input className={inputClass} type="date" value={customTo} onChange={(event) => setCustomTo(event.target.value)} />
+        </div>
+      ) : null}
+      <div className="grid gap-4">
+        {groups.map(([month, rows]) => {
+          const total = rows.reduce((sum, row) => sum + (durationMinutes(row.start_at, row.end_at) ?? 0), 0);
           return (
-            <Card key={row.id}>
-              <p className="font-semibold">{site?.short_name ?? "Visit"} · {row.service_date}</p>
-              <p className="text-sm text-stone-600">
-                {formatWhen(row.start_at)} to {formatWhen(row.end_at)}
-              </p>
-              {long ? <p className="mt-1 text-sm font-medium text-amber-800">Over 6 hours. Check AM/PM.</p> : null}
-              <Button className="mt-3" tone="quiet" onClick={() => setOpenId(row.id)}>
-                Request a correction
-              </Button>
-              {openId === row.id ? (
-                <div className="mt-3">
-                  <Field label="What should change?">
-                    <textarea className={`${inputClass} min-h-24 py-3`} value={reason} onChange={(event) => setReason(event.target.value)} />
-                  </Field>
-                  <Field label="Requested start">
-                    <input className={inputClass} type="time" value={start} onChange={(event) => setStart(event.target.value)} />
-                  </Field>
-                  <Field label="Requested end">
-                    <input className={inputClass} type="time" value={end} onChange={(event) => setEnd(event.target.value)} />
-                  </Field>
-                  <Button disabled={busy} onClick={() => void send()}>
-                    {busy ? "Sending" : "Send request"}
-                  </Button>
-                </div>
-              ) : null}
-            </Card>
+            <section key={month}>
+              <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-stone-500">
+                {month} · {rows.length} visit{rows.length === 1 ? "" : "s"} · {durationLabel(total)}
+              </h2>
+              <div className="grid gap-3">
+                {rows.map((row) => {
+                  const site = Array.isArray(row.sites) ? row.sites[0] : row.sites;
+                  const long = row.start_at && row.end_at && new Date(row.end_at).getTime() - new Date(row.start_at).getTime() > SIX_HOURS;
+                  return (
+                    <Card key={row.id}>
+                      <p className="font-semibold">{site?.short_name ?? "Visit"} · {row.service_date}</p>
+                      <p className="text-sm text-stone-600">
+                        {formatTorontoTime(row.start_at)} to {formatTorontoTime(row.end_at)} · {durationLabel(durationMinutes(row.start_at, row.end_at))}
+                      </p>
+                      {long ? <p className="mt-1 text-sm font-medium text-amber-800">Over 6 hours. Check AM/PM.</p> : null}
+                      <Button className="mt-3" tone="quiet" onClick={() => { setOpenId(row.id); setDate(row.service_date); }}>
+                        Request a correction
+                      </Button>
+                      {openId === row.id ? (
+                        <div className="mt-3">
+                          <Field label="What should change?">
+                            <textarea className={`${inputClass} min-h-24 py-3`} value={reason} onChange={(event) => setReason(event.target.value)} />
+                          </Field>
+                          <Field label="Date">
+                            <input className={inputClass} type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+                          </Field>
+                          <Field label="Requested start">
+                            <input className={inputClass} type="time" value={start} onChange={(event) => setStart(event.target.value)} />
+                          </Field>
+                          <Field label="Requested end">
+                            <input className={inputClass} type="time" value={end} onChange={(event) => setEnd(event.target.value)} />
+                          </Field>
+                          <Button disabled={busy} onClick={() => void send()}>{busy ? "Sending" : "Send request"}</Button>
+                        </div>
+                      ) : null}
+                    </Card>
+                  );
+                })}
+              </div>
+            </section>
           );
         })}
         {query.isLoading ? <p className="text-stone-600">Loading…</p> : null}
-        {!query.isLoading && (query.data ?? []).length === 0 ? <p className="text-stone-600">No submitted visits yet.</p> : null}
+        {!query.isLoading && visible.length === 0 ? <p className="text-stone-600">No submitted visits in this range.</p> : null}
       </div>
       <ErrorText>{error}</ErrorText>
     </Screen>

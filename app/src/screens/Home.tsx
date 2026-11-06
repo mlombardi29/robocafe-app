@@ -39,6 +39,7 @@ export function HomePage() {
   return (
     <Screen>
       <Title sub={clock.today}>Today</Title>
+      <Link to="/history" className="mb-4 inline-block text-base font-semibold text-[var(--accent)]">Past visits</Link>
       <Card className="mb-4">
         <div className="flex items-center justify-between gap-3">
           <div>

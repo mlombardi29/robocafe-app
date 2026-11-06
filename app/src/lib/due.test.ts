@@ -21,20 +21,26 @@ describe("evaluateDue", () => {
     expect(result.due).toBe(true);
   });
 
-  it("shows every-n-days only when never done or old enough", () => {
+  it("keeps a recent every-n-days step visible and marked not due", () => {
     const step = item({ key: "filters", cadenceType: "every_n_days", cadenceDays: 4 });
+    const recent = evaluateDue(step, "2026-11-08", today);
+    expect(recent.show).toBe(true);
+    expect(recent.due).toBe(false);
+    expect(recent.detail).toBe("Not due. Done 1 day ago · needed every 4 days");
     expect(evaluateDue(step, null, today).show).toBe(true);
-    expect(evaluateDue(step, "2026-11-08", today).show).toBe(false);
-    expect(evaluateDue(step, "2026-11-05", today).show).toBe(true);
+    expect(evaluateDue(step, "2026-11-05", today).due).toBe(true);
   });
 
-  it("treats weekly, biweekly, and monthly as 7, 14, and 30 days", () => {
-    expect(evaluateDue(item({ key: "arm_calibration", cadenceType: "weekly" }), "2026-11-03", today).show).toBe(false);
-    expect(evaluateDue(item({ key: "arm_calibration", cadenceType: "weekly" }), "2026-11-02", today).show).toBe(true);
-    expect(evaluateDue(item({ key: "deep_clean_nozzles", cadenceType: "biweekly" }), "2026-10-27", today).show).toBe(false);
-    expect(evaluateDue(item({ key: "deep_clean_nozzles", cadenceType: "biweekly" }), "2026-10-26", today).show).toBe(true);
-    expect(evaluateDue(item({ key: "deep_clean_fridges", cadenceType: "monthly" }), "2026-10-11", today).show).toBe(false);
-    expect(evaluateDue(item({ key: "deep_clean_fridges", cadenceType: "monthly" }), "2026-10-10", today).show).toBe(true);
+  it("treats weekly, biweekly, and monthly as 7, 14, and 30 days and still shows them early", () => {
+    const early = evaluateDue(item({ key: "arm_calibration", cadenceType: "weekly" }), "2026-11-03", today);
+    expect(early.show).toBe(true);
+    expect(early.due).toBe(false);
+    expect(early.detail).toContain("needed every 7 days");
+    expect(evaluateDue(item({ key: "arm_calibration", cadenceType: "weekly" }), "2026-11-02", today).due).toBe(true);
+    expect(evaluateDue(item({ key: "deep_clean_nozzles", cadenceType: "biweekly" }), "2026-10-27", today).due).toBe(false);
+    expect(evaluateDue(item({ key: "deep_clean_nozzles", cadenceType: "biweekly" }), "2026-10-26", today).due).toBe(true);
+    expect(evaluateDue(item({ key: "deep_clean_fridges", cadenceType: "monthly" }), "2026-10-11", today).due).toBe(false);
+    expect(evaluateDue(item({ key: "deep_clean_fridges", cadenceType: "monthly" }), "2026-10-10", today).due).toBe(true);
   });
 
   it("shows a threshold step with X, or a blank placeholder", () => {

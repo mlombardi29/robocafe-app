@@ -1132,11 +1132,11 @@ select m.id, 1, 'How long is the UofT milk-module cleaning?', '["About 9 minutes
 from public.models m where m.code = 's22';
 
 insert into public.quiz_questions (model_id, position, prompt, choices, answer_index, explanation, draft)
-select m.id, 2, 'What has to happen before you start the milk-module cleaning?', '["A test drink","The kiosk is in maintenance mode","Arm calibration","The grey-water clasp is closed"]'::jsonb, 1, 'Maintenance mode comes before the cleaning. Don''t touch the module mid-cycle.', true
+select m.id, 2, 'What has to happen before you start the milk-module cleaning?', '["A test drink","The kiosk is in maintenance mode","Scale calibration check","Exit maintenance mode"]'::jsonb, 1, 'Maintenance mode comes before the cleaning. Don''t touch the module mid-cycle.', true
 from public.models m where m.code = 's22';
 
 insert into public.quiz_questions (model_id, position, prompt, choices, answer_index, explanation, draft)
-select m.id, 3, 'During the cleaning, what may you do with the milk?', '["Change the bag and top up 2% milk, and do not touch the tubes","Change the bag only after the cleaning ends","Top up oat milk","Rinse the tubes in the sink"]'::jsonb, 0, 'You can change the bag and top up during the cleaning. UofT is 2% only. Don''t touch the tubes.', true
+select m.id, 3, 'During the cleaning, what may you do with the milk?', '["Change the bag and top up 2% milk, and do not touch the tubes","Change the bag only after the cleaning ends","Top up coffee concentrate and skip the milk","Rinse the tubes in the sink"]'::jsonb, 0, 'You can change the bag and top up during the cleaning. UofT is 2% only. Don''t touch the tubes.', true
 from public.models m where m.code = 's22';
 
 insert into public.quiz_questions (model_id, position, prompt, choices, answer_index, explanation, draft)
@@ -1148,7 +1148,7 @@ select m.id, 5, 'What happens if the three powder spouts are left facing up?', '
 from public.models m where m.code = 's22';
 
 insert into public.quiz_questions (model_id, position, prompt, choices, answer_index, explanation, draft)
-select m.id, 6, 'What is different about syrup cleaning at UofT?', '["Skip syrup cleaning","Move the cup holder out of the way","Park a robotic arm","Do it twice"]'::jsonb, 1, 'At UofT, move the cup holder out of the way. Syrup cleaning is once per visit.', true
+select m.id, 6, 'What is different about syrup cleaning at UofT?', '["Skip syrup cleaning","Move the cup holder out of the way","Turn all three powder spouts down","Do it twice"]'::jsonb, 1, 'At UofT, move the cup holder out of the way. Syrup cleaning is once per visit.', true
 from public.models m where m.code = 's22';
 
 insert into public.quiz_questions (model_id, position, prompt, choices, answer_index, explanation, draft)

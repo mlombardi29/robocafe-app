@@ -98,7 +98,11 @@ export function evaluateDue(item: DueItem, lastDoneAt: string | null, today: str
     return { show: false, due: false, overdue: false, detail: null, placeholder, daysSince: since };
   }
   const due = since == null || since >= n;
-  return { show: due, due, overdue: false, detail: null, placeholder, daysSince: since };
+  const detail =
+    since == null
+      ? `Not recorded yet · needed every ${n} days`
+      : `${due ? "Due" : "Not due"}. Done ${since} day${since === 1 ? "" : "s"} ago · needed every ${n} days`;
+  return { show: true, due, overdue: false, detail, placeholder, daysSince: since };
 }
 
 export type VisitInput = {

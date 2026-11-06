@@ -13,6 +13,7 @@ import { TIMER_DONE_LABEL } from "../lib/buttonStyles";
 import { checklistCardsClass, checklistStackClass } from "../lib/checklistLayout";
 import { CLOCK_OUT_SAVED, COMPLETE_QUEUED, completeFollowUp, unfinishedRequired, type EndNotice } from "../lib/serviceFlow";
 import { enqueue, enqueueAndFlush, flushQueue, forgetVisit, rememberVisit, stableKey, startFreshPractice } from "../lib/sync";
+import { supabase } from "../lib/supabase";
 import type { SnapItem } from "../lib/types";
 import { Button, CheckItem, ErrorText, FreshPracticeDialog, MilkStepCard, Screen } from "../ui";
 
@@ -43,6 +44,10 @@ export function ServicePage() {
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [freshAsk, setFreshAsk] = useState(false);
   const [freshError, setFreshError] = useState("");
+  const [leaveAsk, setLeaveAsk] = useState(false);
+  const [leaveReason, setLeaveReason] = useState("");
+  const [leaveError, setLeaveError] = useState("");
+  const [closedNote, setClosedNote] = useState("");
   const freshNewId = useRef<string | null>(null);
 
   useEffect(() => {
@@ -232,6 +237,33 @@ export function ServicePage() {
     }
   }
 
+  async function abandonVisit() {
+    const id = sessionId ?? query.data?.session?.id;
+    if (!id || leaveReason.trim().length < 3) {
+      setLeaveError("Say why you cannot finish this visit.");
+      return;
+    }
+    setBusy("abandon");
+    setLeaveError("");
+    const { error: rpcError } = await supabase.rpc("abandon_visit", { p_id: id, p_reason: leaveReason.trim() });
+    if (rpcError) {
+      const missing = rpcError.code === "PGRST202" || /abandon_visit/i.test(rpcError.message);
+      setLeaveError(missing ? "Closing a visit this way is not turned on yet. Nothing was closed." : rpcError.message);
+      setBusy("");
+      return;
+    }
+    await forgetVisit(siteId);
+    setRows({});
+    setSessionId(null);
+    setMilkStart(null);
+    setMilkDone(null);
+    setLeaveAsk(false);
+    setLeaveReason("");
+    setClosedNote("This visit was closed without completing. You can start a new one.");
+    setBusy("");
+    await queryClient.invalidateQueries({ queryKey: ["service", siteId] });
+  }
+
   async function startMilk(item: SnapItem, overrideReason: string | null) {
     const id = await ensureSession(false);
     const blockers = groups.flatMap((section) => section.items).filter((entry) => entry.item.blocks_clean_start);
@@ -409,6 +441,21 @@ export function ServicePage() {
             : ""}
         </p>
       ) : null}
+      {milkRunning ? <div className="h-28" aria-hidden="true" /> : null}
+      {milkRunning ? (
+        <div className="fixed inset-x-0 top-0 z-30 mx-auto w-full max-w-[480px] px-4 pt-2">
+          <div className="rounded-2xl bg-stone-900 px-3 py-3 text-white shadow-lg">
+            <p className="text-sm uppercase tracking-wide text-stone-300">Milk cleaning</p>
+            <p className="text-3xl font-semibold">
+              {`${String(Math.floor(milkLeft / 60000)).padStart(2, "0")}:${String(Math.floor((milkLeft % 60000) / 1000)).padStart(2, "0")}`}
+            </p>
+            <Button tone="quiet" className="mt-3 w-full" disabled={busy === "milk-done"} onClick={() => void finishMilk()}>
+              {TIMER_DONE_LABEL}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {closedNote ? <p className="mt-3 rounded-2xl bg-amber-100 px-3 py-3 text-base font-semibold text-stone-900">{closedNote}</p> : null}
       {offerFreshStart(
         Boolean(profile && inPractice(profile.role, profile.mode)),
         Boolean(query.data.site.is_sandbox),
@@ -418,7 +465,7 @@ export function ServicePage() {
           Start a fresh practice visit
         </Button>
       ) : null}
-      {milkStart ? (
+      {milkStart && !milkRunning ? (
         <div className="mt-3 rounded-2xl bg-stone-900 px-3 py-3 text-white">
           <p className="text-sm uppercase tracking-wide text-stone-300">Milk cleaning</p>
           <p className="text-3xl font-semibold">
@@ -495,13 +542,9 @@ export function ServicePage() {
         ))}
       </div>
 
-      {!submitted ? (
-        <Button className="mt-4 w-full" disabled={busy === "complete"} onClick={() => void complete(false)}>
-          Complete service
-        </Button>
-      ) : (
+      {submitted ? (
         <p className="mt-6 text-sm text-stone-600">Submitted. Times are locked. Use My time if something needs a correction.</p>
-      )}
+      ) : null}
       {showBlocked && missingSteps.length > 0 ? (
         <div className="mt-3 grid gap-2" role="alert">
           <p className="text-sm font-medium text-red-700">Still open. Tap a step to go to it.</p>
@@ -547,6 +590,30 @@ export function ServicePage() {
         </div>
       ) : null}
 
+      {leaveAsk ? (
+        <div className="fixed inset-0 z-30 flex items-end bg-black/40 p-4" role="dialog" aria-labelledby="leave-title">
+          <div className="mx-auto w-full max-w-[480px] rounded-3xl bg-white p-4">
+            <h2 id="leave-title" className="text-xl font-semibold">Leave without completing?</h2>
+            <p className="mt-2 text-sm leading-relaxed text-stone-600">
+              The checklist is not done. I’ll come back only saves your clock-out and keeps this visit open.
+              I can’t finish closes it so a new visit can start here.
+            </p>
+            {leaveError ? <p className="mt-3 text-sm font-medium text-red-700" role="alert">{leaveError}</p> : null}
+            <label className="mt-3 block text-sm font-medium text-stone-600">
+              Reason if you can’t finish
+              <textarea className="mt-1 min-h-20 w-full rounded-2xl border border-stone-200 p-3 text-base" value={leaveReason} onChange={(event) => setLeaveReason(event.target.value)} />
+            </label>
+            <div className="mt-3 grid gap-2">
+              <Button disabled={busy === "end"} onClick={() => { setLeaveAsk(false); void endNow(); }}>I’ll come back</Button>
+              <Button tone="quiet" disabled={busy === "abandon" || leaveReason.trim().length < 3} onClick={() => void abandonVisit()}>
+                I can’t finish this visit
+              </Button>
+              <Button tone="quiet" disabled={busy === "abandon"} onClick={() => setLeaveAsk(false)}>Go back</Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {estimate ? (
         <div className="fixed inset-0 z-30 flex items-end bg-black/40 p-4">
           <div className="mx-auto w-full max-w-[480px] rounded-3xl bg-white p-4">
@@ -571,15 +638,20 @@ export function ServicePage() {
             {endNotice.kind === "error" ? endNotice.detail : null}
           </p>
         ) : null}
-        {!query.data.session?.start_at ? (
+        {!started ? (
           <Button className="w-full shadow-lg" disabled={busy === "start" || submitted} onClick={() => void startNow()}>
             Start now
           </Button>
-        ) : (
-          <Button className="w-full shadow-lg" disabled={busy === "end" || submitted} onClick={() => void endNow()}>
-            {endNotice?.kind === "saved" ? "Clock-out saved" : "End now"}
-          </Button>
-        )}
+        ) : !submitted ? (
+          <div className="grid grid-cols-[1.4fr_1fr] gap-2">
+            <Button className="shadow-lg" disabled={busy === "complete"} onClick={() => void complete(false)}>
+              Complete visit
+            </Button>
+            <Button tone="quiet" className="shadow-lg" disabled={busy === "end" || busy === "abandon"} onClick={() => { setLeaveError(""); setLeaveAsk(true); }}>
+              Leave without completing
+            </Button>
+          </div>
+        ) : null}
       </div>
     </Screen>
   );
