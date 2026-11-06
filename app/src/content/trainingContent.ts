@@ -3,16 +3,36 @@
 
 export const trainingContent = {
   "draft": true,
-  "passPercent": 80,
-  "photoShots": [
-    "Overall shot of the kiosk interior, generally clean, before closing up.",
-    "The Cameo (UofT: the milk module) while the cleaning is running.",
-    "Espresso beans topped up (UofT: coffee concentrate).",
-    "Powders topped up.",
-    "Cups and lids topped up (one angle that gets most or all of them).",
-    "The kiosk closed at the end: front glass clean, presentable.",
-    "The three powder spouts facing down, and at RBC the grey-water clasp closed (perpendicular). Both cause big problems if forgotten."
-  ],
+  "passPercent": 100,
+  "photos": {
+    "s35": [
+      "Overall shot of the kiosk interior, generally clean, before closing up.",
+      "The Cameo while the cleaning is running. The countdown is on the Cameo.",
+      "Espresso beans topped up.",
+      "Powders topped up.",
+      "Cups and lids topped up (one angle that gets most or all of them).",
+      "The kiosk closed at the end: front glass clean, presentable.",
+      "The three powder spouts facing down."
+    ],
+    "s22": [
+      "Overall shot of the kiosk interior, generally clean, before closing up.",
+      "The milk module while the cleaning is running. The countdown is on the milk module screen.",
+      "Coffee concentrate topped up.",
+      "Powders topped up.",
+      "Cups and lids topped up (one angle that gets most or all of them).",
+      "The kiosk closed at the end: front glass clean, presentable.",
+      "The three powder spouts facing down."
+    ],
+    "s5": [
+      "Overall shot of the kiosk interior, generally clean, before closing up.",
+      "The Cameo while the cleaning is running. The countdown is on the Cameo.",
+      "Espresso beans topped up.",
+      "Powders topped up.",
+      "Cups and lids topped up (one angle that gets most or all of them).",
+      "The kiosk closed at the end: front glass clean, presentable.",
+      "The three powder spouts facing down, and the grey-water clasp closed (perpendicular)."
+    ]
+  },
   "why": {
     "s35": "Prep comes before milk cleaning because touching the Cameo aborts the cleaning and it has to restart. That means the bean lid, the puck bin, and the top for cleaning balls. The Cameo cleaning is about 11 minutes.\nDuring the cleaning you can change milk bags and top up milk. Don't touch the tubes.\nOnce the cleaning starts, be as productive as possible, and aim to finish your other tasks close to when it is done.\nTurn all three powder spouts back to down-facing, or powder drinks come out as hot water.\nThe claw wipe is gentle. The arm and claw are very sensitive to pressure.\nThe test drink is last, after you exit maintenance mode.\nDoor clearance: when a drink is made, the door slides down to the customer opening, and there is less space at the top than you see while servicing. Don't stack restocked items into the door path.\nArm calibration is weekly and is done before maintenance mode. It cannot be done in maintenance mode.",
     "s22": "Put the kiosk in maintenance mode before the milk-module cleaning. Don't touch or change the module mid-cycle. The cleaning is about 9 minutes.\nDuring the cleaning you can change the milk bag and top up 2% milk. Don't touch the tubes. This kiosk is 2% only.\nOnce the cleaning starts, be as productive as possible, and aim to finish your other tasks close to when it is done.\nTurn all three powder spouts back to down-facing, or powder drinks come out as hot water.\nThe test drink is last, after you exit maintenance mode.\nThere is no service-door clearance step, no claw, and no grey water on this model. It drains to a pipe.",

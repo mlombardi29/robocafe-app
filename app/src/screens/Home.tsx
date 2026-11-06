@@ -61,6 +61,9 @@ export function HomePage() {
             .filter((row) => row.status === "completed" && row.service_date === clock.today)
             .sort((a, b) => String(b.end_at ?? b.submitted_at ?? "").localeCompare(String(a.end_at ?? a.submitted_at ?? "")));
           const completedTodayTime = formatTorontoTime(completedToday[0]?.end_at ?? completedToday[0]?.submitted_at ?? null);
+          const openVisit = siteSessions.find((row) => row.status === "open");
+          const pausedTime = openVisit?.end_at ? formatTorontoTime(openVisit.end_at) : null;
+          const incompleteToday = !openVisit && completedToday.length === 0 && siteSessions.some((row) => row.status === "voided" && row.service_date === clock.today);
           const show = (shows.data ?? []).find((row) => row.site_id === site.id && row.date === clock.today);
           const previous =
             site.cadence === "daily" ? addDays(clock.today, -1) : site.cadence === "mwf" ? previousMwf(clock.today) : null;
@@ -75,7 +78,10 @@ export function HomePage() {
             startedToday: siteSessions.some((row) => row.service_date === clock.today && row.start_at),
             completedDates: completed,
             previousServiceDate: previous,
-            completedTodayTime: completedTodayTime || null,
+            completedTodayTime: openVisit ? null : completedTodayTime || null,
+            pausedTime: pausedTime || null,
+            visitInProgress: Boolean(openVisit && !openVisit.end_at),
+            incompleteToday,
           });
           return (
             <Link key={site.id} to={`/service/${site.id}`} className="block rounded-3xl bg-white p-5 shadow-sm ring-1 ring-black/5">

@@ -40,6 +40,25 @@ export function daysBetween(lastDoneAt: string | null, today: string): number | 
   return Math.floor((end - start) / DAY);
 }
 
+/** Answers whether an every-N-days step should be serviced today. Due once `since` reaches N. */
+export function intervalStatus(since: number | null, n: number): { due: boolean; overdue: boolean; detail: string } {
+  if (since == null) {
+    return { due: true, overdue: false, detail: `Not recorded yet · needed every ${n} days` };
+  }
+  const day = since + 1;
+  const until = n - since;
+  if (until > 1) {
+    return { due: false, overdue: false, detail: `Early. Day ${day} of ${n} — due in ${until} days` };
+  }
+  if (until === 1) {
+    return { due: false, overdue: false, detail: `Early. Day ${day} of ${n} — due tomorrow` };
+  }
+  if (until === 0) {
+    return { due: true, overdue: false, detail: `Due today. Last changed ${since} days ago · every ${n} days` };
+  }
+  return { due: true, overdue: true, detail: `Overdue. Done ${since} days ago · needed every ${n} days` };
+}
+
 function periodDays(item: DueItem): number | null {
   if (item.cadenceType === "weekly") return item.cadenceDays ?? 7;
   if (item.cadenceType === "biweekly") return item.cadenceDays ?? 14;
@@ -52,29 +71,18 @@ export function evaluateDue(item: DueItem, lastDoneAt: string | null, today: str
   const since = daysBetween(lastDoneAt, today);
   const placeholder = item.status === "pending_validation" ? ARM_SENSOR_PLACEHOLDER : null;
 
-  if (item.key === "milk_bag") {
+  if (item.key === "milk_bag" || item.cadenceType === "every_n_days") {
     const limit = item.cadenceDays ?? 4;
-    const due = since == null || since >= limit;
-    return {
-      show: true,
-      due,
-      overdue: false,
-      detail: since == null ? "Days since last bag change: not recorded." : `Days since last bag change: ${since}.`,
-      placeholder,
-      daysSince: since,
-    };
+    const interval = intervalStatus(since, limit);
+    return { show: true, ...interval, placeholder, daysSince: since };
   }
 
   if (item.key === "empty_pucks") {
     const overdue = since == null || since >= 2;
-    return {
-      show: true,
-      due: true,
-      overdue,
-      detail: overdue ? "Overdue. It has been 2 or more days since it was emptied." : "Check the volume.",
-      placeholder,
-      daysSince: since,
-    };
+    const detail = overdue
+      ? "Overdue. It has been 2 or more days since it was emptied."
+      : "Early. Check the volume. Empty it when it is full, or at 2 days.";
+    return { show: true, due: true, overdue, detail, placeholder, daysSince: since };
   }
 
   if (item.cadenceType === "below_threshold") {
@@ -117,6 +125,12 @@ export type VisitInput = {
   startedToday: boolean;
   completedDates: string[];
   previousServiceDate: string | null;
+  /** Open visit that already has a clock-out. */
+  pausedTime?: string | null;
+  /** Open visit with no clock-out yet. */
+  visitInProgress?: boolean;
+  /** Closed without completing, dated today. */
+  incompleteToday?: boolean;
   /** Toronto time already formatted, when this site has a completed visit today. */
   completedTodayTime?: string | null;
 };
@@ -147,6 +161,34 @@ export function visitStatus(input: VisitInput): VisitStatus {
       beforeOpening: false,
       lateForShow: false,
       label: "Offline for the season",
+    };
+  }
+
+  if (input.pausedTime) {
+    return {
+      due: true,
+      missed: false,
+      beforeOpening: false,
+      lateForShow: false,
+      label: `Paused · clocked out ${input.pausedTime}. Resume this visit.`,
+    };
+  }
+  if (input.visitInProgress) {
+    return {
+      due: true,
+      missed: false,
+      beforeOpening: false,
+      lateForShow: false,
+      label: "Visit in progress",
+    };
+  }
+  if (input.incompleteToday) {
+    return {
+      due: false,
+      missed: false,
+      beforeOpening: false,
+      lateForShow: false,
+      label: "Incomplete today",
     };
   }
 

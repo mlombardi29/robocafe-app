@@ -42,7 +42,7 @@ type ModelFile = {
 
 type QuizQ = { prompt: string; choices: string[]; answer: number; explanation: string };
 type QuizFile = { draft: boolean; pass_percent: number; models: Record<string, QuizQ[]> };
-type TrainingFile = { draft: boolean; photo_shots: string[]; why: Record<string, string> };
+type TrainingFile = { draft: boolean; photo_shots?: string[]; photos?: Record<string, string[]>; why: Record<string, string> };
 
 const CADENCE_DAYS: Record<string, number | null> = {
   every_visit: null,
@@ -356,7 +356,11 @@ export const trainingContent = ${JSON.stringify(
   {
     draft: true,
     passPercent: 80,
-    photoShots: training.photo_shots,
+    photos: {
+      s35: training.photos?.s35 ?? training.photo_shots ?? [],
+      s22: training.photos?.s22 ?? training.photo_shots ?? [],
+      s5: training.photos?.s5 ?? training.photo_shots ?? [],
+    },
     why: {
       s35: training.why.s35.trim(),
       s22: training.why.s22.trim(),

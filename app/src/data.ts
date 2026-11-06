@@ -38,8 +38,7 @@ export async function loadRecentSessions(from: string) {
   const { data, error } = await supabase
     .from("service_sessions")
     .select("id, site_id, person_id, service_date, status, start_at, end_at, start_estimated, submitted_at")
-    .gte("service_date", from)
-    .neq("status", "voided");
+    .gte("service_date", from);
   if (error) throw new Error(error.message);
   return data ?? [];
 }

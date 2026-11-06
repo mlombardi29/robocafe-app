@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { AddPersonPage } from "../screens/Admin";
 import type { SiteRow } from "../lib/types";
-import { timerDoneButtonClass } from "../lib/buttonStyles";
+import { composeButtonClass } from "../lib/buttonStyles";
 import { FRESH_OFFLINE, assessFreshStart } from "../lib/freshPractice";
 import { MILK_LOCK_NOT_NEEDED_OK } from "../lib/milkLock";
 import { Button, CheckItem, FreshPracticeDialog, MilkStepCard, PinPad, PracticeBanner, Screen, Title } from "../ui";
@@ -103,10 +103,12 @@ function ChecklistPreview({ showOpen }: { showOpen: boolean }) {
         <Button tone="quiet" className="mt-3 w-full" onClick={() => { setFreshError(""); setFreshAsk(true); }}>
           Start a fresh practice visit
         </Button>
-        <div className="mt-3 rounded-2xl bg-stone-900 px-3 py-3 text-white">
-        <p className="text-sm uppercase tracking-wide text-stone-300">Milk cleaning</p>
-        <p className="text-3xl font-semibold" aria-live="polite">12:40</p>
-        <button type="button" className={timerDoneButtonClass()}>Mark cleaning done</button>
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-stone-900 px-3 py-2 text-white">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-stone-300">Milk cleaning</p>
+          <p className="text-2xl font-semibold leading-none" aria-live="polite">12:40</p>
+        </div>
+        <button type="button" className={composeButtonClass("quiet", "shrink-0 px-3")}>Mark cleaning done</button>
       </div>
       <div className="mt-4 grid gap-2">
         <MilkStepCard
@@ -181,14 +183,21 @@ function ChecklistPreview({ showOpen }: { showOpen: boolean }) {
           }}
         />
       ) : null}
-      <div className="fixed inset-x-0 bottom-16 z-20 mx-auto w-full max-w-[480px] px-4">
-        <button type="button" className="min-h-12 w-full rounded-2xl bg-[var(--accent)] text-base font-semibold text-white shadow-lg">End now</button>
+      <div className="fixed inset-x-0 z-30 mx-auto w-full max-w-[480px] px-4" style={{ bottom: "var(--nav-stack)" }}>
+        <div className="grid gap-2">
+          <button type="button" className="min-h-12 w-full rounded-2xl bg-[var(--accent)] text-base font-semibold text-white shadow-lg">Complete servicing</button>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" className="min-h-12 rounded-2xl bg-white text-base font-semibold text-stone-800 shadow-lg ring-1 ring-stone-200">Pause servicing</button>
+            <button type="button" className="min-h-12 rounded-2xl bg-white text-base font-semibold text-stone-800 shadow-lg ring-1 ring-stone-200">Incomplete today</button>
+          </div>
+        </div>
       </div>
-      <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-black/5 bg-[var(--bg)]">
-        <div className="mx-auto grid max-w-[480px] grid-cols-3 text-center text-sm font-semibold">
-          <span className="flex min-h-14 items-center justify-center">Home</span>
-          <span className="flex min-h-14 items-center justify-center">Training</span>
-          <span className="flex min-h-14 items-center justify-center">My time</span>
+      <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-black/5 bg-[var(--bg)] pb-[env(safe-area-inset-bottom)]">
+        <p className="mx-auto max-w-[480px] px-3 pt-1 text-center text-[11px] leading-tight text-stone-500">Build ui-2026-11-06-abcd</p>
+        <div className="mx-auto grid min-h-16 max-w-[480px] grid-cols-3 text-center text-sm font-semibold">
+          <span className="flex min-h-16 items-center justify-center">Home</span>
+          <span className="flex min-h-16 items-center justify-center">Training</span>
+          <span className="flex min-h-16 items-center justify-center">My time</span>
         </div>
       </nav>
     </Screen>

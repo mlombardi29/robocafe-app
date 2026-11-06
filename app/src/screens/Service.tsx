@@ -441,15 +441,17 @@ export function ServicePage() {
             : ""}
         </p>
       ) : null}
-      {milkRunning ? <div className="h-28" aria-hidden="true" /> : null}
+      {milkRunning ? <div className="h-16" aria-hidden="true" /> : null}
       {milkRunning ? (
         <div className="fixed inset-x-0 top-0 z-30 mx-auto w-full max-w-[480px] px-4 pt-2">
-          <div className="rounded-2xl bg-stone-900 px-3 py-3 text-white shadow-lg">
-            <p className="text-sm uppercase tracking-wide text-stone-300">Milk cleaning</p>
-            <p className="text-3xl font-semibold">
-              {`${String(Math.floor(milkLeft / 60000)).padStart(2, "0")}:${String(Math.floor((milkLeft % 60000) / 1000)).padStart(2, "0")}`}
-            </p>
-            <Button tone="quiet" className="mt-3 w-full" disabled={busy === "milk-done"} onClick={() => void finishMilk()}>
+          <div className="flex items-center justify-between gap-3 rounded-2xl bg-stone-900 px-3 py-2 text-white shadow-lg">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-stone-300">Milk cleaning</p>
+              <p className="text-2xl font-semibold leading-none">
+                {`${String(Math.floor(milkLeft / 60000)).padStart(2, "0")}:${String(Math.floor((milkLeft % 60000) / 1000)).padStart(2, "0")}`}
+              </p>
+            </div>
+            <Button tone="quiet" className="min-h-11 shrink-0 px-3" disabled={busy === "milk-done"} onClick={() => void finishMilk()}>
               {TIMER_DONE_LABEL}
             </Button>
           </div>
@@ -593,20 +595,18 @@ export function ServicePage() {
       {leaveAsk ? (
         <div className="fixed inset-0 z-30 flex items-end bg-black/40 p-4" role="dialog" aria-labelledby="leave-title">
           <div className="mx-auto w-full max-w-[480px] rounded-3xl bg-white p-4">
-            <h2 id="leave-title" className="text-xl font-semibold">Leave without completing?</h2>
+            <h2 id="leave-title" className="text-xl font-semibold">Incomplete today?</h2>
             <p className="mt-2 text-sm leading-relaxed text-stone-600">
-              The checklist is not done. I’ll come back only saves your clock-out and keeps this visit open.
-              I can’t finish closes it so a new visit can start here.
+              Are you sure? This does not finish the checklist. It closes the visit for today so a new one can start here. Payroll can see it later as incomplete.
             </p>
             {leaveError ? <p className="mt-3 text-sm font-medium text-red-700" role="alert">{leaveError}</p> : null}
             <label className="mt-3 block text-sm font-medium text-stone-600">
-              Reason if you can’t finish
-              <textarea className="mt-1 min-h-20 w-full rounded-2xl border border-stone-200 p-3 text-base" value={leaveReason} onChange={(event) => setLeaveReason(event.target.value)} />
+              Reason
+              <textarea className="mt-1 min-h-24 w-full rounded-2xl border border-stone-200 p-3 text-base" value={leaveReason} onChange={(event) => setLeaveReason(event.target.value)} />
             </label>
             <div className="mt-3 grid gap-2">
-              <Button disabled={busy === "end"} onClick={() => { setLeaveAsk(false); void endNow(); }}>I’ll come back</Button>
-              <Button tone="quiet" disabled={busy === "abandon" || leaveReason.trim().length < 3} onClick={() => void abandonVisit()}>
-                I can’t finish this visit
+              <Button disabled={busy === "abandon" || leaveReason.trim().length < 3} onClick={() => void abandonVisit()}>
+                Are you sure? Close this visit
               </Button>
               <Button tone="quiet" disabled={busy === "abandon"} onClick={() => setLeaveAsk(false)}>Go back</Button>
             </div>
@@ -628,10 +628,10 @@ export function ServicePage() {
         </div>
       ) : null}
 
-      <div className="fixed inset-x-0 bottom-16 z-20 mx-auto w-full max-w-[480px] px-4">
+      <div className="fixed inset-x-0 z-30 mx-auto w-full max-w-[480px] px-4" style={{ bottom: "var(--nav-stack)" }}>
         {endNotice ? (
           <p className="mb-2 rounded-2xl bg-amber-100 px-3 py-3 text-base font-semibold text-stone-900 shadow-sm ring-1 ring-amber-300" aria-live="polite">
-            {endNotice.kind === "saved" ? `Clock-out saved at ${formatTorontoTime(endNotice.iso)}. ${CLOCK_OUT_SAVED}` : null}
+            {endNotice.kind === "saved" ? `Paused. Clock-out saved at ${formatTorontoTime(endNotice.iso)}. ${CLOCK_OUT_SAVED} Resume it from Home.` : null}
             {endNotice.kind === "queued"
               ? `Saved on this phone (${formatWhen(endNotice.iso)}). It will sync when you are online.`
               : null}
@@ -643,13 +643,18 @@ export function ServicePage() {
             Start now
           </Button>
         ) : !submitted ? (
-          <div className="grid grid-cols-[1.4fr_1fr] gap-2">
-            <Button className="shadow-lg" disabled={busy === "complete"} onClick={() => void complete(false)}>
-              Complete visit
+          <div className="grid gap-2">
+            <Button className="w-full shadow-lg" disabled={busy === "complete"} onClick={() => void complete(false)}>
+              Complete servicing
             </Button>
-            <Button tone="quiet" className="shadow-lg" disabled={busy === "end" || busy === "abandon"} onClick={() => { setLeaveError(""); setLeaveAsk(true); }}>
-              Leave without completing
-            </Button>
+            <div className="grid grid-cols-2 gap-2">
+              <Button tone="quiet" className="shadow-lg" disabled={busy === "end"} onClick={() => void endNow()}>
+                Pause servicing
+              </Button>
+              <Button tone="quiet" className="shadow-lg" disabled={busy === "abandon"} onClick={() => { setLeaveError(""); setLeaveAsk(true); }}>
+                Incomplete today
+              </Button>
+            </div>
           </div>
         ) : null}
       </div>

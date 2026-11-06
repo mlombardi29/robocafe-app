@@ -3,7 +3,7 @@ import { composeButtonClass, type ButtonTone } from "./lib/buttonStyles";
 import { actionButtonClass, actionRowClass, disclosureClass, noteFieldClass, stepCardClass } from "./lib/checklistLayout";
 
 export function Screen({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`mx-auto min-h-screen w-full max-w-[480px] px-4 pb-44 pt-4 ${className}`}>{children}</div>;
+  return <div className={`mx-auto min-h-screen w-full max-w-[480px] px-4 pb-[calc(var(--nav-stack)+11rem)] pt-4 ${className}`}>{children}</div>;
 }
 
 export function PracticeBanner({ show }: { show: boolean }) {

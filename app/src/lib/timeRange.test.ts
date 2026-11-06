@@ -11,6 +11,8 @@ describe("My Time ranges", () => {
     expect(rangeBounds("this-month", "2026-11-05").from).toBe("2026-11-01");
     expect(rangeBounds("past-month", "2026-11-05")).toEqual({ from: "2026-10-01", to: "2026-10-31" });
     expect(rangeBounds("past-year", "2026-11-05")).toEqual({ from: "2025-01-01", to: "2025-12-31" });
+    expect(rangeBounds("this-year", "2026-11-05")).toEqual({ from: "2026-01-01", to: "2026-11-05" });
+    expect(rangeBounds("all-time", "2026-11-05")).toEqual({ from: "2000-01-01", to: "2026-11-05" });
   });
 
   it("formats a 22 minute visit", () => {

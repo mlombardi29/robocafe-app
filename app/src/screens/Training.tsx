@@ -47,9 +47,13 @@ export function TrainingHome() {
       <div className="grid gap-3">
         {(models.data ?? []).map((model) => {
           const row = (progress.data ?? []).find((item) => item.model_id === model.id);
+          const passed = row?.status === "quiz_passed" || row?.status === "solo" || row?.status === "signed_off";
           return (
             <Link key={model.id} to={`/training/${model.code}`} className="block rounded-3xl bg-white p-5 shadow-sm ring-1 ring-black/5">
-              <div className="text-xl font-semibold">{model.name}</div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xl font-semibold">{model.name}</div>
+                {passed ? <span className="text-lg font-bold text-emerald-700" aria-label="Passed">✓</span> : null}
+              </div>
               <div className="text-sm text-stone-600">{STATUS_LABEL[row?.status ?? "in_training"]}</div>
             </Link>
           );
@@ -93,7 +97,7 @@ export function TrainingModelPage() {
     },
   });
   const why = trainingContent.why[code as keyof typeof trainingContent.why];
-  const overview = why?.split("\n").find((line) => line.trim()) ?? "";
+  const overview = (why ?? "").split("\n").map((line) => line.trim()).filter(Boolean);
   const places = useQuery({
     queryKey: ["model-sites", model.data?.id],
     enabled: Boolean(model.data),
@@ -113,7 +117,11 @@ export function TrainingModelPage() {
     <Screen>
       <Link to="/training" className="text-sm font-semibold text-[var(--accent)]">Training</Link>
       <Title sub={(places.data ?? []).join(", ") || "Locations"}>{model.data?.name ?? "Guide"}</Title>
-      {overview ? <p className="mb-4 text-base leading-relaxed text-stone-700">{overview}</p> : null}
+      {overview.length ? (
+        <div className="mb-4 grid gap-3 text-base leading-relaxed text-stone-700">
+          {overview.map((line) => <p key={line}>{line}</p>)}
+        </div>
+      ) : null}
       <div className="grid gap-3">
         {(guide.data ?? []).map((section) => (
           <Card key={section.id}>
@@ -136,7 +144,7 @@ export function TrainingModelPage() {
         <h2 className="font-semibold">Photo list for the first three visits</h2>
         <p className="mt-1 text-sm text-stone-600">Text only for now. Upload is later.</p>
         <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-stone-700">
-          {trainingContent.photoShots.map((shot) => (
+          {(trainingContent.photos[code as keyof typeof trainingContent.photos] ?? []).map((shot) => (
             <li key={shot}>{shot}</li>
           ))}
         </ol>
@@ -201,7 +209,7 @@ export function QuizPage() {
       return;
     }
     const row = data as { score: number; passed: boolean };
-    setResult(row.passed ? `Certified (${row.score} correct).` : `The server did not certify this yet (${row.score} correct).`);
+    setResult(row.passed ? "You got 100%." : `The server did not certify this yet (${row.score} correct).`);
     await queryClient.invalidateQueries({ queryKey: ["training"] });
   }
 
@@ -218,11 +226,22 @@ export function QuizPage() {
             <Card key={question.id} className={right ? "ring-emerald-400" : missed ? "ring-red-400" : ""}>
               <p className="font-semibold">{index + 1}. {question.prompt}</p>
               <div className="mt-2 grid gap-2">
-                {question.choices.map((choice, choiceIndex) => (
+                {question.choices.map((choice, choiceIndex) => {
+                  const selected = picked === choiceIndex;
+                  const selectedCorrect = checked && selected && choiceIndex === question.answer_index;
+                  const selectedWrong = checked && selected && choiceIndex !== question.answer_index;
+                  const tone = selectedCorrect
+                    ? "bg-emerald-600 text-white"
+                    : selectedWrong
+                      ? "bg-red-700 text-white"
+                      : selected
+                        ? "bg-[var(--accent)] text-white"
+                        : "bg-stone-100";
+                  return (
                   <button
                     key={choice}
                     type="button"
-                    className={`min-h-12 rounded-2xl px-3 text-left text-base ${picked === choiceIndex ? "bg-[var(--accent)] text-white" : "bg-stone-100"}`}
+                    className={`min-h-12 rounded-2xl px-3 text-left text-base ${tone}`}
                     onClick={() => {
                       setChecked(false);
                       setAnswers((current) => ({ ...current, [question.position]: choiceIndex }));
@@ -230,7 +249,8 @@ export function QuizPage() {
                   >
                     {choice}
                   </button>
-                ))}
+                  );
+                })}
               </div>
               {missed && question.explanation ? <p className="mt-2 text-sm text-red-800">{question.explanation}</p> : null}
               {right ? <p className="mt-2 text-sm font-medium text-emerald-800">Correct</p> : null}
@@ -238,6 +258,11 @@ export function QuizPage() {
           );
         })}
       </div>
+      {checked ? (
+        <p className="mt-4 text-base font-semibold">
+          {wrong.length === 0 ? "You got 100%." : `You got ${ordered.length - wrong.length} of ${ordered.length} (${Math.round(((ordered.length - wrong.length) / ordered.length) * 100)}%).`}
+        </p>
+      ) : null}
       <Button className="mt-4 w-full" disabled={!allAnswered} onClick={() => setChecked(true)}>Check answers</Button>
       {checked && wrong.length > 0 ? (
         <Button

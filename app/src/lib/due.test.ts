@@ -21,12 +21,12 @@ describe("evaluateDue", () => {
     expect(result.due).toBe(true);
   });
 
-  it("keeps a recent every-n-days step visible and marked not due", () => {
+  it("keeps a recent every-n-days step visible and says when it is due", () => {
     const step = item({ key: "filters", cadenceType: "every_n_days", cadenceDays: 4 });
     const recent = evaluateDue(step, "2026-11-08", today);
     expect(recent.show).toBe(true);
     expect(recent.due).toBe(false);
-    expect(recent.detail).toBe("Not due. Done 1 day ago · needed every 4 days");
+    expect(recent.detail).toBe("Early. Day 2 of 4 — due in 3 days");
     expect(evaluateDue(step, null, today).show).toBe(true);
     expect(evaluateDue(step, "2026-11-05", today).due).toBe(true);
   });
@@ -66,11 +66,14 @@ describe("evaluateDue", () => {
     const fresh = evaluateDue(step, "2026-11-07", today);
     expect(fresh.show).toBe(true);
     expect(fresh.due).toBe(false);
-    expect(fresh.detail).toBe("Days since last bag change: 2.");
+    expect(fresh.detail).toBe("Early. Day 3 of 4 — due in 2 days");
+    const tomorrow = evaluateDue(step, "2026-11-06", today);
+    expect(tomorrow.detail).toBe("Early. Day 4 of 4 — due tomorrow");
     const old = evaluateDue(step, "2026-11-04", today);
     expect(old.due).toBe(true);
-    expect(old.detail).toBe("Days since last bag change: 5.");
-    expect(evaluateDue(step, null, today).detail).toBe("Days since last bag change: not recorded.");
+    expect(old.overdue).toBe(true);
+    expect(old.detail).toContain("Overdue");
+    expect(evaluateDue(step, null, today).detail).toBe("Not recorded yet · needed every 4 days");
   });
 
   it("shows the puck bin and highlights overdue at 2 days", () => {
@@ -195,6 +198,9 @@ describe("visitStatus", () => {
 
   it("keeps an inactive site off the due list", () => {
     expect(visitStatus({ ...base, cadence: "show_days", active: false }).label).toBe("Offline for the season");
+    expect(visitStatus({ ...base, cadence: "daily", pausedTime: "6:23 PM" }).label).toContain("Paused · clocked out 6:23 PM");
+    expect(visitStatus({ ...base, cadence: "daily", visitInProgress: true }).label).toBe("Visit in progress");
+    expect(visitStatus({ ...base, cadence: "daily", incompleteToday: true }).label).toBe("Incomplete today");
   });
 });
 

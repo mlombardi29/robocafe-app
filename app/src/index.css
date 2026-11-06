@@ -6,6 +6,7 @@
   color-scheme: light;
   --bg: #f4f1ea;
   --accent: #0f766e;
+  --nav-stack: calc(5.75rem + env(safe-area-inset-bottom));
 }
 
 html[data-mode="practice"] {

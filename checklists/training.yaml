@@ -1,12 +1,29 @@
 draft: true
-photo_shots:
-  - "Overall shot of the kiosk interior, generally clean, before closing up."
-  - "The Cameo (UofT: the milk module) while the cleaning is running."
-  - "Espresso beans topped up (UofT: coffee concentrate)."
-  - "Powders topped up."
-  - "Cups and lids topped up (one angle that gets most or all of them)."
-  - "The kiosk closed at the end: front glass clean, presentable."
-  - "The three powder spouts facing down, and at RBC the grey-water clasp closed (perpendicular). Both cause big problems if forgotten."
+photos:
+  s35:
+    - "Overall shot of the kiosk interior, generally clean, before closing up."
+    - "The Cameo while the cleaning is running. The countdown is on the Cameo."
+    - "Espresso beans topped up."
+    - "Powders topped up."
+    - "Cups and lids topped up (one angle that gets most or all of them)."
+    - "The kiosk closed at the end: front glass clean, presentable."
+    - "The three powder spouts facing down."
+  s22:
+    - "Overall shot of the kiosk interior, generally clean, before closing up."
+    - "The milk module while the cleaning is running. The countdown is on the milk module screen."
+    - "Coffee concentrate topped up."
+    - "Powders topped up."
+    - "Cups and lids topped up (one angle that gets most or all of them)."
+    - "The kiosk closed at the end: front glass clean, presentable."
+    - "The three powder spouts facing down."
+  s5:
+    - "Overall shot of the kiosk interior, generally clean, before closing up."
+    - "The Cameo while the cleaning is running. The countdown is on the Cameo."
+    - "Espresso beans topped up."
+    - "Powders topped up."
+    - "Cups and lids topped up (one angle that gets most or all of them)."
+    - "The kiosk closed at the end: front glass clean, presentable."
+    - "The three powder spouts facing down, and the grey-water clasp closed (perpendicular)."
 why:
   s35: |
     Prep comes before milk cleaning because touching the Cameo aborts the cleaning and it has to restart. That means the bean lid, the puck bin, and the top for cleaning balls. The Cameo cleaning is about 11 minutes.

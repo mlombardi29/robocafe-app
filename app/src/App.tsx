@@ -110,7 +110,7 @@ function Shell() {
       <Outlet />
       <p className="sr-only">Build {UI_BUILD}</p>
       <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-black/5 bg-[var(--bg)] pb-[env(safe-area-inset-bottom)]">
-        <p className="mx-auto max-w-[480px] px-3 pt-1 text-center text-xs text-stone-500">Build {UI_BUILD}</p>
+        <p className="mx-auto max-w-[480px] px-3 pt-1 text-center text-[11px] leading-tight text-stone-500">Build {UI_BUILD}</p>
         <div className={`mx-auto grid max-w-[480px] ${admin ? "grid-cols-4" : "grid-cols-3"} text-center text-base font-semibold`}>
           <Tab to="/">Home</Tab>
           <Tab to="/training">Training</Tab>

@@ -1,6 +1,6 @@
 /** Date windows for My Time. Days are YYYY-MM-DD. */
 
-export type RangeKey = "this-week" | "past-week" | "this-month" | "past-month" | "past-year" | "custom";
+export type RangeKey = "this-week" | "past-week" | "this-month" | "past-month" | "this-year" | "past-year" | "all-time" | "custom";
 
 function parseDay(day: string): Date {
   return new Date(`${day}T00:00:00Z`);
@@ -41,6 +41,12 @@ export function rangeBounds(
   }
   if (key === "this-month") {
     return { from: `${today.slice(0, 7)}-01`, to: today };
+  }
+  if (key === "this-year") {
+    return { from: `${today.slice(0, 4)}-01-01`, to: today };
+  }
+  if (key === "all-time") {
+    return { from: "2000-01-01", to: today };
   }
   if (key === "past-month") {
     const firstThis = parseDay(`${today.slice(0, 7)}-01`);

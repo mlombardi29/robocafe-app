@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { useAuth } from "../auth";
 import { formatTorontoTime, instantOnTorontoDay, torontoNow } from "../lib/dates";
 import { durationLabel, durationMinutes, inRange, rangeBounds, type RangeKey } from "../lib/timeRange";
@@ -9,11 +10,9 @@ import { Button, Card, ErrorText, Field, Screen, Title, inputClass } from "../ui
 const SIX_HOURS = 6 * 60 * 60 * 1000;
 const RANGES: { key: RangeKey; label: string }[] = [
   { key: "this-week", label: "This week" },
-  { key: "past-week", label: "Past week" },
   { key: "this-month", label: "This month" },
-  { key: "past-month", label: "Past month" },
-  { key: "past-year", label: "Past year" },
-  { key: "custom", label: "Custom" },
+  { key: "this-year", label: "This year" },
+  { key: "all-time", label: "All time" },
 ];
 
 type Session = {
@@ -39,6 +38,7 @@ export function TimePage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [range, setRange] = useState<RangeKey>("this-month");
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [customFrom, setCustomFrom] = useState(today);
   const [customTo, setCustomTo] = useState(today);
   const [siteId, setSiteId] = useState("all");
@@ -73,13 +73,16 @@ export function TimePage() {
     return inRange(row.service_date, bounds.from, bounds.to);
   });
 
-  const groups = useMemo(() => {
-    const map = new Map<string, Session[]>();
+  const years = useMemo(() => {
+    const yearMap = new Map<string, Map<string, Session[]>>();
     for (const row of visible) {
-      const key = row.service_date.slice(0, 7);
-      map.set(key, [...(map.get(key) ?? []), row]);
+      const year = row.service_date.slice(0, 4);
+      const month = row.service_date.slice(0, 7);
+      const months = yearMap.get(year) ?? new Map<string, Session[]>();
+      months.set(month, [...(months.get(month) ?? []), row]);
+      yearMap.set(year, months);
     }
-    return [...map.entries()];
+    return [...yearMap.entries()].map(([year, months]) => [year, [...months.entries()]] as const);
   }, [visible]);
 
   async function send() {
@@ -138,14 +141,37 @@ export function TimePage() {
         </div>
       ) : null}
       <div className="grid gap-4">
-        {groups.map(([month, rows]) => {
+        {years.map(([year, months]) => {
+          const multiYear = years.length > 1;
+          const yearOpen = !multiYear || year === today.slice(0, 4) || openGroups[year];
+          const yearCount = months.reduce((sum, [, rows]) => sum + rows.length, 0);
+          return (
+            <section key={year}>
+              {multiYear ? (
+                <button
+                  type="button"
+                  className="mb-2 min-h-11 text-left text-lg font-semibold"
+                  onClick={() => setOpenGroups((current) => ({ ...current, [year]: !yearOpen }))}
+                >
+                  {year} · {yearCount} visit{yearCount === 1 ? "" : "s"}{yearOpen ? " · Hide" : " · Show"}
+                </button>
+              ) : null}
+              {yearOpen ? months.map(([month, rows]) => {
           const total = rows.reduce((sum, row) => sum + (durationMinutes(row.start_at, row.end_at) ?? 0), 0);
+          const collapse = visible.length > 10;
+          const currentMonth = today.slice(0, 7);
+          const open = !collapse || month === currentMonth || openGroups[month];
           return (
             <section key={month}>
-              <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-stone-500">
+              <button
+                type="button"
+                className="mb-2 min-h-11 text-left text-sm font-bold uppercase tracking-wide text-stone-500"
+                onClick={() => setOpenGroups((current) => ({ ...current, [month]: !open }))}
+              >
                 {month} · {rows.length} visit{rows.length === 1 ? "" : "s"} · {durationLabel(total)}
-              </h2>
-              <div className="grid gap-3">
+                {collapse ? (open ? " · Hide" : " · Show") : ""}
+              </button>
+              {open ? <div className="grid gap-3">
                 {rows.map((row) => {
                   const site = Array.isArray(row.sites) ? row.sites[0] : row.sites;
                   const long = row.start_at && row.end_at && new Date(row.end_at).getTime() - new Date(row.start_at).getTime() > SIX_HOURS;
@@ -156,9 +182,14 @@ export function TimePage() {
                         {formatTorontoTime(row.start_at)} to {formatTorontoTime(row.end_at)} · {durationLabel(durationMinutes(row.start_at, row.end_at))}
                       </p>
                       {long ? <p className="mt-1 text-sm font-medium text-amber-800">Over 6 hours. Check AM/PM.</p> : null}
-                      <Button className="mt-3" tone="quiet" onClick={() => { setOpenId(row.id); setDate(row.service_date); }}>
-                        Request a correction
-                      </Button>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <Link to={`/history/${row.id}`} className="flex min-h-12 items-center justify-center rounded-2xl bg-white px-3 text-center text-base font-semibold text-stone-800 ring-1 ring-stone-200">
+                          View servicing
+                        </Link>
+                        <Button tone="quiet" onClick={() => { setOpenId(row.id); setDate(row.service_date); }}>
+                          Request a correction
+                        </Button>
+                      </div>
                       {openId === row.id ? (
                         <div className="mt-3">
                           <Field label="What should change?">
@@ -179,7 +210,10 @@ export function TimePage() {
                     </Card>
                   );
                 })}
-              </div>
+              </div> : null}
+            </section>
+          );
+              }) : null}
             </section>
           );
         })}

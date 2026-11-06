@@ -8,16 +8,35 @@ import { supabase } from "../lib/supabase";
 import type { Role, SiteRow } from "../lib/types";
 import { Button, Card, ErrorText, Field, Screen, Title, inputClass } from "../ui";
 
-const links = [
-  ["/admin/people/new", "Add a person"],
-  ["/admin/people", "People"],
-  ["/admin/corrections", "Time corrections"],
-  ["/admin/trainees", "Trainees"],
-  ["/admin/shows", "RBC show days"],
-  ["/admin/checklist", "Checklist items"],
-  ["/admin/practice", "Reset one person's practice"],
-  ["/admin/access", "Site access"],
-  ["/admin/offboarding", "Offboarding"],
+const sections: { title: string; links: [string, string][] }[] = [
+  {
+    title: "People",
+    links: [
+      ["/admin/people/new", "Add a person"],
+      ["/admin/people", "Manage profiles"],
+      ["/admin/trainees", "Trainees"],
+      ["/admin/offboarding", "Offboarding"],
+    ],
+  },
+  {
+    title: "Training",
+    links: [["/admin/practice", "Reset one person's practice"]],
+  },
+  {
+    title: "Scheduling",
+    links: [
+      ["/admin/shows", "RBC show days"],
+      ["/admin/corrections", "Time corrections"],
+    ],
+  },
+  {
+    title: "Inventory",
+    links: [["/admin/checklist", "Order thresholds"]],
+  },
+  {
+    title: "Locations",
+    links: [["/admin/access", "Site access"]],
+  },
 ];
 
 export function AdminHome() {
@@ -35,14 +54,21 @@ export function AdminHome() {
   return (
     <Screen>
       <Title sub={pending.data ? `${pending.data} waiting` : "Nothing waiting"}>Admin</Title>
-      <div className="grid gap-3">
-        {links.map(([to, label]) => (
-          <Link key={to} to={to} className="flex min-h-12 items-center justify-between rounded-3xl bg-white px-4 text-lg font-semibold shadow-sm ring-1 ring-black/5">
-            <span>{label}</span>
-            {to === "/admin/corrections" && (pending.data ?? 0) > 0 ? (
-              <span className="rounded-full bg-red-700 px-2 text-sm text-white">{pending.data}</span>
-            ) : null}
-          </Link>
+      <div className="grid gap-5">
+        {sections.map((section) => (
+          <section key={section.title}>
+            <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-stone-500">{section.title}</h2>
+            <div className="grid gap-3">
+              {section.links.map(([to, label]) => (
+                <Link key={to} to={to} className="flex min-h-12 items-center justify-between rounded-3xl bg-white px-4 text-lg font-semibold shadow-sm ring-1 ring-black/5">
+                  <span>{label}</span>
+                  {to === "/admin/corrections" && (pending.data ?? 0) > 0 ? (
+                    <span className="rounded-full bg-red-700 px-2 text-sm text-white">{pending.data}</span>
+                  ) : null}
+                </Link>
+              ))}
+            </div>
+          </section>
         ))}
       </div>
     </Screen>
@@ -459,7 +485,7 @@ export function ChecklistPage() {
   return (
     <Screen>
       <Link to="/admin" className="text-sm font-semibold text-[var(--accent)]">Admin</Link>
-      <Title sub="Threshold numbers are TODO until you set them. Blank means “Check. Fill if low.”">Checklist</Title>
+      <Title sub="Leave every number blank until it is approved. Blank means “Check. Fill if low.”">Order thresholds</Title>
       {item ? (
         <Card>
           <Field label="Title"><input className={inputClass} defaultValue={item.title} onBlur={(event) => void saveItem({ title: event.target.value })} /></Field>
