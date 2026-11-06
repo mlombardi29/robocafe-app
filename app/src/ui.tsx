@@ -245,7 +245,7 @@ export function FreshPracticeDialog({
   onConfirm: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-30 flex items-end bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="fresh-practice-title">
+    <div className="fixed inset-0 z-40 flex items-end bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="fresh-practice-title">
       <div className="mx-auto w-full max-w-[480px] rounded-3xl bg-white p-4">
         <h2 id="fresh-practice-title" className="text-xl font-semibold">Start a fresh practice visit?</h2>
         <p className="mt-2 text-sm leading-relaxed text-stone-600">

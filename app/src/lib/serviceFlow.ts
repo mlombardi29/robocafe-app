@@ -75,6 +75,20 @@ export type EndNotice =
   | { kind: "queued"; iso: string; detail: string }
   | { kind: "error"; iso: string; detail: string };
 
+/** Pause confirmation. Long enough to read, short enough that it cannot sit on the next tap. */
+export const SUCCESS_TOAST_MS = 1000;
+
+export function successToast(notice: EndNotice | null): boolean {
+  return notice?.kind === "saved" || notice?.kind === "queued";
+}
+
+/** A confirmation dialog hides a pause/success toast. Errors stay for after the dialog closes. */
+export function visibleEndNotice(notice: EndNotice | null, modalOpen: boolean): EndNotice | null {
+  if (!notice) return null;
+  if (modalOpen && successToast(notice)) return null;
+  return notice;
+}
+
 export function endNotice(iso: string, outcome: EndUpdateOutcome, failedKind: string | null): EndNotice {
   if (outcome.ok && (failedKind === null || failedKind === "end")) {
     return { kind: "saved", iso };

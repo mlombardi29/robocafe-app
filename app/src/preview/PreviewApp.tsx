@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { AddPersonPage } from "../screens/Admin";
 import type { SiteRow } from "../lib/types";
 import { composeButtonClass } from "../lib/buttonStyles";
+import { CLOCK_OUT_SAVED, SUCCESS_TOAST_MS, successToast, visibleEndNotice, type EndNotice } from "../lib/serviceFlow";
 import { FRESH_OFFLINE, assessFreshStart } from "../lib/freshPractice";
 import { MILK_LOCK_NOT_NEEDED_OK } from "../lib/milkLock";
 import { Button, CheckItem, FreshPracticeDialog, MilkStepCard, PinPad, PracticeBanner, Screen, Title } from "../ui";
@@ -64,6 +65,8 @@ export default function PreviewApp() {
     );
   }
 
+  if (screen === "toast") return <ToastPreview />;
+
   if (screen === "checklist" || screen === "checklist-open") {
     return <ChecklistPreview showOpen={screen === "checklist-open"} />;
   }
@@ -88,6 +91,59 @@ export default function PreviewApp() {
   }
 
   return <AddPersonPage preview previewSites={sites} />;
+}
+
+function ToastPreview() {
+  const [endNotice, setEndNotice] = useState<EndNotice | null>(null);
+  const [leaveAsk, setLeaveAsk] = useState(false);
+  const shown = visibleEndNotice(endNotice, leaveAsk);
+
+  useEffect(() => {
+    if (!successToast(endNotice)) return;
+    const timer = window.setTimeout(() => setEndNotice(null), SUCCESS_TOAST_MS);
+    return () => window.clearTimeout(timer);
+  }, [endNotice]);
+
+  return (
+    <Screen>
+      <Title sub="Pause toast must not cover this">Incomplete today</Title>
+      <button
+        type="button"
+        className="min-h-12 rounded-2xl bg-white px-4 font-semibold ring-1 ring-stone-200"
+        onClick={() => setEndNotice({ kind: "saved", iso: "2026-11-06T04:45:00.000Z" })}
+      >
+        Pause servicing
+      </button>
+      <button
+        type="button"
+        className="mt-2 min-h-12 rounded-2xl bg-white px-4 font-semibold ring-1 ring-stone-200"
+        onClick={() => {
+          setEndNotice((current) => (successToast(current) ? null : current));
+          setLeaveAsk(true);
+        }}
+      >
+        Incomplete today
+      </button>
+      {leaveAsk ? (
+        <div className="fixed inset-0 z-40 flex items-end bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="leave-title">
+          <div className="mx-auto w-full max-w-[480px] rounded-3xl bg-white p-4">
+            <h2 id="leave-title" className="text-xl font-semibold">Incomplete today?</h2>
+            <p className="mt-2 text-sm text-stone-600">Are you sure? This does not finish the checklist.</p>
+            <button type="button" className="mt-3 min-h-12 w-full rounded-2xl bg-[var(--accent)] font-semibold text-white" onClick={() => setLeaveAsk(false)}>
+              Go back
+            </button>
+          </div>
+        </div>
+      ) : null}
+      <div className="fixed inset-x-0 z-30 mx-auto w-full max-w-[480px] px-4" style={{ bottom: "var(--nav-stack)" }} data-toast={shown ? "visible" : "hidden"}>
+        {shown?.kind === "saved" ? (
+          <p className="mb-2 rounded-2xl bg-amber-100 px-3 py-3 text-base font-semibold text-stone-900 shadow-sm ring-1 ring-amber-300">
+            Paused. Clock-out saved at 11:45 PM. {CLOCK_OUT_SAVED} Resume it from Home.
+          </p>
+        ) : null}
+      </div>
+    </Screen>
+  );
 }
 
 function ChecklistPreview({ showOpen }: { showOpen: boolean }) {
@@ -193,7 +249,7 @@ function ChecklistPreview({ showOpen }: { showOpen: boolean }) {
         </div>
       </div>
       <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-black/5 bg-[var(--bg)] pb-[env(safe-area-inset-bottom)]">
-        <p className="mx-auto max-w-[480px] px-3 pt-1 text-center text-[11px] leading-tight text-stone-500">Build ui-2026-11-06-abcd</p>
+        <p className="mx-auto max-w-[480px] px-3 pt-1 text-center text-[11px] leading-tight text-stone-500">Build ui-2026-11-06-toast</p>
         <div className="mx-auto grid min-h-16 max-w-[480px] grid-cols-3 text-center text-sm font-semibold">
           <span className="flex min-h-16 items-center justify-center">Home</span>
           <span className="flex min-h-16 items-center justify-center">Training</span>

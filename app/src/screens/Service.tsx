@@ -11,7 +11,7 @@ import { milkCleanRunning, milkStepLocks } from "../lib/milkLock";
 import type { CompletionWrite } from "../lib/queue";
 import { TIMER_DONE_LABEL } from "../lib/buttonStyles";
 import { checklistCardsClass, checklistStackClass } from "../lib/checklistLayout";
-import { CLOCK_OUT_SAVED, COMPLETE_QUEUED, completeFollowUp, unfinishedRequired, type EndNotice } from "../lib/serviceFlow";
+import { CLOCK_OUT_SAVED, COMPLETE_QUEUED, SUCCESS_TOAST_MS, completeFollowUp, successToast, unfinishedRequired, visibleEndNotice, type EndNotice } from "../lib/serviceFlow";
 import { enqueue, enqueueAndFlush, flushQueue, forgetVisit, rememberVisit, stableKey, startFreshPractice } from "../lib/sync";
 import { supabase } from "../lib/supabase";
 import type { SnapItem } from "../lib/types";
@@ -49,11 +49,19 @@ export function ServicePage() {
   const [leaveError, setLeaveError] = useState("");
   const [closedNote, setClosedNote] = useState("");
   const freshNewId = useRef<string | null>(null);
+  const dialogOpen = useRef(false);
+  dialogOpen.current = leaveAsk || override || estimate || freshAsk;
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!successToast(endNotice)) return;
+    const timer = window.setTimeout(() => setEndNotice(null), SUCCESS_TOAST_MS);
+    return () => window.clearTimeout(timer);
+  }, [endNotice]);
 
   useEffect(() => {
     if (!query.data) return;
@@ -219,8 +227,9 @@ export function ServicePage() {
     const end = new Date().toISOString();
     try {
       const result = await enqueueAndFlush({ kind: "end", id, end });
-      if (result.ok) setEndNotice({ kind: "saved", iso: end });
-      else if (result.retry) {
+      if (result.ok) {
+        if (!dialogOpen.current) setEndNotice({ kind: "saved", iso: end });
+      } else if (result.retry) {
         setEndNotice({ kind: "queued", iso: end, detail: result.error ?? "It will sync when you are online." });
       } else {
         setEndNotice({ kind: "error", iso: end, detail: result.error ?? "End time was not saved." });
@@ -426,6 +435,7 @@ export function ServicePage() {
 
   const started = Boolean(query.data.session?.start_at || sessionId);
   const submitted = Boolean(query.data.session?.submitted_at);
+  const toast = visibleEndNotice(endNotice, leaveAsk || override || estimate || freshAsk);
 
   return (
     <Screen>
@@ -579,7 +589,7 @@ export function ServicePage() {
       ) : null}
 
       {override ? (
-        <div className="fixed inset-0 z-30 flex items-end bg-black/40 p-4">
+        <div className="fixed inset-0 z-40 flex items-end bg-black/40 p-4" role="dialog" aria-modal="true">
           <div className="mx-auto w-full max-w-[480px] rounded-3xl bg-white p-4">
             <h2 className="text-xl font-semibold">Prep is not finished</h2>
             <p className="mt-2 text-sm text-stone-600">Finish those steps, or start anyway and say why.</p>
@@ -593,7 +603,7 @@ export function ServicePage() {
       ) : null}
 
       {leaveAsk ? (
-        <div className="fixed inset-0 z-30 flex items-end bg-black/40 p-4" role="dialog" aria-labelledby="leave-title">
+        <div className="fixed inset-0 z-40 flex items-end bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="leave-title">
           <div className="mx-auto w-full max-w-[480px] rounded-3xl bg-white p-4">
             <h2 id="leave-title" className="text-xl font-semibold">Incomplete today?</h2>
             <p className="mt-2 text-sm leading-relaxed text-stone-600">
@@ -615,7 +625,7 @@ export function ServicePage() {
       ) : null}
 
       {estimate ? (
-        <div className="fixed inset-0 z-30 flex items-end bg-black/40 p-4">
+        <div className="fixed inset-0 z-40 flex items-end bg-black/40 p-4" role="dialog" aria-modal="true">
           <div className="mx-auto w-full max-w-[480px] rounded-3xl bg-white p-4">
             <h2 className="text-xl font-semibold">What time did you arrive?</h2>
             <p className="mt-2 text-sm text-stone-600">Next time, tap Start now when you arrive.</p>
@@ -629,13 +639,13 @@ export function ServicePage() {
       ) : null}
 
       <div className="fixed inset-x-0 z-30 mx-auto w-full max-w-[480px] px-4" style={{ bottom: "var(--nav-stack)" }}>
-        {endNotice ? (
+        {toast ? (
           <p className="mb-2 rounded-2xl bg-amber-100 px-3 py-3 text-base font-semibold text-stone-900 shadow-sm ring-1 ring-amber-300" aria-live="polite">
-            {endNotice.kind === "saved" ? `Paused. Clock-out saved at ${formatTorontoTime(endNotice.iso)}. ${CLOCK_OUT_SAVED} Resume it from Home.` : null}
-            {endNotice.kind === "queued"
-              ? `Saved on this phone (${formatWhen(endNotice.iso)}). It will sync when you are online.`
+            {toast.kind === "saved" ? `Paused. Clock-out saved at ${formatTorontoTime(toast.iso)}. ${CLOCK_OUT_SAVED} Resume it from Home.` : null}
+            {toast.kind === "queued"
+              ? `Saved on this phone (${formatWhen(toast.iso)}). It will sync when you are online.`
               : null}
-            {endNotice.kind === "error" ? endNotice.detail : null}
+            {toast.kind === "error" ? toast.detail : null}
           </p>
         ) : null}
         {!started ? (
@@ -651,7 +661,7 @@ export function ServicePage() {
               <Button tone="quiet" className="shadow-lg" disabled={busy === "end"} onClick={() => void endNow()}>
                 Pause servicing
               </Button>
-              <Button tone="quiet" className="shadow-lg" disabled={busy === "abandon"} onClick={() => { setLeaveError(""); setLeaveAsk(true); }}>
+              <Button tone="quiet" className="shadow-lg" disabled={busy === "abandon"} onClick={() => { setLeaveError(""); setEndNotice((current) => (successToast(current) ? null : current)); setLeaveAsk(true); }}>
                 Incomplete today
               </Button>
             </div>

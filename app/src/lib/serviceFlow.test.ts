@@ -4,6 +4,9 @@ import {
   COMPLETE_QUEUED,
   completeFollowUp,
   endNotice,
+  SUCCESS_TOAST_MS,
+  successToast,
+  visibleEndNotice,
   outcomeFromEndUpdate,
   queueAfterFailure,
   retriesSyncError,
@@ -71,6 +74,17 @@ describe("end now result", () => {
     if (notice.kind === "queued") expect(notice.iso).toBe(iso);
     const queue = ["older", "end"];
     expect(queueAfterFailure(queue, 1, true)).toEqual(["end"]);
+  });
+
+  it("hides a pause toast while a confirmation is open and clears it after a second", () => {
+    const saved = endNotice(iso, outcomeFromEndUpdate([{ id: "visit" }], null), "end");
+    expect(successToast(saved)).toBe(true);
+    expect(SUCCESS_TOAST_MS).toBe(1000);
+    expect(visibleEndNotice(saved, true)).toBeNull();
+    expect(visibleEndNotice(saved, false)).toBe(saved);
+    const failed = endNotice(iso, outcomeFromEndUpdate([], null), "end");
+    expect(successToast(failed)).toBe(false);
+    expect(visibleEndNotice(failed, true)?.kind).toBe("error");
   });
 
   it("drops a rejected end update but keeps later jobs", () => {
