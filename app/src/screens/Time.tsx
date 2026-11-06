@@ -3,8 +3,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth";
 import { formatTorontoTime, instantOnTorontoDay, torontoNow } from "../lib/dates";
+import { correctionGlance } from "../lib/correctionGlance";
 import { durationLabel, durationMinutes, inRange, rangeBounds, type RangeKey } from "../lib/timeRange";
 import { supabase } from "../lib/supabase";
+import { CorrectionGlanceView } from "./CorrectionGlance";
 import { Button, Card, ErrorText, Field, Screen, Title, inputClass } from "../ui";
 
 const SIX_HOURS = 6 * 60 * 60 * 1000;
@@ -42,6 +44,21 @@ export function TimePage() {
   const [customFrom, setCustomFrom] = useState(today);
   const [customTo, setCustomTo] = useState(today);
   const [siteId, setSiteId] = useState("all");
+
+  const requests = useQuery({
+    queryKey: ["my-corrections", profile?.id],
+    enabled: Boolean(profile),
+    queryFn: async () => {
+      const { data, error: queryError } = await supabase
+        .from("time_corrections")
+        .select("id, reason, status, requested_start, requested_end, service_sessions(service_date, start_at, end_at, sites(short_name))")
+        .eq("requested_by", profile!.id)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (queryError) throw new Error(queryError.message);
+      return data ?? [];
+    },
+  });
 
   const query = useQuery({
     queryKey: ["my-time", profile?.id],
@@ -108,11 +125,34 @@ export function TimePage() {
     setOpenId(null);
     setReason("");
     await queryClient.invalidateQueries({ queryKey: ["my-time"] });
+    await queryClient.invalidateQueries({ queryKey: ["my-corrections"] });
   }
 
   return (
     <Screen>
       <Title sub="Submitted times stay locked. Ask an admin to change one.">My time</Title>
+      {(requests.data ?? []).length > 0 ? (
+        <div className="mb-5 grid gap-3">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-stone-500">Your requests</h2>
+          {(requests.data ?? []).map((row) => {
+            const session = Array.isArray(row.service_sessions) ? row.service_sessions[0] : row.service_sessions;
+            const site = session ? (Array.isArray(session.sites) ? session.sites[0] : session.sites) : null;
+            if (!session?.service_date) return null;
+            const glance = correctionGlance({
+              serviceDate: session.service_date,
+              startAt: session.start_at,
+              endAt: session.end_at,
+              requestedStart: row.requested_start,
+              requestedEnd: row.requested_end,
+            });
+            return (
+              <Card key={row.id}>
+                <CorrectionGlanceView glance={glance} who={site?.short_name} reason={row.reason} status={row.status} />
+              </Card>
+            );
+          })}
+        </div>
+      ) : null}
       <label className="mb-3 block text-sm font-medium text-stone-600">
         Location
         <select className={`${inputClass} mt-1`} value={siteId} onChange={(event) => setSiteId(event.target.value)}>

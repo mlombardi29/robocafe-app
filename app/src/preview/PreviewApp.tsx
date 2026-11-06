@@ -6,7 +6,9 @@ import { composeButtonClass } from "../lib/buttonStyles";
 import { CLOCK_OUT_SAVED, SUCCESS_TOAST_MS, successToast, visibleEndNotice, type EndNotice } from "../lib/serviceFlow";
 import { FRESH_OFFLINE, assessFreshStart } from "../lib/freshPractice";
 import { MILK_LOCK_NOT_NEEDED_OK } from "../lib/milkLock";
-import { Button, CheckItem, FreshPracticeDialog, MilkStepCard, PinPad, PracticeBanner, Screen, Title } from "../ui";
+import { correctionGlance } from "../lib/correctionGlance";
+import { CorrectionGlanceView } from "../screens/CorrectionGlance";
+import { Button, Card, CheckItem, FreshPracticeDialog, MilkStepCard, PinPad, PracticeBanner, Screen, Title } from "../ui";
 
 const sites: SiteRow[] = [
   {
@@ -66,6 +68,7 @@ export default function PreviewApp() {
   }
 
   if (screen === "toast") return <ToastPreview />;
+  if (screen === "correction") return <CorrectionPreview />;
 
   if (screen === "checklist" || screen === "checklist-open") {
     return <ChecklistPreview showOpen={screen === "checklist-open"} />;
@@ -91,6 +94,24 @@ export default function PreviewApp() {
   }
 
   return <AddPersonPage preview previewSites={sites} />;
+}
+
+function CorrectionPreview() {
+  const glance = correctionGlance({
+    serviceDate: "2026-11-05",
+    startAt: "2026-11-05T23:02:00.000Z",
+    endAt: "2026-11-05T23:23:00.000Z",
+    requestedStart: null,
+    requestedEnd: "2026-11-06T00:02:00.000Z",
+  });
+  return (
+    <Screen>
+      <Title sub="Approve from the lengths, not the timestamps.">Corrections</Title>
+      <Card>
+        <CorrectionGlanceView glance={glance} who="Kajsa · RBC" reason="Left at 7, the end time was the arrival." status="pending" />
+      </Card>
+    </Screen>
+  );
 }
 
 function ToastPreview() {
@@ -249,7 +270,7 @@ function ChecklistPreview({ showOpen }: { showOpen: boolean }) {
         </div>
       </div>
       <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-black/5 bg-[var(--bg)] pb-[env(safe-area-inset-bottom)]">
-        <p className="mx-auto max-w-[480px] px-3 pt-1 text-center text-[11px] leading-tight text-stone-500">Build ui-2026-11-06-toast</p>
+        <p className="mx-auto max-w-[480px] px-3 pt-1 text-center text-[11px] leading-tight text-stone-500">Build ui-2026-11-06-corr</p>
         <div className="mx-auto grid min-h-16 max-w-[480px] grid-cols-3 text-center text-sm font-semibold">
           <span className="flex min-h-16 items-center justify-center">Home</span>
           <span className="flex min-h-16 items-center justify-center">Training</span>

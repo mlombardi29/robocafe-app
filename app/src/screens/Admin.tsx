@@ -3,9 +3,11 @@ import { Link } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "../auth";
 import { loadSites } from "../data";
+import { correctionGlance } from "../lib/correctionGlance";
 import { offboardingTitles } from "../lib/offboarding";
 import { supabase } from "../lib/supabase";
 import type { Role, SiteRow } from "../lib/types";
+import { CorrectionGlanceView } from "./CorrectionGlance";
 import { Button, Card, ErrorText, Field, Screen, Title, inputClass } from "../ui";
 
 const sections: { title: string; links: [string, string][] }[] = [
@@ -258,6 +260,35 @@ export function PeoplePage() {
   );
 }
 
+const CORRECTION_COLUMNS = "id, reason, requested_start, requested_end, status, was_paid, service_sessions(service_date, start_at, end_at, sites(short_name), people(goes_by))";
+
+type CorrectionRow = {
+  id: string;
+  reason: string;
+  requested_start: string | null;
+  requested_end: string | null;
+  status: string;
+  was_paid: boolean;
+  service_sessions: {
+    service_date: string;
+    start_at: string | null;
+    end_at: string | null;
+    sites: { short_name: string } | { short_name: string }[] | null;
+    people: { goes_by: string } | { goes_by: string }[] | null;
+  } | {
+    service_date: string;
+    start_at: string | null;
+    end_at: string | null;
+    sites: { short_name: string } | { short_name: string }[] | null;
+    people: { goes_by: string } | { goes_by: string }[] | null;
+  }[] | null;
+};
+
+function oneOf<T>(value: T | T[] | null | undefined): T | null {
+  if (!value) return null;
+  return Array.isArray(value) ? value[0] ?? null : value;
+}
+
 export function CorrectionsPage() {
   const queryClient = useQueryClient();
   const [note, setNote] = useState("");
@@ -265,13 +296,23 @@ export function CorrectionsPage() {
   const rows = useQuery({
     queryKey: ["corrections"],
     queryFn: async () => {
-      const { data, error: queryError } = await supabase
+      const pending = await supabase
         .from("time_corrections")
-        .select("id, reason, requested_start, requested_end, status, was_paid, session_id")
+        .select(CORRECTION_COLUMNS)
         .eq("status", "pending")
         .order("created_at");
-      if (queryError) throw new Error(queryError.message);
-      return data ?? [];
+      if (pending.error) throw new Error(pending.error.message);
+      const decided = await supabase
+        .from("time_corrections")
+        .select(CORRECTION_COLUMNS)
+        .neq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (decided.error) throw new Error(decided.error.message);
+      return {
+        pending: (pending.data ?? []) as CorrectionRow[],
+        decided: (decided.data ?? []) as CorrectionRow[],
+      };
     },
   });
 
@@ -284,7 +325,10 @@ export function CorrectionsPage() {
     }
     const { error: rpcError } = await supabase.rpc("decide_correction", { p_id: id, p_approve: approve, p_note: note });
     if (rpcError) setError(rpcError.message);
-    else await queryClient.invalidateQueries({ queryKey: ["corrections"] });
+    else {
+      await queryClient.invalidateQueries({ queryKey: ["corrections"] });
+      await queryClient.invalidateQueries({ queryKey: ["corrections-count"] });
+    }
   }
 
   return (
@@ -294,11 +338,19 @@ export function CorrectionsPage() {
       <Field label="Note for the decision">
         <textarea className={`${inputClass} min-h-24 py-3`} value={note} onChange={(event) => setNote(event.target.value)} />
       </Field>
+      <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-stone-500">Waiting</h2>
       <div className="grid gap-3">
-        {(rows.data ?? []).map((row) => (
+        {(rows.data?.pending ?? []).map((row) => (
           <CorrectionCard key={row.id} row={row} onDecide={decide} />
         ))}
-        {(rows.data ?? []).length === 0 ? <p className="text-stone-600">Nothing waiting.</p> : null}
+        {(rows.data?.pending ?? []).length === 0 ? <p className="text-stone-600">Nothing waiting.</p> : null}
+      </div>
+      <h2 className="mb-2 mt-6 text-sm font-bold uppercase tracking-wide text-stone-500">Decided</h2>
+      <div className="grid gap-3">
+        {(rows.data?.decided ?? []).map((row) => (
+          <CorrectionCard key={row.id} row={row} />
+        ))}
+        {(rows.data?.decided ?? []).length === 0 ? <p className="text-stone-600">No decisions yet.</p> : null}
       </div>
       <ErrorText>{error}</ErrorText>
     </Screen>
@@ -309,22 +361,45 @@ function CorrectionCard({
   row,
   onDecide,
 }: {
-  row: { id: string; reason: string; requested_start: string | null; requested_end: string | null; was_paid: boolean };
-  onDecide: (id: string, approve: boolean, wasPaid: boolean) => Promise<void>;
+  row: CorrectionRow;
+  onDecide?: (id: string, approve: boolean, wasPaid: boolean) => Promise<void>;
 }) {
   const [paid, setPaid] = useState(row.was_paid);
+  const session = oneOf(row.service_sessions);
+  const site = oneOf(session?.sites ?? null);
+  const person = oneOf(session?.people ?? null);
+  const who = [person?.goes_by, site?.short_name].filter(Boolean).join(" · ");
+  if (!session?.service_date) {
+    return (
+      <Card>
+        <p className="font-semibold">{who || "Visit"}</p>
+        <p className="text-sm text-stone-600">The visit times could not be loaded.</p>
+        <p className="mt-2 text-sm">{row.reason}</p>
+      </Card>
+    );
+  }
+  const glance = correctionGlance({
+    serviceDate: session.service_date,
+    startAt: session.start_at,
+    endAt: session.end_at,
+    requestedStart: row.requested_start,
+    requestedEnd: row.requested_end,
+  });
   return (
     <Card>
-      <p className="font-semibold">{row.reason}</p>
-      <p className="text-sm text-stone-600">{row.requested_start ?? "Same start"} → {row.requested_end ?? "Same end"}</p>
-      <label className="mt-3 flex min-h-12 items-center gap-2 text-sm">
-        <input type="checkbox" checked={paid} onChange={(event) => setPaid(event.target.checked)} />
-        This time was already paid
-      </label>
-      <div className="mt-2 grid grid-cols-2 gap-2">
-        <Button onClick={() => void onDecide(row.id, true, paid)}>Approve</Button>
-        <Button tone="quiet" onClick={() => void onDecide(row.id, false, paid)}>Reject</Button>
-      </div>
+      <CorrectionGlanceView glance={glance} who={who || "Visit"} reason={row.reason} status={row.status} />
+      {onDecide ? (
+        <>
+          <label className="mt-3 flex min-h-12 items-center gap-2 text-sm">
+            <input type="checkbox" checked={paid} onChange={(event) => setPaid(event.target.checked)} />
+            This time was already paid
+          </label>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <Button onClick={() => void onDecide(row.id, true, paid)}>Approve</Button>
+            <Button tone="quiet" onClick={() => void onDecide(row.id, false, paid)}>Reject</Button>
+          </div>
+        </>
+      ) : null}
     </Card>
   );
 }
