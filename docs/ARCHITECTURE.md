@@ -29,7 +29,7 @@ Start now calls `start_session` with a client UUID. Repeating the same id return
 
 Complete service calls `complete_session`. A blank end time becomes now. After submit, a tech cannot change the times. They send a correction; an admin approves it with `decide_correction`, which writes an audit row.
 
-Milk cleaning stores `milk_clean_started_at` on the visit, so the countdown survives a reload. The checklist stays in the recommended order, and the visit screen says which prep steps are recommended first. That order does not block Start milk cleaning, and no override reason is required. Steps that would touch the machine stay locked only while that timer is actually running. Complete service rejects a visit while a required step is still open. Done and Not needed both count. A milk timer that was actually started counts as the start-milk step.
+Milk cleaning stores `milk_clean_started_at` on the visit, so the countdown survives a reload. The checklist stays in the recommended order, and the visit screen says which prep steps are recommended first. That order does not block Start milk cleaning, and no override reason is required. Steps that would touch the machine stay locked only while that timer is actually running. Complete service rejects a visit while a required step is still open. Done and Not needed both count. A milk timer that was actually started counts as the start-milk step. Photo audit is required only when that visit's checklist snapshot says `photo_audit.required` is true. The phone asks the server to write that field once, when it starts the visit. Older open visits do not have the field, and a missing field does not mean photos are required.
 
 ## Due items
 

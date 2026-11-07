@@ -18,7 +18,7 @@ export type FlushResult = {
 
 export type SyncJob =
   | { kind: "completion"; write: CompletionWrite; stepKey: string }
-  | { kind: "start"; id: string; siteId: string; start: string; estimated: boolean }
+  | { kind: "start"; id: string; siteId: string; start: string; estimated: boolean; photoAudit?: boolean }
   | { kind: "end"; id: string; end: string }
   | { kind: "milk"; id: string; action: "start" | "done"; reason: string | null }
   | { kind: "complete"; id: string; end: string | null; estimate: string | null };
@@ -156,6 +156,12 @@ async function runJob(job: SyncJob): Promise<void> {
       p_estimated: job.estimated,
     });
     if (error) throw new Error(error.message);
+    if (job.photoAudit) {
+      const frozen = await supabase.rpc("freeze_photo_audit", { p_session: job.id });
+      if (frozen.error && frozen.error.code !== "PGRST202" && !/freeze_photo_audit|does not exist|schema cache/i.test(frozen.error.message)) {
+        throw new Error(frozen.error.message);
+      }
+    }
     return;
   }
   if (job.kind === "completion") {

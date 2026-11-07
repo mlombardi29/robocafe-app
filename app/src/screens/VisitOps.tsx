@@ -6,7 +6,7 @@ import { trainingContent } from "../content/trainingContent";
 import { useAuth } from "../auth";
 import { loadSites } from "../data";
 import { NOT_TURNED_ON, turnedOff } from "../lib/rpcError";
-import { dupontGuidance, kcInstruction, kcLines, photoAuditRequired, shotsForLabels } from "../lib/opsRules";
+import { dupontGuidance, kcInstruction, kcLines, shotsForLabels } from "../lib/opsRules";
 import { compressPhoto } from "../lib/photoFile";
 import { supabase } from "../lib/supabase";
 import { Button, Card, ErrorText, Field, Screen, Title, inputClass } from "../ui";
@@ -129,11 +129,13 @@ export function VisitOps({
   sessionId,
   modelCode,
   doneSkuIds,
+  photoAuditRequired,
 }: {
   siteId: string;
   sessionId: string | null;
   modelCode: string;
   doneSkuIds: string[];
+  photoAuditRequired: boolean;
 }) {
   const flags = useOpenFlags(siteId);
   const skus = useQuery({
@@ -153,13 +155,13 @@ export function VisitOps({
         </div>
       ) : null}
       {missingTable(flags.error) ? <p className="text-sm text-stone-600">Stock flags are not turned on yet.</p> : null}
-      <PhotoCapture siteId={siteId} sessionId={sessionId} modelCode={modelCode} />
+      <PhotoCapture sessionId={sessionId} modelCode={modelCode} required={photoAuditRequired} />
       <KcPanel siteId={siteId} sessionId={sessionId} doneSkuIds={doneSkuIds} />
     </div>
   );
 }
 
-function PhotoCapture({ siteId, sessionId, modelCode }: { siteId: string; sessionId: string | null; modelCode: string }) {
+function PhotoCapture({ sessionId, modelCode, required }: { sessionId: string | null; modelCode: string; required: boolean }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -174,25 +176,8 @@ function PhotoCapture({ siteId, sessionId, modelCode }: { siteId: string; sessio
       return (data ?? []) as ShotRow[];
     },
   });
-  const prior = useQuery({
-    queryKey: ["photo-ok", siteId],
-    enabled: Boolean(siteId),
-    queryFn: async () => {
-      const { data, error: queryError } = await supabase.from("photo_audit_shots").select("session_id, review_status, storage_state, site_id").eq("site_id", siteId);
-      if (queryError) throw new Error(queryError.message);
-      const rows = (data ?? []) as { session_id: string; review_status: string; storage_state: string }[];
-      const bySession = new Map<string, { ok: number }>();
-      for (const row of rows) {
-        const current = bySession.get(row.session_id) ?? { ok: 0 };
-        if (row.review_status === "ok" && row.storage_state === "stored") current.ok += 1;
-        bySession.set(row.session_id, current);
-      }
-      return [...bySession.values()].filter((row) => row.ok === 7).length;
-    },
-  });
-  if (!sessionId) return null;
+  if (!sessionId || !required) return null;
   if (missingTable(saved.error)) return <p className="text-sm text-stone-600">Photo audit is not turned on yet. This visit is not blocked by it.</p>;
-  if (!photoAuditRequired(prior.data ?? 0)) return <p className="text-sm text-stone-600">Photo audit is signed off for this kiosk.</p>;
 
   async function take(shotKey: string, label: string, file: File) {
     setError("");

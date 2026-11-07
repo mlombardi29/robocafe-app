@@ -22,6 +22,7 @@ In the Supabase dashboard, open SQL Editor. Run these files **one at a time, in 
 9. `supabase/migrations/0009_phase2_pay_inventory.sql`
 10. `supabase/migrations/0010_milk_order_guidance.sql`
 11. `supabase/migrations/0011_ops_batch.sql`
+12. `supabase/migrations/0012_photo_audit_grandfather.sql`
 
 If a later file fails, stop. Do not re-run an earlier file that already succeeded. If 0001 through 0005 are already applied, run `0006_fresh_practice.sql`, then `0007_milk_lock_not_needed.sql`. `0006` adds `start_fresh_practice` and does not delete rows or change last-done dates. `0007` rejects Done on timer-locked steps while milk cleaning is running, and still allows Not needed on Wipe the Cameo. The phone already does this before `0007` is applied. No edge function redeploy is required for these files.
 
@@ -116,7 +117,7 @@ Admin → Reset practice data. This deletes practice visits and restores the pra
 
 Admin → Order thresholds. The sentence under each site is what techs see. A blank number with no instruction still says "Check. Fill if low." A saved 50% reads as below half, 67% as below two-thirds, and a stored instruction with no number is shown as written.
 
-Photo audit, stock flags, Dupont pickup, and KC Manager lines stay quiet until `0011_ops_batch.sql` is applied. Nothing in that file sends email or uploads a photo. Drive upload also needs the `photo-audit-upload` function deployed with secrets `DRIVE_RELAY_URL` and `DRIVE_RELAY_TOKEN`. Until those exist, a photo stays on the phone and an admin cannot mark it OK. Do not put those secrets in the repo.
+Photo audit, stock flags, Dupont pickup, and KC Manager lines stay quiet until `0011_ops_batch.sql` and `0012_photo_audit_grandfather.sql` are both applied, in that order. Do not stop between them. Neither file updates existing visit rows. A visit already open, or started by an older phone, has no `photo_audit` field and can be completed without the seven shots. A visit started by this app after `0012` freezes that field once. Required checklist steps and KC lines still apply. Nothing in these files sends email or uploads a photo. Drive upload also needs the `photo-audit-upload` function deployed with secrets `DRIVE_RELAY_URL` and `DRIVE_RELAY_TOKEN`. Until those exist, a photo stays on the phone and an admin cannot mark it OK. Do not put those secrets in the repo.
 
 Link a checklist step to a Dupont or grocery item, and set a KC max, only after you choose the real values. The app does not invent them. Reorder check stores a held list and does not email.
 

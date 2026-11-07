@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dupontGuidance, fitWithin, kcInstruction, kcLines, photoAuditRequired, shotsForLabels } from "./opsRules";
+import { dupontGuidance, fitWithin, kcInstruction, kcLines, photoAuditRequired, photoAuditRequiredBySnapshot, shotsForLabels } from "./opsRules";
 
 describe("ops batch rules", () => {
   it("asks for seven shots until three visits at that kiosk are reviewed ok", () => {
@@ -9,6 +9,10 @@ describe("ops batch rules", () => {
     expect(photoAuditRequired(0)).toBe(true);
     expect(photoAuditRequired(2)).toBe(true);
     expect(photoAuditRequired(3)).toBe(false);
+    expect(photoAuditRequiredBySnapshot(null)).toBe(false);
+    expect(photoAuditRequiredBySnapshot({})).toBe(false);
+    expect(photoAuditRequiredBySnapshot({ photo_audit: { required: false } })).toBe(false);
+    expect(photoAuditRequiredBySnapshot({ photo_audit: { required: true } })).toBe(true);
   });
 
   it("shrinks the long edge to 1600 pixels", () => {

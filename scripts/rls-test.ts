@@ -44,6 +44,7 @@ async function main() {
     "0009_phase2_pay_inventory.sql",
     "0010_milk_order_guidance.sql",
     "0011_ops_batch.sql",
+    "0012_photo_audit_grandfather.sql",
   ]) {
     const sql = readFileSync(resolve(root, "supabase/migrations", file), "utf8");
     await db.exec(sql);
@@ -193,11 +194,6 @@ async function main() {
       );
     }
   });
-  await db.exec(`
-    insert into public.photo_audit_shots (session_id, person_id, site_id, shot_key, shot_label, storage_state, is_sandbox)
-    select '66666666-6666-4666-8666-666666666666', '${TECH}', '${sinai}', shot, shot, 'local_only', false
-    from unnest(array['overall','cleaning','beans','powders','cups','closed','spouts']) as shot
-  `);
   await db.transaction(async (tx) => {
     await tx.exec(`select set_config('request.jwt.claim.sub', '${TECH}', true)`);
     await tx.query(`select public.complete_session('66666666-6666-4666-8666-666666666666', null, null)`);
@@ -679,6 +675,97 @@ async function main() {
   }
   assert(practiceLive, "practice pickup changed live Dupont stock");
   await db.exec(`update public.people set mode = 'live' where id = '${TECH}'`);
+
+  await db.exec(`update public.service_sessions set milk_clean_done_at = now() where id = '${replacement}'`);
+  const replacementSteps = await db.query<{ id: string; key: string }>(`
+    select item->>'id' as id, item->>'key' as key
+    from public.service_sessions sess,
+      jsonb_array_elements(sess.checklist_snapshot->'sections') sec,
+      jsonb_array_elements(sec->'items') item
+    where sess.id = '${replacement}'
+      and coalesce((item->>'required')::boolean, true)
+  `);
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${TECH}', true)`);
+    let n = 0;
+    for (const row of replacementSteps.rows) {
+      n += 1;
+      const idem = `99999999-9999-4999-8999-${n.toString(16).padStart(12, "0")}`;
+      const state = row.key === "gloves" ? "done" : "not_needed";
+      await tx.query(
+        `select public.save_completion($1,$2,$3,null,'',null,1,$4,$5)`,
+        [replacement, row.id, state, idem, row.key],
+      );
+    }
+  });
+  await db.exec(`
+    update public.checklist_items set sku_id = '${cups}' where id = '${item.rows[0].id}';
+    insert into public.site_skus (site_id, sku_id, kc_max, is_sandbox)
+    values ('${sinai}', '${cups}', 10, false);
+  `);
+  let kcBlocked = false;
+  try {
+    await asUser(TECH, `select public.complete_session('${replacement}', null, null)`);
+  } catch (err) {
+    kcBlocked = String(err).includes("KC Manager");
+    if (!kcBlocked) throw err;
+  }
+  assert(kcBlocked, "an already-open visit skipped a KC confirmation");
+  await asUser(
+    TECH,
+    `select public.save_kc_confirmation('${replacement}', '${cups}', true, null, true, '${crypto.randomUUID()}')`,
+  );
+  await asUser(TECH, `select public.complete_session('${replacement}', null, null)`);
+  const grandfathered = await db.query<{ status: string }>(
+    `select status from public.service_sessions where id = '${replacement}'`,
+  );
+  assert(grandfathered.rows[0].status === "completed", "an already-open visit could not be completed without new photos");
+
+  const photoVisit = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${ADMIN}', true)`);
+    await tx.query(`select public.start_session($1::uuid, $2::uuid, '2026-11-21T15:00:00Z')`, [photoVisit, sinai]);
+    await tx.query(`select public.freeze_photo_audit($1)`, [photoVisit]);
+    await tx.query(`select public.freeze_photo_audit($1)`, [photoVisit]);
+  });
+  const frozen = await db.query<{ required: string | null }>(
+    `select checklist_snapshot->'photo_audit'->>'required' as required from public.service_sessions where id = '${photoVisit}'`,
+  );
+  assert(frozen.rows[0].required === "true", "a new visit did not freeze photo audit as required");
+  const photoSteps = await db.query<{ id: string; key: string }>(`
+    select item->>'id' as id, item->>'key' as key
+    from public.service_sessions sess,
+      jsonb_array_elements(sess.checklist_snapshot->'sections') sec,
+      jsonb_array_elements(sec->'items') item
+    where sess.id = '${photoVisit}'
+      and coalesce((item->>'required')::boolean, true)
+  `);
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${ADMIN}', true)`);
+    let n = 0;
+    for (const row of photoSteps.rows) {
+      n += 1;
+      const idem = `abababab-abab-4aba-8aba-${n.toString(16).padStart(12, "0")}`;
+      await tx.query(
+        `select public.save_completion($1,$2,'not_needed',null,'',null,1,$3,$4)`,
+        [photoVisit, row.id, idem, row.key],
+      );
+    }
+  });
+  let photosMissing = false;
+  try {
+    await asUser(ADMIN, `select public.complete_session('${photoVisit}', null, null)`);
+  } catch (err) {
+    photosMissing = String(err).includes("Photo audit");
+    if (!photosMissing) throw err;
+  }
+  assert(photosMissing, "a new visit completed without its photo audit");
+  await db.exec(`
+    insert into public.photo_audit_shots (session_id, person_id, site_id, shot_key, shot_label, storage_state, is_sandbox)
+    select '${photoVisit}', '${ADMIN}', '${sinai}', shot, shot, 'local_only', false
+    from unnest(array['overall','cleaning','beans','powders','cups','closed','spouts']) as shot
+  `);
+  await asUser(ADMIN, `select public.complete_session('${photoVisit}', null, null)`);
 
   console.log("RLS checks passed");
   await db.close();

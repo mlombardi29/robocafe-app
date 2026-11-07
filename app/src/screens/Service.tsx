@@ -15,6 +15,7 @@ import { CLOCK_OUT_SAVED, COMPLETE_QUEUED, SUCCESS_TOAST_MS, completeFollowUp, s
 import { enqueue, enqueueAndFlush, flushQueue, forgetVisit, readQueue, rememberVisit, stableKey, startFreshPractice } from "../lib/sync";
 import { supabase } from "../lib/supabase";
 import type { SnapItem, Snapshot } from "../lib/types";
+import { photoAuditRequiredBySnapshot } from "../lib/opsRules";
 import { FlagButtons, VisitOps } from "./VisitOps";
 import { Button, CheckItem, ErrorText, FreshPracticeDialog, MilkStepCard, Screen } from "../ui";
 
@@ -194,7 +195,7 @@ export function ServicePage() {
     setSessionId(id);
     setMilkStart(null);
     setMilkDone(null);
-    await enqueue({ kind: "start", id, siteId, start, estimated });
+    await enqueue({ kind: "start", id, siteId, start, estimated, photoAudit: true });
     await persist(kept, { sessionId: id, milkStartedAt: null, milkDoneAt: null });
     await flushQueue();
     return id;
@@ -552,6 +553,7 @@ export function ServicePage() {
         doneSkuIds={groups.flatMap((section) => section.items)
           .filter((entry) => entry.item.sku_id && rows[entry.item.id]?.state === "done")
           .map((entry) => entry.item.sku_id as string)}
+        photoAuditRequired={photoAuditRequiredBySnapshot(snapshot)}
       />
       <div className={checklistStackClass}>
         {groups.map((section) => (

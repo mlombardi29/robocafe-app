@@ -1,5 +1,9 @@
 -- Additive. Do not edit 0001–0010. Do not apply this from the app.
 -- No SKUs, stock counts, KC numbers, photos, or site codes are inserted.
+-- This file does not update existing visit rows.
+-- Photo audit is required only when a visit snapshot says photo_audit.required = true.
+-- Visits already open, and starts from older phones, do not have that field, so they are not asked for photos.
+-- 0012_photo_audit_grandfather.sql is what writes the field for a new visit. Apply 0011, then 0012, before using photo audit.
 -- Drive upload is not performed here. Photo rows store metadata only.
 -- Email is not sent.
 
@@ -383,7 +387,6 @@ declare
   v_end timestamptz;
   v_estimated boolean;
   v_missing integer;
-  v_ok_visits integer;
   v_photos integer;
   v_kc integer;
 begin
@@ -442,19 +445,9 @@ begin
     raise exception 'KC Manager lines are not confirmed.';
   end if;
 
-  select count(*) into v_ok_visits
-  from (
-    select s.session_id
-    from public.photo_audit_shots s
-    join public.service_sessions ss on ss.id = s.session_id
-    where s.person_id = v_session.person_id
-      and s.site_id = v_session.site_id
-      and ss.is_sandbox = v_session.is_sandbox
-      and s.session_id <> p_id
-    group by s.session_id
-    having count(*) filter (where s.review_status = 'ok' and s.storage_state = 'stored') = 7
-  ) ok_visits;
-  if v_ok_visits < 3 then
+  -- Missing photo_audit means this visit started before the rule, or the client
+  -- did not opt in. Do not treat that as "photos required".
+  if coalesce((v_session.checklist_snapshot -> 'photo_audit' ->> 'required') = 'true', false) then
     select count(distinct shot_key) into v_photos
     from public.photo_audit_shots
     where session_id = p_id

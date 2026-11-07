@@ -13,6 +13,11 @@ export function photoAuditRequired(okVisitsAtSite: number): boolean {
   return okVisitsAtSite < 3;
 }
 
+/** Only an explicit snapshot flag requires photos. A missing field is an older visit. */
+export function photoAuditRequiredBySnapshot(snapshot: { photo_audit?: { required?: boolean } } | null | undefined): boolean {
+  return snapshot?.photo_audit?.required === true;
+}
+
 export function fitWithin(width: number, height: number, max = 1600): { width: number; height: number } {
   if (width <= 0 || height <= 0) return { width: 0, height: 0 };
   const longest = Math.max(width, height);

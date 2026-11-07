@@ -45,6 +45,8 @@ export type Snapshot = {
   model_code: string;
   milk_clean_minutes: number;
   sections: SnapSection[];
+  /** Written once when a visit starts on a phone that knows about photo audit. Absent on older visits. */
+  photo_audit?: { required?: boolean };
 };
 
 export type SiteRow = {
