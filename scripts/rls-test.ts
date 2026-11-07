@@ -41,6 +41,9 @@ async function main() {
     "0006_fresh_practice.sql",
     "0007_milk_lock_not_needed.sql",
     "0008_phase1_batches.sql",
+    "0009_phase2_pay_inventory.sql",
+    "0010_milk_order_guidance.sql",
+    "0011_ops_batch.sql",
   ]) {
     const sql = readFileSync(resolve(root, "supabase/migrations", file), "utf8");
     await db.exec(sql);
@@ -169,6 +172,32 @@ async function main() {
   );
   assert(completions.rows[0].n === 1, "completion replay created extra rows");
 
+  const requiredSteps = await db.query<{ id: string; key: string }>(`
+    select item->>'id' as id, item->>'key' as key
+    from public.service_sessions sess,
+      jsonb_array_elements(sess.checklist_snapshot->'sections') sec,
+      jsonb_array_elements(sec->'items') item
+    where sess.id = '66666666-6666-4666-8666-666666666666'
+      and coalesce((item->>'required')::boolean, true)
+  `);
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${TECH}', true)`);
+    let n = 0;
+    for (const row of requiredSteps.rows) {
+      if (row.key === "gloves") continue;
+      n += 1;
+      const idem = `88888888-8888-4888-8888-${n.toString(16).padStart(12, "0")}`;
+      await tx.query(
+        `select public.save_completion($1,$2,'not_needed',null,'',null,1,$3,$4)`,
+        ["66666666-6666-4666-8666-666666666666", row.id, idem, row.key],
+      );
+    }
+  });
+  await db.exec(`
+    insert into public.photo_audit_shots (session_id, person_id, site_id, shot_key, shot_label, storage_state, is_sandbox)
+    select '66666666-6666-4666-8666-666666666666', '${TECH}', '${sinai}', shot, shot, 'local_only', false
+    from unnest(array['overall','cleaning','beans','powders','cups','closed','spouts']) as shot
+  `);
   await db.transaction(async (tx) => {
     await tx.exec(`select set_config('request.jwt.claim.sub', '${TECH}', true)`);
     await tx.query(`select public.complete_session('66666666-6666-4666-8666-666666666666', null, null)`);
@@ -599,6 +628,57 @@ async function main() {
     techAsset = true;
   }
   assert(techAsset, "a tech inserted a held key");
+
+  await db.exec(`update public.people set mode = 'live' where id = '${TECH}'`);
+  let missingSteps = false;
+  try {
+    await asUser(TECH, `select public.complete_session('${replacement}', null, null)`);
+  } catch (err) {
+    missingSteps = String(err).includes("Required steps");
+    if (!missingSteps) throw err;
+  }
+  assert(missingSteps, "complete accepted a visit with required steps open");
+  let doneTooSoon = false;
+  try {
+    await asUser(TECH, `select public.set_milk_clean('${replacement}', 'done', null)`);
+  } catch (err) {
+    doneTooSoon = String(err).includes("Start milk cleaning");
+    if (!doneTooSoon) throw err;
+  }
+  assert(doneTooSoon, "milk cleaning was marked done before it started");
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${TECH}', true)`);
+    await tx.query(`select public.set_milk_clean($1, 'start', null)`, [replacement]);
+  });
+  const milkStarted = await db.query<{ started: string | null }>(
+    `select milk_clean_started_at::text as started from public.service_sessions where id = '${replacement}'`,
+  );
+  assert(Boolean(milkStarted.rows[0].started), "milk cleaning stayed blocked by prep order");
+
+  const cups = crypto.randomUUID();
+  await db.exec(`
+    insert into public.skus (id, name, base_unit, source, is_sandbox) values ('${cups}', 'Test cups', 'cups', 'dupont', false);
+    insert into public.inventory_tx (sku_id, type, delta_base, location, is_sandbox, idempotency_key)
+    values ('${cups}', 'receipt', 5, 'dupont', false, '${crypto.randomUUID()}');
+  `);
+  const pickupKey = crypto.randomUUID();
+  await asUser(TECH, `select public.record_dupont_pickup('${cups}', '${sinai}', 1, 'test', '${pickupKey}')`);
+  await asUser(TECH, `select public.record_dupont_pickup('${cups}', '${sinai}', 1, 'test', '${pickupKey}')`);
+  const taken = await db.query<{ n: number; qty: number }>(
+    `select count(*)::int as n, coalesce(sum(-delta_base), 0)::float as qty
+     from public.inventory_tx where idempotency_key = '${pickupKey}'`,
+  );
+  assert(taken.rows[0].n === 1 && taken.rows[0].qty === 1, "pickup was not idempotent");
+  await db.exec(`update public.people set mode = 'practice' where id = '${TECH}'`);
+  let practiceLive = false;
+  try {
+    await asUser(TECH, `select public.record_dupont_pickup('${cups}', '${sinai}', 1, 'no', '${crypto.randomUUID()}')`);
+  } catch (err) {
+    practiceLive = String(err).includes("Practice cannot");
+    if (!practiceLive) throw err;
+  }
+  assert(practiceLive, "practice pickup changed live Dupont stock");
+  await db.exec(`update public.people set mode = 'live' where id = '${TECH}'`);
 
   console.log("RLS checks passed");
   await db.close();

@@ -31,6 +31,11 @@ Vitest covers:
 - a fresh practice start keeps the old attempt, starts an empty visit, and does not change live or practice last-done dates
 - live mode, another person, a trainee, and a finished or live visit cannot use that start to change the wrong row
 - the arm sensor row is `pending_validation` and UofT `opening_time` is null
+- migrations `0009`, `0010`, and `0011` apply on top of `0008`
+- milk cleaning can start before prep is saved, and cannot be marked done before it starts
+- Complete service rejects a visit with required steps still open
+- a Dupont pickup with the same idempotency key takes stock once
+- a person in practice cannot take live Dupont stock for a live kiosk
 
 ## Manual, on a phone
 

@@ -19,6 +19,9 @@ In the Supabase dashboard, open SQL Editor. Run these files **one at a time, in 
 6. `supabase/migrations/0006_fresh_practice.sql`
 7. `supabase/migrations/0007_milk_lock_not_needed.sql`
 8. `supabase/migrations/0008_phase1_batches.sql`
+9. `supabase/migrations/0009_phase2_pay_inventory.sql`
+10. `supabase/migrations/0010_milk_order_guidance.sql`
+11. `supabase/migrations/0011_ops_batch.sql`
 
 If a later file fails, stop. Do not re-run an earlier file that already succeeded. If 0001 through 0005 are already applied, run `0006_fresh_practice.sql`, then `0007_milk_lock_not_needed.sql`. `0006` adds `start_fresh_practice` and does not delete rows or change last-done dates. `0007` rejects Done on timer-locked steps while milk cleaning is running, and still allows Not needed on Wipe the Cameo. The phone already does this before `0007` is applied. No edge function redeploy is required for these files.
 
@@ -111,7 +114,11 @@ Admin → Reset practice data. This deletes practice visits and restores the pra
 
 ## 9. Checklist edits and show days
 
-Admin → Checklist items. Titles, details, cadence, required, and status save on blur. Per-site "fill below X" boxes start blank. Leave them blank until you decide a number. Techs then see "Check. Fill if low."
+Admin → Order thresholds. The sentence under each site is what techs see. A blank number with no instruction still says "Check. Fill if low." A saved 50% reads as below half, 67% as below two-thirds, and a stored instruction with no number is shown as written.
+
+Photo audit, stock flags, Dupont pickup, and KC Manager lines stay quiet until `0011_ops_batch.sql` is applied. Nothing in that file sends email or uploads a photo. Drive upload also needs the `photo-audit-upload` function deployed with secrets `DRIVE_RELAY_URL` and `DRIVE_RELAY_TOKEN`. Until those exist, a photo stays on the phone and an admin cannot mark it OK. Do not put those secrets in the repo.
+
+Link a checklist step to a Dupont or grocery item, and set a KC max, only after you choose the real values. The app does not invent them. Reorder check stores a held list and does not email.
 
 Admin → RBC show days. One line per show: `YYYY-MM-DD HH:MM`. The real season list is not in the app yet. While you are in Practice mode, the paste writes the practice RBC site.
 

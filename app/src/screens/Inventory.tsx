@@ -28,6 +28,10 @@ export function InventoryPage() {
   const [lowSite, setLowSite] = useState("");
   const [lowSku, setLowSku] = useState("");
   const [low, setLow] = useState("");
+  const [kcMax, setKcMax] = useState("");
+  const [kcWarn, setKcWarn] = useState("");
+  const [linkItem, setLinkItem] = useState("");
+  const [linkSku, setLinkSku] = useState("");
   const [held, setHeld] = useState("");
 
   const sites = useQuery({ queryKey: ["sites-admin"], queryFn: loadSites });
@@ -45,6 +49,15 @@ export function InventoryPage() {
       const { data, error: queryError } = await supabase.from("inventory_tx").select("sku_id, site_id, location, delta_base, is_sandbox");
       if (queryError) throw new Error(queryError.message);
       return (data ?? []) as Tx[];
+    },
+  });
+  const steps = useQuery({
+    queryKey: ["checklist-link"],
+    enabled: admin,
+    queryFn: async () => {
+      const { data, error: queryError } = await supabase.from("checklist_items").select("id, title, sku_id").order("title");
+      if (queryError) throw new Error(queryError.message);
+      return (data ?? []) as { id: string; title: string; sku_id: string | null }[];
     },
   });
   const levels = useQuery({
@@ -117,12 +130,37 @@ export function InventoryPage() {
       return;
     }
     setError("");
+    const max = kcMax.trim() === "" ? null : Number(kcMax);
+    const warn = kcWarn.trim() === "" ? null : Number(kcWarn);
+    if ((max != null && !Number.isFinite(max)) || (warn != null && !Number.isFinite(warn))) {
+      setError("KC numbers must be blank or a number. None are filled in for you.");
+      return;
+    }
     const { error: upsertError } = await supabase.from("site_skus").upsert(
-      { site_id: lowSite, sku_id: lowSku, low_threshold: numeric, is_sandbox: practice, idempotency_key: crypto.randomUUID() },
+      {
+        site_id: lowSite,
+        sku_id: lowSku,
+        low_threshold: numeric,
+        kc_max: max,
+        kc_warn: warn,
+        is_sandbox: practice,
+        idempotency_key: crypto.randomUUID(),
+      },
       { onConflict: "site_id,sku_id" },
     );
     if (upsertError) setError(turnedOff(upsertError, "site_skus") ? NOT_TURNED_ON : upsertError.message);
     else await queryClient.invalidateQueries({ queryKey: ["site-skus"] });
+  }
+
+  async function linkStep() {
+    if (!linkItem) {
+      setError("Choose a checklist step.");
+      return;
+    }
+    setError("");
+    const { error: updateError } = await supabase.from("checklist_items").update({ sku_id: linkSku || null }).eq("id", linkItem);
+    if (updateError) setError(turnedOff(updateError, "sku_id") ? NOT_TURNED_ON : updateError.message);
+    else await queryClient.invalidateQueries({ queryKey: ["checklist-link"] });
   }
 
   async function preview() {
@@ -197,7 +235,29 @@ export function InventoryPage() {
           <Field label="Reorder below">
             <input className={inputClass} inputMode="decimal" placeholder="Blank" value={low} onChange={(event) => setLow(event.target.value)} />
           </Field>
+          <Field label="KC Manager max">
+            <input className={inputClass} inputMode="decimal" placeholder="Blank until you set it" value={kcMax} onChange={(event) => setKcMax(event.target.value)} />
+          </Field>
+          <Field label="KC Manager warn">
+            <input className={inputClass} inputMode="decimal" placeholder="Blank until you set it" value={kcWarn} onChange={(event) => setKcWarn(event.target.value)} />
+          </Field>
           <Button onClick={() => void saveLow()}>Save level</Button>
+          <h2 className="mt-5 font-semibold">Link a step to an item</h2>
+          <p className="mt-1 text-sm text-stone-600">Until a step is linked, it has no Low/Out buttons and no KC line. Nothing is linked for you.</p>
+          {steps.error ? <p className="text-sm text-stone-600">{NOT_TURNED_ON}</p> : null}
+          <Field label="Checklist step">
+            <select className={inputClass} value={linkItem} onChange={(event) => setLinkItem(event.target.value)}>
+              <option value="">Choose</option>
+              {(steps.data ?? []).map((step) => <option key={step.id} value={step.id}>{step.title}</option>)}
+            </select>
+          </Field>
+          <Field label="Item">
+            <select className={inputClass} value={linkSku} onChange={(event) => setLinkSku(event.target.value)}>
+              <option value="">None</option>
+              {visibleSkus.map((sku) => <option key={sku.id} value={sku.id}>{sku.name}</option>)}
+            </select>
+          </Field>
+          <Button tone="quiet" onClick={() => void linkStep()}>Save link</Button>
           <Button className="mt-3" tone="quiet" onClick={() => void preview()}>Check what would be reordered</Button>
           {held ? <p className="mt-2 text-sm font-medium">{held}</p> : null}
           <div className="mt-3 grid gap-1">

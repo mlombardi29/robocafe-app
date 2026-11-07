@@ -6,6 +6,7 @@ import { formatTorontoTime, torontoNow } from "../lib/dates";
 import { addDays, parseClock, previousMwf, visitStatus } from "../lib/due";
 import { inPractice } from "../lib/access";
 import { supabase } from "../lib/supabase";
+import { SiteGuidance } from "./VisitOps";
 import { Button, Card, ErrorText, Screen, Title } from "../ui";
 
 export function HomePage() {
@@ -39,10 +40,11 @@ export function HomePage() {
   return (
     <Screen>
       <Title sub={clock.today}>Today</Title>
-      <div className="mb-4 flex gap-4">
+      <div className="mb-4 flex flex-wrap gap-4">
         <Link to="/history" className="text-base font-semibold text-[var(--accent)]">Past visits</Link>
         {profile && profile.role !== "visitor" ? <Link to="/pay" className="text-base font-semibold text-[var(--accent)]">Your pay</Link> : null}
         {profile && profile.role !== "visitor" ? <Link to="/inventory" className="text-base font-semibold text-[var(--accent)]">Stock</Link> : null}
+        {profile && profile.role !== "visitor" ? <Link to="/flags" className="text-base font-semibold text-[var(--accent)]">Flag stock</Link> : null}
       </div>
       <Card className="mb-4">
         <div className="flex items-center justify-between gap-3">
@@ -88,16 +90,19 @@ export function HomePage() {
             incompleteToday,
           });
           return (
-            <Link key={site.id} to={`/service/${site.id}`} className="block rounded-3xl bg-white p-5 shadow-sm ring-1 ring-black/5">
-              <div className="text-xl font-semibold">{site.short_name}</div>
-              <div className="text-sm text-stone-500">{site.name}</div>
-              <div className={`mt-2 text-base font-semibold ${status.beforeOpening || status.lateForShow ? "text-red-700" : "text-stone-800"}`}>
-                {status.label}
-              </div>
+            <div key={site.id} className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+              <Link to={`/service/${site.id}`} className="block">
+                <div className="text-xl font-semibold">{site.short_name}</div>
+                <div className="text-sm text-stone-500">{site.name}</div>
+                <div className={`mt-2 text-base font-semibold ${status.beforeOpening || status.lateForShow ? "text-red-700" : "text-stone-800"}`}>
+                  {status.label}
+                </div>
+              </Link>
+              <SiteGuidance siteId={site.id} />
               {!site.active && !site.is_sandbox ? (
                 <p className="mt-1 text-sm text-stone-500">Offline since Oct 15, 2026.</p>
               ) : null}
-            </Link>
+            </div>
           );
         })}
         {sites.isLoading ? <p className="text-stone-600">Loading sites…</p> : null}

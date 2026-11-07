@@ -26,6 +26,7 @@ export type SnapItem = {
   threshold_label: string | null;
   locked_during_clean: boolean;
   blocks_clean_start: boolean;
+  sku_id?: string | null;
   status: "active" | "pending_validation";
   position: number;
 };

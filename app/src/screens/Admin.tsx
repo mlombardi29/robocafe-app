@@ -41,6 +41,7 @@ const sections: { title: string; links: [string, string][] }[] = [
     links: [
       ["/admin/checklist", "Order thresholds"],
       ["/inventory", "Stock"],
+      ["/admin/photos", "Photo audit"],
     ],
   },
   {

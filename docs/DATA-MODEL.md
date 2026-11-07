@@ -30,9 +30,9 @@ The hosted project does not expose tables until a grant exists. `anon` has no ta
 - `config`, `offboarding_tasks`
 - `site_codes` — empty. No codes are seeded
 
-## Phase 2 tables (no screens yet)
+## Phase 2 tables
 
-`skus`, `sku_packs`, `site_skus`, `inventory_tx`, `stock_flags`, `payments`, `charges`. Admins can write them. Techs can read rows for their own sites or their own pay, and only in the mode they are in.
+`skus`, `sku_packs`, `site_skus`, `inventory_tx`, `stock_flags`, `payments`, `charges`. `0009` adds pay rates, payment lines, and held reorder notices. `0011` adds photo-audit metadata, KC confirmations, an optional checklist-to-SKU link, and the kiosk a Dupont pickup was for. Screens exist for stock, flags, pickup, pay, and photo review. Packs, coverage, reimbursements, and Drive backup do not. Admins can write them. Techs can read rows for their own sites or their own pay, and only in the mode they are in. Photo rows do not contain image bytes.
 
 ## Helpers
 

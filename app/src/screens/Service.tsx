@@ -15,6 +15,7 @@ import { CLOCK_OUT_SAVED, COMPLETE_QUEUED, SUCCESS_TOAST_MS, completeFollowUp, s
 import { enqueue, enqueueAndFlush, flushQueue, forgetVisit, readQueue, rememberVisit, stableKey, startFreshPractice } from "../lib/sync";
 import { supabase } from "../lib/supabase";
 import type { SnapItem, Snapshot } from "../lib/types";
+import { FlagButtons, VisitOps } from "./VisitOps";
 import { Button, CheckItem, ErrorText, FreshPracticeDialog, MilkStepCard, Screen } from "../ui";
 
 async function sendPendingCompletions(pending: CompletionWrite[], snapshot: Snapshot | null): Promise<{ ok: boolean; retry: boolean; error: string | null }> {
@@ -544,6 +545,14 @@ export function ServicePage() {
         </div>
       ) : null}
 
+      <VisitOps
+        siteId={siteId}
+        sessionId={sessionId ?? query.data.session?.id ?? null}
+        modelCode={snapshot?.model_code ?? query.data.site.models?.code ?? ""}
+        doneSkuIds={groups.flatMap((section) => section.items)
+          .filter((entry) => entry.item.sku_id && rows[entry.item.id]?.state === "done")
+          .map((entry) => entry.item.sku_id as string)}
+      />
       <div className={checklistStackClass}>
         {groups.map((section) => (
           <section key={section.id}>
@@ -572,33 +581,35 @@ export function ServicePage() {
                     onSkip={() => void mark(item, "not_needed")}
                   />
                 ) : (
-                  <CheckItem
-                    key={item.id}
-                    stepId={`step-${item.id}`}
-                    highlighted={highlightId === item.id}
-                    title={item.title}
-                    detail={due.detail}
-                    howTo={item.details}
-                    placeholder={due.placeholder}
-                    overdue={due.overdue}
-                    due={due.due}
-                    doneLocked={locks.doneLocked}
-                    skipLocked={locks.notNeededLocked}
-                    lockMessage={locks.message}
-                    state={rows[item.id]?.state}
-                    note={rows[item.id]?.note}
-                    disabled={!started || submitted || busy === item.id}
-                    onDone={() => void mark(item, "done")}
-                    onSkip={() => void mark(item, "not_needed")}
-                    onNote={(note) => {
-                      const prev = rows[item.id];
-                      if (!prev) return;
-                      const write = { ...prev, note, clientRev: prev.clientRev + 1 };
-                      const next = { ...rows, [item.id]: write };
-                      setRows(next);
-                      void persist(next, {}).then(() => enqueue({ kind: "completion", write, stepKey: item.key })).then(() => flushQueue());
-                    }}
-                  />
+                  <div key={item.id}>
+                    <CheckItem
+                      stepId={`step-${item.id}`}
+                      highlighted={highlightId === item.id}
+                      title={item.title}
+                      detail={due.detail}
+                      howTo={item.details}
+                      placeholder={due.placeholder}
+                      overdue={due.overdue}
+                      due={due.due}
+                      doneLocked={locks.doneLocked}
+                      skipLocked={locks.notNeededLocked}
+                      lockMessage={locks.message}
+                      state={rows[item.id]?.state}
+                      note={rows[item.id]?.note}
+                      disabled={!started || submitted || busy === item.id}
+                      onDone={() => void mark(item, "done")}
+                      onSkip={() => void mark(item, "not_needed")}
+                      onNote={(note) => {
+                        const prev = rows[item.id];
+                        if (!prev) return;
+                        const write = { ...prev, note, clientRev: prev.clientRev + 1 };
+                        const next = { ...rows, [item.id]: write };
+                        setRows(next);
+                        void persist(next, {}).then(() => enqueue({ kind: "completion", write, stepKey: item.key })).then(() => flushQueue());
+                      }}
+                    />
+                    {item.sku_id ? <FlagButtons siteId={siteId} skuId={item.sku_id} /> : null}
+                  </div>
                 );
               })}
             </div>

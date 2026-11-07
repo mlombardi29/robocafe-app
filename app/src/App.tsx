@@ -19,6 +19,7 @@ import {
 } from "./screens/Admin";
 import { HistoryPage, HistoryVisitPage } from "./screens/History";
 import { InventoryPage } from "./screens/Inventory";
+import { FlagsPage, PhotoReviewPage, PickupPage } from "./screens/VisitOps";
 import { PayRatesPage, PayrollPage, TechPayPage } from "./screens/Payroll";
 import { HomePage } from "./screens/Home";
 import { ServicePage } from "./screens/Service";
@@ -54,6 +55,8 @@ export function App() {
                 <Route path="/time" element={<TimePage />} />
                 <Route path="/pay" element={<TechPayPage />} />
                 <Route path="/inventory" element={<InventoryPage />} />
+                <Route path="/flags" element={<FlagsPage />} />
+                <Route path="/pickup/:siteId" element={<PickupPage />} />
                 <Route path="/training" element={<TrainingHome />} />
                 <Route path="/training/:code" element={<TrainingModelPage />} />
                 <Route path="/training/:code/quiz" element={<QuizPage />} />
@@ -69,6 +72,7 @@ export function App() {
                 <Route path="/admin/practice" element={<AdminOnly><PracticeResetPage /></AdminOnly>} />
                 <Route path="/admin/offboarding" element={<AdminOnly><OffboardingPage /></AdminOnly>} />
                 <Route path="/admin/access" element={<AdminOnly><AccessPage /></AdminOnly>} />
+                <Route path="/admin/photos" element={<AdminOnly><PhotoReviewPage /></AdminOnly>} />
               </Route>
             </Route>
           </Routes>

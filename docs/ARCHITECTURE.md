@@ -29,7 +29,7 @@ Start now calls `start_session` with a client UUID. Repeating the same id return
 
 Complete service calls `complete_session`. A blank end time becomes now. After submit, a tech cannot change the times. They send a correction; an admin approves it with `decide_correction`, which writes an audit row.
 
-Milk cleaning stores `milk_clean_started_at` on the visit, so the countdown survives a reload. Prep steps that would touch the Cameo have to be Done or Not needed before the timer starts, unless the tech gives a reason.
+Milk cleaning stores `milk_clean_started_at` on the visit, so the countdown survives a reload. The checklist stays in the recommended order, and the visit screen says which prep steps are recommended first. That order does not block Start milk cleaning, and no override reason is required. Steps that would touch the machine stay locked only while that timer is actually running. Complete service rejects a visit while a required step is still open. Done and Not needed both count. A milk timer that was actually started counts as the start-milk step.
 
 ## Due items
 
