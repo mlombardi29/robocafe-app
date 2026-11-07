@@ -1,0 +1,167 @@
+code: s5
+name: Series 5 (Lite Gen 5.2)
+milk_clean_minutes: 18
+sections:
+  - phase: before_maint
+    title: Before maintenance mode
+    items:
+      - key: kc_sign_in
+        title: "Sign in to KC Manager: scan your QR code at the kiosk"
+        cadence: every_visit
+        required: true
+      - key: gloves
+        title: Wash hands, put on gloves
+        cadence: every_visit
+        required: true
+      - key: arm_calibration
+        title: Robot arm calibration
+        cadence: weekly
+        required: true
+      - key: arm_sensor
+        title: Arm sensor check
+        cadence: weekly
+        required: true
+        status: pending_validation
+        details: "Pass/fail criteria are being confirmed with KioCafe (Albert Kim). For now, note what you see."
+
+  - phase: prep
+    title: Get the Cameo ready
+    items:
+      - key: maintenance_mode
+        title: Put the kiosk in maintenance mode
+        cadence: every_visit
+        required: true
+        blocks_clean_start: true
+      - key: fill_beans
+        title: Fill beans
+        cadence: below_threshold
+        required: true
+        blocks_clean_start: true
+        locked_during_clean: true
+      - key: empty_pucks
+        title: Empty pucks, if needed
+        cadence: check_decide
+        required: true
+        blocks_clean_start: true
+        locked_during_clean: true
+        details: "Empty it by volume, or whenever it has been 2 days or more since it was last emptied. This follows days since it was emptied, not each show."
+      - key: cleaning_balls
+        title: Add cleaning balls, if needed (at least 7, none cracked)
+        cadence: every_visit
+        required: true
+        blocks_clean_start: true
+        locked_during_clean: true
+      - key: long_water
+        title: Long Water, then Pour
+        cadence: every_visit
+        required: true
+        blocks_clean_start: true
+        locked_during_clean: true
+        details: "On the last product pages, press Next. It pours scalding hot water for cleaning and the syrup cleaning."
+
+  - phase: clean_start
+    title: Milk cleaning
+    items:
+      - key: start_milk_clean
+        title: Start milk cleaning
+        cadence: every_visit
+        required: true
+        details: "Cameo menu button (top middle) → Clean → follow the screen."
+
+  - phase: during_clean
+    title: While the cleaning runs
+    items:
+      - key: milk_bag
+        title: Change the milk bag if it is due
+        cadence: every_n_days
+        days: 4
+        required: true
+        details: "No milk stays in a bag more than 4 days. Count days since the fresh bag, not shows. Don't touch the tubes. During cleaning the tubes are in the hot water and Everclean container, so you can change the bag."
+      - key: milk_topup
+        title: Top up 2% and oat
+        cadence: every_visit
+        required: true
+        details: "Don't touch the tubes."
+      - key: grey_water
+        title: Grey water
+        cadence: every_visit
+        required: true
+        details: "Grey-water bin (lower half of the kiosk). Unroll the hose and point it at the drain beside the kiosk. Turn the clasp parallel to the hose to open it and drain. Then turn the clasp back to perpendicular (closed) BEFORE you bring the hose in, and roll the hose back up. If it's left open, the next drink's grey water floods inside the kiosk."
+      - key: syrup
+        title: Syrup cleaning and top-ups
+        cadence: every_visit
+        required: true
+        details: "Wipe the bottles with hot water. Push the nozzles (at the end of the tubes) fully down so they reach deep into the liquid, not just the surface. Caps tight on top. Press Stop during a refill so syrup doesn't keep pouring. Run a pipe cleaner through the syrup nozzles so they don't clog. At UofT (2.2), move the cup holder out of the way. At Sinai (3.5) and RBC (S5), park the robotic arm out of the way."
+      - key: powder_clean
+        title: Clean the powder module
+        cadence: every_visit
+        required: true
+        details: "Lay a damp paper towel under the dispenser first to catch fallout. Turn the nozzles upward and take out the funnels. Check for powder buildup or residue. If there is residue, deep clean it, and it must be completely dry before you put it back (wetness causes more buildup). Vacuum any loose powder with the handheld vacuum. At the end, turn ALL THREE powder spouts back to down-facing, or powder drinks will come out as plain hot water."
+      - key: powder_fill
+        title: Powders
+        cadence: below_threshold
+        required: true
+      - key: cups_lids
+        title: Cups and lids
+        cadence: below_threshold
+        required: true
+        details: "Gently twist stuck 16 oz cold cups apart before loading, then seat them lightly in the cup holder. Otherwise they jam at the top and won't dispense."
+      - key: garbage
+        title: Cup and drink garbage
+        cadence: check_decide
+        required: true
+        details: "Quick look. Empty it only if it is worth it."
+      - key: claw
+        title: Robot claw
+        cadence: check_decide
+        required: true
+        details: "The arm and claw are very sensitive to pressure and easy to knock off calibration. Use very hot water on a towel and press lightly. Don't scrub, don't push."
+      - key: glass
+        title: Glass and surfaces
+        cadence: every_visit
+        required: true
+        details: "If splashes or marks would make you not want to buy from it, wipe it."
+
+  - phase: after_clean
+    title: After the cleaning
+    items:
+      - key: wipe_cameo
+        title: Wipe the Cameo
+        cadence: every_visit
+        required: true
+        locked_during_clean: true
+        details: "If splashes or marks would make you not want to buy from it, wipe it."
+
+  - phase: close
+    title: Close up
+    items:
+      - key: door_check
+        title: Close-up check
+        cadence: every_visit
+        required: true
+        details: "The service doors sit higher when the kiosk is running than when they're open for servicing. Leave clear space above anything you put back, and make sure nothing is stacked into the door path. A blocked door takes the kiosk out of service and can break the door."
+      - key: kc_consumables
+        title: Update consumables in KC Manager
+        cadence: every_visit
+        required: true
+      - key: exit_maint
+        title: Exit maintenance mode
+        cadence: every_visit
+        required: true
+      - key: test_drink
+        title: Test drink
+        cadence: every_visit
+        required: true
+        details: "Have a test drink, whatever you want. You can also offer it to someone nearby. If you're unsure a drink will make properly, test that one."
+
+  - phase: rare
+    title: Less often
+    items:
+      - key: deep_clean_nozzles
+        title: Deep clean milk nozzles
+        cadence: biweekly
+        required: true
+      - key: deep_clean_fridges
+        title: Deep clean fridges
+        cadence: monthly
+        required: true

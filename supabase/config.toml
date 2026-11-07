@@ -1,0 +1,55 @@
+# Local Supabase only. Do not run `supabase link` or `supabase db push` against
+# the hosted project from this repo's scripts. Project ref for later (manual)
+# apply: ucvacwbmhutedwfffcoj (ca-central-1).
+project_id = "kioskops"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[inbucket]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:5173"
+additional_redirect_urls = ["http://localhost:5173", "http://127.0.0.1:5173"]
+jwt_expiry = 3600
+enable_signup = false
+enable_anonymous_sign_ins = false
+
+[auth.email]
+enable_signup = false
+enable_confirmations = false
+
+[edge_runtime]
+enabled = true
+
+# Sign-in is PIN-only. This function is called before a session exists.
+[functions.keep-alive]
+verify_jwt = false
+
+[functions.pin-login]
+verify_jwt = false
+
+[functions.set-pin]
+verify_jwt = true
+
+[functions.admin-person]
+verify_jwt = true

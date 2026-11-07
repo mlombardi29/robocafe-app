@@ -1,0 +1,114 @@
+code: s22
+name: Series 2.2
+milk_clean_minutes: 9
+sections:
+  - phase: before_maint
+    title: Before maintenance mode
+    items:
+      - key: kc_sign_in
+        title: "Sign in to KC Manager: scan your QR code at the kiosk"
+        cadence: every_visit
+        required: true
+      - key: gloves
+        title: Wash hands, put on gloves
+        cadence: every_visit
+        required: true
+
+  - phase: prep
+    title: Before the milk cleaning
+    items:
+      - key: maintenance_mode
+        title: Put the kiosk in maintenance mode
+        cadence: every_visit
+        required: true
+        blocks_clean_start: true
+
+  - phase: clean_start
+    title: Milk cleaning
+    items:
+      - key: start_milk_clean
+        title: Start milk module cleaning
+        cadence: every_visit
+        required: true
+        details: "Follow the milk module screen. The cleaning runs about 9 minutes. Don't touch the module while it runs."
+
+  - phase: during_clean
+    title: While the cleaning runs
+    items:
+      - key: milk_bag
+        title: Change the milk bag if it is due
+        cadence: every_n_days
+        days: 4
+        required: true
+        details: "No milk stays in a bag more than 4 days. Don't touch the tubes. During cleaning the tubes are in the hot water and Everclean container, so you can change the bag and top up milk. The milk suction tube sits 2 cm above the bottom of the milk bag. The milk sensor tube (a plastic tube running alongside the suction tube that tells the module whether there's still milk) sits 2 cm above the bottom of the suction tube, about 4 cm above the bag bottom. Neither should touch the bottom."
+      - key: milk_topup
+        title: Top up 2% milk
+        cadence: every_visit
+        required: true
+        details: "This kiosk uses 2% only. Don't touch the tubes."
+      - key: concentrate
+        title: Coffee concentrate
+        cadence: below_threshold
+        required: true
+      - key: syrup
+        title: Syrup cleaning and top-ups
+        cadence: every_visit
+        required: true
+        details: "Wipe the bottles with hot water. Push the nozzles (at the end of the tubes) fully down so they reach deep into the liquid, not just the surface. Caps tight on top. Press Stop during a refill so syrup doesn't keep pouring. Run a pipe cleaner through the syrup nozzles so they don't clog. At UofT (2.2), move the cup holder out of the way. At Sinai (3.5) and RBC (S5), park the robotic arm out of the way."
+      - key: powder_clean
+        title: Clean the powder module
+        cadence: every_visit
+        required: true
+        details: "Lay a damp paper towel under the dispenser first to catch fallout. Turn the nozzles upward and take out the funnels. Check for powder buildup or residue. If there is residue, deep clean it, and it must be completely dry before you put it back (wetness causes more buildup). Vacuum any loose powder with the handheld vacuum. At the end, turn ALL THREE powder spouts back to down-facing, or powder drinks will come out as plain hot water."
+      - key: powder_fill
+        title: Powders
+        cadence: below_threshold
+        required: true
+      - key: cups_lids
+        title: Cups and lids
+        cadence: below_threshold
+        required: true
+        details: "Gently twist stuck 16 oz cold cups apart before loading, then seat them lightly in the cup holder. Otherwise they jam at the top and won't dispense."
+      - key: scale_check
+        title: Scale calibration check
+        cadence: every_visit
+        required: true
+      - key: garbage
+        title: Cup and drink garbage
+        cadence: check_decide
+        required: true
+        details: "Quick look. Empty it only if it is worth it."
+      - key: glass
+        title: Glass and surfaces
+        cadence: every_visit
+        required: true
+        details: "If splashes or marks would make you not want to buy from it, wipe it."
+
+  - phase: close
+    title: Close up
+    items:
+      - key: kc_consumables
+        title: Update consumables in KC Manager
+        cadence: every_visit
+        required: true
+      - key: exit_maint
+        title: Exit maintenance mode
+        cadence: every_visit
+        required: true
+      - key: test_drink
+        title: Test drink
+        cadence: every_visit
+        required: true
+        details: "Have a test drink, whatever you want. You can also offer it to someone nearby. If you're unsure a drink will make properly, test that one."
+
+  - phase: rare
+    title: Less often
+    items:
+      - key: deep_clean_nozzles
+        title: Deep clean milk nozzles
+        cadence: biweekly
+        required: true
+      - key: deep_clean_fridges
+        title: Deep clean fridges
+        cadence: monthly
+        required: true
