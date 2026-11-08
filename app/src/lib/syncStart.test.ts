@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { acceptStartResult, startRequest } from "./sync";
+import { acceptStartResult, startRequest } from "./startRequest";
 
 describe("atomic photo start", () => {
   const job = { kind: "start" as const, id: "11111111-1111-4111-8111-111111111111", siteId: "22222222-2222-4222-8222-222222222222", start: "2026-11-08T15:00:00Z", estimated: false };
