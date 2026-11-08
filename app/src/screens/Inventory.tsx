@@ -1,9 +1,10 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth";
 import { loadSites } from "../data";
 import { inPractice } from "../lib/access";
+import { conversionLabel, onHandLabel, positivePerBase, toBaseQty, type EntryMode, type PackOption } from "../lib/packEntry";
 import { NOT_TURNED_ON, turnedOff } from "../lib/rpcError";
 import { supabase } from "../lib/supabase";
 import { Button, Card, ErrorText, Field, Screen, Title, inputClass } from "../ui";
@@ -11,6 +12,7 @@ import { Button, Card, ErrorText, Field, Screen, Title, inputClass } from "../ui
 type Sku = { id: string; name: string; base_unit: string | null; is_sandbox: boolean };
 type Tx = { sku_id: string; site_id: string | null; location: string; delta_base: number; is_sandbox: boolean };
 type SiteSku = { site_id: string; sku_id: string; low_threshold: number | null };
+type PackRow = { id: string; sku_id: string; name: string; per_base: number; is_sandbox: boolean };
 
 export function InventoryPage() {
   const { profile } = useAuth();
@@ -23,8 +25,13 @@ export function InventoryPage() {
   const [skuId, setSkuId] = useState("");
   const [place, setPlace] = useState("");
   const [action, setAction] = useState("add");
+  const [entryKind, setEntryKind] = useState<"base" | "pack">("base");
+  const [packId, setPackId] = useState("");
   const [qty, setQty] = useState("");
   const [note, setNote] = useState("");
+  const [packSku, setPackSku] = useState("");
+  const [packName, setPackName] = useState("");
+  const [packPerBase, setPackPerBase] = useState("");
   const [lowSite, setLowSite] = useState("");
   const [lowSku, setLowSku] = useState("");
   const [low, setLow] = useState("");
@@ -41,6 +48,14 @@ export function InventoryPage() {
       const { data, error: queryError } = await supabase.from("skus").select("id, name, base_unit, is_sandbox").eq("active", true).order("name");
       if (queryError) throw new Error(queryError.message);
       return (data ?? []) as Sku[];
+    },
+  });
+  const packs = useQuery({
+    queryKey: ["sku-packs"],
+    queryFn: async () => {
+      const { data, error: queryError } = await supabase.from("sku_packs").select("id, sku_id, name, per_base, is_sandbox").order("name");
+      if (queryError) throw new Error(queryError.message);
+      return (data ?? []) as PackRow[];
     },
   });
   const txs = useQuery({
@@ -72,7 +87,24 @@ export function InventoryPage() {
 
   const visibleSkus = (skus.data ?? []).filter((row) => row.is_sandbox === practice);
   const modeSites = (sites.data ?? []).filter((site) => site.is_sandbox === practice);
-  const missing = turnedOff(skus.error as { message?: string } | null, "skus") || turnedOff(txs.error as { message?: string } | null, "location");
+  const selectedSku = visibleSkus.find((sku) => sku.id === skuId) ?? null;
+  const selectedPacks: PackOption[] = useMemo(
+    () =>
+      (packs.data ?? [])
+        .filter((row) => row.sku_id === skuId && row.is_sandbox === practice)
+        .map((row) => ({ id: row.id, name: row.name, perBase: Number(row.per_base) })),
+    [packs.data, skuId, practice],
+  );
+  const entryMode: EntryMode = entryKind === "pack" && packId ? { kind: "pack", packId } : { kind: "base" };
+  const qtyNumber = qty.trim() === "" ? NaN : Number(qty);
+  const conversionPreview =
+    selectedSku && Number.isFinite(qtyNumber)
+      ? conversionLabel(entryMode, qtyNumber, selectedPacks, selectedSku.base_unit)
+      : null;
+  const missing =
+    turnedOff(skus.error as { message?: string } | null, "skus") ||
+    turnedOff(txs.error as { message?: string } | null, "location") ||
+    turnedOff(packs.error as { message?: string } | null, "sku_packs");
 
   function onHand(id: string, site: string): number {
     return (txs.data ?? [])
@@ -100,10 +132,40 @@ export function InventoryPage() {
     }
   }
 
+  async function addPack() {
+    const per = positivePerBase(packPerBase.trim() === "" ? NaN : Number(packPerBase));
+    if (!packSku || !packName.trim() || per == null) {
+      setError("Pick an item, name the pack, and enter how many base units it holds.");
+      return;
+    }
+    setError("");
+    const { error: insertError } = await supabase.from("sku_packs").insert({
+      sku_id: packSku,
+      name: packName.trim(),
+      per_base: per,
+      is_sandbox: practice,
+    });
+    if (insertError) setError(turnedOff(insertError, "sku_packs") ? NOT_TURNED_ON : insertError.message);
+    else {
+      setPackName("");
+      setPackPerBase("");
+      await queryClient.invalidateQueries({ queryKey: ["sku-packs"] });
+    }
+  }
+
   async function changeStock() {
     const quantity = Number(qty);
     if (!skuId || !place || !Number.isFinite(quantity)) {
       setError("Pick an item, a place, and a quantity.");
+      return;
+    }
+    if (entryKind === "pack" && !packId) {
+      setError("Pick a pack size, or enter in base units.");
+      return;
+    }
+    const baseQty = toBaseQty(entryMode, quantity, selectedPacks);
+    if (baseQty == null) {
+      setError("That pack size is missing or invalid.");
       return;
     }
     setError("");
@@ -111,7 +173,7 @@ export function InventoryPage() {
       p_sku: skuId,
       p_site: place === "dupont" ? null : place,
       p_action: action,
-      p_qty: quantity,
+      p_qty: baseQty,
       p_note: note,
       p_key: crypto.randomUUID(),
     });
@@ -163,7 +225,7 @@ export function InventoryPage() {
     else await queryClient.invalidateQueries({ queryKey: ["checklist-link"] });
   }
 
-  async function preview() {
+  async function previewReorder() {
     setError("");
     setHeld("");
     const { data, error: rpcError } = await supabase.rpc("preview_reorder", { p_day: null });
@@ -183,7 +245,15 @@ export function InventoryPage() {
       <Card>
         <h2 className="font-semibold">Add, take, or recount one item</h2>
         <Field label="Item">
-          <select className={inputClass} value={skuId} onChange={(event) => setSkuId(event.target.value)}>
+          <select
+            className={inputClass}
+            value={skuId}
+            onChange={(event) => {
+              setSkuId(event.target.value);
+              setEntryKind("base");
+              setPackId("");
+            }}
+          >
             <option value="">Choose</option>
             {visibleSkus.map((sku) => <option key={sku.id} value={sku.id}>{sku.name}</option>)}
           </select>
@@ -202,22 +272,63 @@ export function InventoryPage() {
             <option value="recount">Recount</option>
           </select>
         </Field>
+        <Field label="Enter as">
+          <select
+            className={inputClass}
+            value={entryKind === "pack" ? `pack:${packId}` : "base"}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (value === "base") {
+                setEntryKind("base");
+                setPackId("");
+                return;
+              }
+              setEntryKind("pack");
+              setPackId(value.slice("pack:".length));
+            }}
+          >
+            <option value="base">{selectedSku?.base_unit?.trim() || "Base units"}</option>
+            {selectedPacks.map((pack) => (
+              <option key={pack.id} value={`pack:${pack.id}`}>
+                {pack.name} ({pack.perBase} {selectedSku?.base_unit?.trim() || "each"})
+              </option>
+            ))}
+          </select>
+        </Field>
         <Field label="Quantity">
           <input className={inputClass} inputMode="decimal" placeholder="Blank" value={qty} onChange={(event) => setQty(event.target.value)} />
         </Field>
+        {conversionPreview ? <p className="mb-3 text-sm font-medium text-stone-700">Saves as {conversionPreview}</p> : null}
         <Field label="Note">
           <input className={inputClass} value={note} onChange={(event) => setNote(event.target.value)} />
         </Field>
-        {skuId ? <p className="mb-3 text-sm text-stone-600">On hand here: {onHand(skuId, place)}{visibleSkus.find((sku) => sku.id === skuId)?.base_unit ? ` ${visibleSkus.find((sku) => sku.id === skuId)?.base_unit}` : ""}</p> : null}
+        {skuId ? (
+          <p className="mb-3 text-sm text-stone-600">
+            On hand here: {onHandLabel(onHand(skuId, place), selectedSku?.base_unit, selectedPacks)}
+          </p>
+        ) : null}
         <Button onClick={() => void changeStock()}>Save</Button>
       </Card>
       {admin ? (
         <Card className="mt-4">
           <h2 className="font-semibold">New item</h2>
-          <p className="mt-1 text-sm text-stone-600">Name it. Do not invent a starting count.</p>
+          <p className="mt-1 text-sm text-stone-600">Name it and its base unit. Do not invent a starting count or pack sizes.</p>
           <Field label="Name"><input className={inputClass} value={name} onChange={(event) => setName(event.target.value)} /></Field>
-          <Field label="Unit"><input className={inputClass} placeholder="Blank" value={unit} onChange={(event) => setUnit(event.target.value)} /></Field>
+          <Field label="Base unit"><input className={inputClass} placeholder="Blank" value={unit} onChange={(event) => setUnit(event.target.value)} /></Field>
           <Button onClick={() => void addSku()}>Add item</Button>
+          <h2 className="mt-5 font-semibold">Pack size</h2>
+          <p className="mt-1 text-sm text-stone-600">Optional. Example: sleeves of 50. Terminology stays as you type it until Michael confirms names later.</p>
+          <Field label="Item">
+            <select className={inputClass} value={packSku} onChange={(event) => setPackSku(event.target.value)}>
+              <option value="">Choose</option>
+              {visibleSkus.map((sku) => <option key={sku.id} value={sku.id}>{sku.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Pack name"><input className={inputClass} placeholder="e.g. sleeves" value={packName} onChange={(event) => setPackName(event.target.value)} /></Field>
+          <Field label="Base units per pack">
+            <input className={inputClass} inputMode="decimal" placeholder="e.g. 50" value={packPerBase} onChange={(event) => setPackPerBase(event.target.value)} />
+          </Field>
+          <Button onClick={() => void addPack()}>Add pack</Button>
           <h2 className="mt-5 font-semibold">Reorder level</h2>
           <p className="mt-1 text-sm text-stone-600">Leave blank until you decide a number. Blank does not create a reorder.</p>
           <Field label="Site">
@@ -258,7 +369,7 @@ export function InventoryPage() {
             </select>
           </Field>
           <Button tone="quiet" onClick={() => void linkStep()}>Save link</Button>
-          <Button className="mt-3" tone="quiet" onClick={() => void preview()}>Check what would be reordered</Button>
+          <Button className="mt-3" tone="quiet" onClick={() => void previewReorder()}>Check what would be reordered</Button>
           {held ? <p className="mt-2 text-sm font-medium">{held}</p> : null}
           <div className="mt-3 grid gap-1">
             {(levels.data ?? []).map((row) => (
