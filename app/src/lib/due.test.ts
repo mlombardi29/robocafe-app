@@ -203,7 +203,7 @@ describe("visitStatus", () => {
   it("keeps an inactive site off the due list", () => {
     expect(visitStatus({ ...base, cadence: "show_days", active: false }).label).toBe("Offline for the season");
     expect(visitStatus({ ...base, cadence: "daily", pausedTime: "6:23 PM" }).label).toContain("Paused · clocked out 6:23 PM");
-    expect(visitStatus({ ...base, cadence: "daily", visitInProgress: true }).label).toBe("Visit in progress");
+    expect(visitStatus({ ...base, cadence: "daily", visitInProgress: true }).label).toBe("Resume this visit.");
     expect(visitStatus({ ...base, cadence: "daily", incompleteToday: true }).label).toBe("Incomplete today");
   });
 });

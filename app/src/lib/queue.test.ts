@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   completionsForOpenVisit,
   completionsNotQueued,
+  keptVisitTimes,
   mergeCompletions,
   mergedMilkTimes,
   reduceCompletions,
@@ -20,6 +21,17 @@ const write = (partial: Partial<CompletionWrite>): CompletionWrite => ({
   overrideReason: "",
   value: "",
   ...partial,
+});
+
+describe("visit timer", () => {
+  it("keeps a timer when the next save does not mention it", () => {
+    const kept = keptVisitTimes(
+      { startedAt: "2026-11-08T15:00:00Z", doneAt: null, pausedAt: null },
+      {},
+    );
+    expect(kept.startedAt).toBe("2026-11-08T15:00:00Z");
+    expect(keptVisitTimes(kept, { pausedAt: "2026-11-08T15:05:00Z" }).startedAt).toBe("2026-11-08T15:00:00Z");
+  });
 });
 
 describe("idempotent saves", () => {

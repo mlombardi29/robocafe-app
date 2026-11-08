@@ -64,6 +64,18 @@ export function completionsNotQueued(pending: CompletionWrite[], queuedItemRevs:
  * Local milk times show after a reload only for this visit, and only when the server has none.
  * A server time always wins. A different visit's local timer is ignored.
  */
+/** A later save that does not mention the timer must not erase it. */
+export function keptVisitTimes<T extends { startedAt: string | null; doneAt: string | null; pausedAt: string | null }>(
+  current: T,
+  patch: { startedAt?: string | null; doneAt?: string | null; pausedAt?: string | null },
+): { startedAt: string | null; doneAt: string | null; pausedAt: string | null } {
+  return {
+    startedAt: patch.startedAt !== undefined ? patch.startedAt : current.startedAt,
+    doneAt: patch.doneAt !== undefined ? patch.doneAt : current.doneAt,
+    pausedAt: patch.pausedAt !== undefined ? patch.pausedAt : current.pausedAt,
+  };
+}
+
 export function mergedMilkTimes(
   server: { sessionId: string | null; startedAt: string | null; doneAt: string | null },
   local: { sessionId: string | null; startedAt: string | null; doneAt: string | null } | null,

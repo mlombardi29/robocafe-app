@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run && tsx ../scripts/rls-test.ts",
-    "gen:seed": "tsx ../scripts/gen-seed.ts"
+    "gen:seed": "tsx ../scripts/gen-seed.ts",
+    "gen:servicing-docs": "tsx ../scripts/gen-servicing-docs.ts"
   },
   "dependencies": {
     "@fontsource/figtree": "^5.2.8",

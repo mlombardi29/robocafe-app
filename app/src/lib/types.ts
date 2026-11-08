@@ -29,6 +29,8 @@ export type SnapItem = {
   sku_id?: string | null;
   status: "active" | "pending_validation";
   position: number;
+  /** Absent on visits started before this rule. False hides Not needed. */
+  not_needed_allowed?: boolean;
 };
 
 export type SnapSection = {
