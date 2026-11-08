@@ -6,7 +6,7 @@ import { trainingContent } from "../content/trainingContent";
 import { useAuth } from "../auth";
 import { loadSites } from "../data";
 import { NOT_TURNED_ON, turnedOff } from "../lib/rpcError";
-import { driveFileIdOk } from "../../../supabase/functions/_shared/driveRelay";
+import { driveFileIdOk, sha256Hex } from "../../../supabase/functions/_shared/driveRelay";
 import { dupontGuidance, kcInstruction, kcLines, shotsForLabels } from "../lib/opsRules";
 import { compressPhoto } from "../lib/photoFile";
 import { supabase } from "../lib/supabase";
@@ -185,12 +185,14 @@ function PhotoCapture({ sessionId, modelCode, required }: { sessionId: string | 
     setNotice("");
     const blob = await compressPhoto(file);
     await set(`kioskops-photo:${sessionId}:${shotKey}`, blob);
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const sha = await sha256Hex(bytes);
     const { data, error: rpcError } = await supabase.rpc("register_photo_shot", {
       p_session: sessionId,
       p_shot_key: shotKey,
       p_label: label,
-      p_sha: null,
-      p_bytes: blob.size,
+      p_sha: sha,
+      p_bytes: bytes.length,
       p_key: crypto.randomUUID(),
     });
     if (rpcError) {
@@ -201,12 +203,11 @@ function PhotoCapture({ sessionId, modelCode, required }: { sessionId: string | 
     const { data: auth } = await supabase.auth.getSession();
     const token = auth.session?.access_token;
     const base = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-    if (!token || !base) {
+    if (!token || !base || !shot.id) {
       setNotice("Photo saved on this phone. Drive upload is not set up yet.");
       await queryClient.invalidateQueries({ queryKey: ["photo-audit", sessionId] });
       return;
     }
-    const bytes = new Uint8Array(await blob.arrayBuffer());
     let binary = "";
     bytes.forEach((value) => { binary += String.fromCharCode(value); });
     const response = await fetch(`${base}/functions/v1/photo-audit-upload`, {
@@ -214,9 +215,7 @@ function PhotoCapture({ sessionId, modelCode, required }: { sessionId: string | 
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify({
         kind: "photo_audit",
-        parts: ["tech", `${new Date().toISOString().slice(0, 10)}-site`],
         idempotencyKey: shot.id,
-        name: `${shotKey}.jpg`,
         base64: btoa(binary),
       }),
     });

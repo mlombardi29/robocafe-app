@@ -24,6 +24,16 @@ function assert(cond: unknown, message: string) {
 }
 
 async function main() {
+  const gas = readFileSync(resolve(root, "drive-relay/Code.gs"), "utf8");
+  assert(!gas.includes("e.headers") && !gas.includes(".headers"), "Apps Script reads a request header");
+  assert(gas.includes("postData") && gas.includes("relayToken"), "Apps Script does not read the token from postData");
+  const waitAt = gas.indexOf("waitLock");
+  const callAt = gas.indexOf("handleLocked_(body)");
+  const releaseAt = gas.indexOf("releaseLock");
+  assert(waitAt >= 0 && waitAt < callAt && callAt < releaseAt, "find/create is not inside the script lock");
+  const lockedFn = gas.slice(gas.indexOf("function handleLocked_"));
+  assert(lockedFn.indexOf("findInFolder_") < lockedFn.indexOf("createFile") && lockedFn.indexOf("createFile") < lockedFn.indexOf("setDescription"), "a file is created before its idempotency description");
+
   const db = new PGlite();
   await db.exec(`
     create schema if not exists auth;
@@ -46,6 +56,7 @@ async function main() {
     "0011_ops_batch.sql",
     "0012_photo_audit_grandfather.sql",
     "0013_preview_relay_guards.sql",
+    "0014_atomic_photo_relay.sql",
   ]) {
     const sql = readFileSync(resolve(root, "supabase/migrations", file), "utf8");
     await db.exec(sql);
@@ -772,30 +783,52 @@ async function main() {
     `select id from public.photo_audit_shots where session_id = '${photoVisit}' and shot_key = 'overall'`,
   );
   const fileId = "abcdef1234567890";
+  const shaA = "a".repeat(64);
+  const shaB = "b".repeat(64);
+  async function asService(sql: string, params: unknown[]) {
+    return db.transaction(async (tx) => {
+      await tx.exec("set local role service_role");
+      return tx.query(sql, params);
+    });
+  }
   await db.transaction(async (tx) => {
     await tx.exec(`select set_config('request.jwt.claim.sub', '${ADMIN}', true)`);
-    await tx.query(`select public.register_photo_shot($1, 'overall', 'Overall', 'same-sha', 20, $2)`, [photoVisit, crypto.randomUUID()]);
+    await tx.query(`select public.register_photo_shot($1, 'overall', 'Overall', $2, 20, $3)`, [photoVisit, shaA, crypto.randomUUID()]);
   });
-  await db.exec(`insert into private.drive_file_acks (shot_id, file_id) values ('${shot.rows[0].id}', '${fileId}')`);
+  const bound = await db.query<{ content_sha256: string; byte_size: number; content_version: number }>(
+    `select content_sha256, byte_size, content_version from public.photo_audit_shots where id = '${shot.rows[0].id}'`,
+  );
+  await asService(
+    `select public.record_drive_ack($1, $2, $3, $4, $5)`,
+    [shot.rows[0].id, fileId, bound.rows[0].content_sha256, bound.rows[0].byte_size, bound.rows[0].content_version],
+  );
   await asUser(ADMIN, `select public.mark_photo_stored('${shot.rows[0].id}', '${fileId}')`);
   await asUser(ADMIN, `select public.review_photo_shot('${shot.rows[0].id}', 'ok', null)`);
   await asUser(ADMIN, `select public.mark_photo_stored('${shot.rows[0].id}', '${fileId}')`);
   await db.transaction(async (tx) => {
     await tx.exec(`select set_config('request.jwt.claim.sub', '${ADMIN}', true)`);
-    await tx.query(`select public.register_photo_shot($1, 'overall', 'Overall', 'same-sha', 20, $2)`, [photoVisit, crypto.randomUUID()]);
+    await tx.query(`select public.register_photo_shot($1, 'overall', 'Overall', $2, 20, $3)`, [photoVisit, shaA, crypto.randomUUID()]);
   });
-  const retried = await db.query<{ review_status: string; storage_state: string }>(
-    `select review_status, storage_state from public.photo_audit_shots where id = '${shot.rows[0].id}'`,
+  const retried = await db.query<{ review_status: string; storage_state: string; content_version: number }>(
+    `select review_status, storage_state, content_version from public.photo_audit_shots where id = '${shot.rows[0].id}'`,
   );
-  assert(retried.rows[0].review_status === "ok" && retried.rows[0].storage_state === "stored", "the same photo was sent again and lost its approval");
+  assert(retried.rows[0].review_status === "ok" && retried.rows[0].storage_state === "stored" && retried.rows[0].content_version === bound.rows[0].content_version, "the same photo bytes were sent again and lost their approval");
   await db.transaction(async (tx) => {
     await tx.exec(`select set_config('request.jwt.claim.sub', '${ADMIN}', true)`);
-    await tx.query(`select public.register_photo_shot($1, 'overall', 'Overall', 'different-sha', 20, $2)`, [photoVisit, crypto.randomUUID()]);
+    await tx.query(`select public.register_photo_shot($1, 'overall', 'Overall', $2, 21, $3)`, [photoVisit, shaB, crypto.randomUUID()]);
   });
-  const replaced = await db.query<{ review_status: string; drive_file_id: string | null; storage_state: string }>(
-    `select review_status, drive_file_id, storage_state from public.photo_audit_shots where id = '${shot.rows[0].id}'`,
+  const replaced = await db.query<{ review_status: string; drive_file_id: string | null; storage_state: string; content_version: number; byte_size: number }>(
+    `select review_status, drive_file_id, storage_state, content_version, byte_size from public.photo_audit_shots where id = '${shot.rows[0].id}'`,
   );
-  assert(replaced.rows[0].review_status === "pending" && replaced.rows[0].drive_file_id === null && replaced.rows[0].storage_state === "local_only", "replacing a photo kept the old approval");
+  assert(replaced.rows[0].review_status === "pending" && replaced.rows[0].drive_file_id === null && replaced.rows[0].storage_state === "local_only" && replaced.rows[0].byte_size === 21 && replaced.rows[0].content_version === bound.rows[0].content_version + 1, "replacing the photo bytes kept the old approval");
+  let staleAck = false;
+  try {
+    await asService(`select public.record_drive_ack($1, $2, $3, $4, $5)`, [shot.rows[0].id, fileId, shaA, 20, bound.rows[0].content_version]);
+  } catch (err) {
+    staleAck = String(err).includes("changed before Drive");
+    if (!staleAck) throw err;
+  }
+  assert(staleAck, "an acknowledgement for the previous photo bytes was stored");
   let badProof = false;
   try {
     await asUser(ADMIN, `select public.mark_photo_stored('${shot.rows[0].id}', '${fileId}')`);
@@ -816,6 +849,26 @@ async function main() {
   assert(badFile, "a path was accepted as a Drive file");
   const directStored = await fails(ADMIN, `update public.photo_audit_shots set storage_state = 'stored', review_status = 'ok', drive_file_id = '${fileId}' where id = '${shot.rows[0].id}'`);
   assert(directStored, "a photo was marked stored without the Drive acknowledgement");
+  await db.exec(`update public.people set mode = 'practice' where id = '${ADMIN}'`);
+  let reviewLive = false;
+  try {
+    await asUser(ADMIN, `select public.review_photo_shot('${shot.rows[0].id}', 'redo', null)`);
+  } catch (err) {
+    reviewLive = String(err).includes("Practice cannot");
+    if (!reviewLive) throw err;
+  }
+  assert(reviewLive, "practice reviewed a live photo");
+  await db.exec(`update public.people set mode = 'live' where id = '${ADMIN}'`);
+  await db.exec(`update public.photo_audit_shots set is_sandbox = true where id = '${shot.rows[0].id}'`);
+  let liveSandbox = false;
+  try {
+    await asUser(ADMIN, `select public.mark_photo_stored('${shot.rows[0].id}', '${fileId}')`);
+  } catch (err) {
+    liveSandbox = String(err).includes("Switch Practice");
+    if (!liveSandbox) throw err;
+  }
+  assert(liveSandbox, "live mode stored a practice photo");
+  await db.exec(`update public.photo_audit_shots set is_sandbox = false where id = '${shot.rows[0].id}'`);
 
   await db.exec(`insert into public.person_sites (person_id, site_id) values ('${OTHER}', '${sinai}') on conflict do nothing`);
   let stolen = false;
@@ -826,6 +879,14 @@ async function main() {
     if (!stolen) throw err;
   }
   assert(stolen, "another person replayed a pickup save");
+  let qtyMismatch = false;
+  try {
+    await asUser(TECH, `select public.record_dupont_pickup('${cups}', '${sinai}', 2, 'no', '${pickupKey}')`);
+  } catch (err) {
+    qtyMismatch = String(err).includes("another pickup");
+    if (!qtyMismatch) throw err;
+  }
+  assert(qtyMismatch, "a pickup replay changed the quantity");
 
   const noticeKey = crypto.randomUUID();
   const firstNotice = await asUser<{ preview_ops_notification: { sent: boolean } }>(
@@ -838,6 +899,30 @@ async function main() {
   );
   assert(firstNotice.rows[0].preview_ops_notification.sent === false, "a preview notification was sent");
   assert(notices.rows[0].n === 1 && notices.rows[0].sent === false, "a disabled notification was stored more than once or marked sent");
+  const unconfigured = await db.query<{ n: number }>(
+    `select jsonb_array_length(recipients) as n from public.notification_outbox where idempotency_key = '${noticeKey}'`,
+  );
+  assert(unconfigured.rows[0].n === 0, "reorder recipients were guessed before they were configured");
+  await db.exec(`
+    update public.people set email = 'admin-list@example.com' where id = '${ADMIN}';
+    insert into private.notification_recipients (kind, slot, email) values
+      ('reorder', 'michael', 'slot-michael@example.com'),
+      ('reorder', 'kajsa', 'slot-kajsa@example.com');
+  `);
+  const configuredKey = crypto.randomUUID();
+  await asUser(ADMIN, `select public.preview_ops_notification('reorder', '${configuredKey}', true)`);
+  const configured = await db.query<{ recipients: string[] }>(
+    `select recipients from public.notification_outbox where idempotency_key = '${configuredKey}'`,
+  );
+  const recipientList = configured.rows[0].recipients;
+  assert(recipientList.length === 2 && recipientList.includes("slot-michael@example.com") && recipientList.includes("slot-kajsa@example.com") && !recipientList.includes("admin-list@example.com"), "reorder recipients were not the two configured slots");
+  await db.exec(`delete from private.notification_recipients where slot = 'kajsa'`);
+  const partialKey = crypto.randomUUID();
+  await asUser(ADMIN, `select public.preview_ops_notification('reorder', '${partialKey}', true)`);
+  const partial = await db.query<{ n: number; sent: boolean }>(
+    `select jsonb_array_length(recipients) as n, sent from public.notification_outbox where idempotency_key = '${partialKey}'`,
+  );
+  assert(partial.rows[0].n === 0 && partial.rows[0].sent === false, "a partial recipient list was accepted");
   const techNotice = await fails(TECH, `select public.preview_ops_notification('reorder', '${crypto.randomUUID()}', true)`);
   assert(techNotice, "a tech queued a notification");
 
@@ -892,6 +977,115 @@ async function main() {
   }
   assert(practiceKc, "practice confirmed KC on a live visit");
   await db.exec(`update public.people set mode = 'live' where id = '${TECH}'`);
+
+  const oldStart = crypto.randomUUID();
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${OTHER}', true)`);
+    await tx.query(`select public.start_session($1::uuid, $2::uuid, '2026-11-24T15:00:00Z')`, [oldStart, sinai]);
+  });
+  const oldSnap = await db.query<{ photo: string | null; title: string | null }>(
+    `select checklist_snapshot->'photo_audit'->>'required' as photo, checklist_snapshot->'sections'->0->>'title' as title
+     from public.service_sessions where id = '${oldStart}'`,
+  );
+  assert(oldSnap.rows[0].photo == null, "an old start wrote a photo requirement");
+  const section = await db.query<{ id: string }>(
+    `select checklist_snapshot->'sections'->0->>'id' as id from public.service_sessions where id = '${oldStart}'`,
+  );
+  await db.exec(`update public.checklist_sections set title = title || ' changed' where id = '${section.rows[0].id}'`);
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${OTHER}', true)`);
+    await tx.query(`select public.start_session($1::uuid, $2::uuid, '2026-11-24T15:00:00Z', false, true)`, [oldStart, sinai]);
+  });
+  const retriedOld = await db.query<{ photo: string | null; title: string | null }>(
+    `select checklist_snapshot->'photo_audit'->>'required' as photo, checklist_snapshot->'sections'->0->>'title' as title
+     from public.service_sessions where id = '${oldStart}'`,
+  );
+  assert(retriedOld.rows[0].photo == null && retriedOld.rows[0].title === oldSnap.rows[0].title, "a retry changed an existing visit snapshot");
+  await db.exec(`update public.service_sessions set status = 'voided' where id = '${oldStart}'`);
+
+  const atomicId = crypto.randomUUID();
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${OTHER}', true)`);
+    await tx.query(`select public.start_session($1::uuid, $2::uuid, '2026-11-25T15:00:00Z', false, true)`, [atomicId, sinai]);
+    const inside = await tx.query<{ required: string | null }>(
+      `select checklist_snapshot->'photo_audit'->>'required' as required from public.service_sessions where id = '${atomicId}'`,
+    );
+    assert(inside.rows[0].required === "true", "photo eligibility was not visible before the start transaction finished");
+  });
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${OTHER}', true)`);
+    await tx.query(`select public.start_session($1::uuid, $2::uuid, '2026-11-25T15:00:00Z', false, true)`, [atomicId, sinai]);
+  });
+  const stillRequiredAtomic = await db.query<{ required: string }>(
+    `select checklist_snapshot->'photo_audit'->>'required' as required from public.service_sessions where id = '${atomicId}'`,
+  );
+  assert(stillRequiredAtomic.rows[0].required === "true", "a lost-response retry downgraded the photo requirement");
+  let secondOpen = false;
+  try {
+    await asUser(OTHER, `select public.start_session('${crypto.randomUUID()}'::uuid, '${sinai}'::uuid, '2026-11-25T16:00:00Z', false, true)`);
+  } catch (err) {
+    secondOpen = String(err).includes("already open");
+    if (!secondOpen) throw err;
+  }
+  assert(secondOpen, "two open visits were created for one person");
+
+  for (let n = 1; n <= 3; n += 1) {
+    const doneId = crypto.randomUUID();
+    await db.exec(`
+      insert into public.service_sessions (id, site_id, person_id, service_date, status, is_sandbox, checklist_snapshot, start_at)
+      values ('${doneId}', '${sinai}', '${OTHER}', '2026-10-0${n}', 'completed', false, '{}'::jsonb, '2026-10-0${n}T15:00:00Z');
+      insert into public.photo_audit_shots (session_id, person_id, site_id, shot_key, shot_label, storage_state, review_status, drive_file_id, is_sandbox, content_sha256, byte_size, content_version)
+      select '${doneId}', '${OTHER}', '${sinai}', shot, shot, 'stored', 'ok', 'abcdef1234567890', false, '${"c".repeat(64)}', 20, 1
+      from unnest(array['overall','cleaning','beans','powders','cups','closed','spouts']) as shot;
+    `);
+  }
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${OTHER}', true)`);
+    await tx.query(`select public.start_session($1::uuid, $2::uuid, '2026-11-25T15:00:00Z', false, true)`, [atomicId, sinai]);
+  });
+  const notDowngraded = await db.query<{ required: string }>(
+    `select checklist_snapshot->'photo_audit'->>'required' as required from public.service_sessions where id = '${atomicId}'`,
+  );
+  assert(notDowngraded.rows[0].required === "true", "a later history change removed the photo requirement");
+  await db.exec(`update public.service_sessions set status = 'voided' where person_id = '${OTHER}' and status = 'open'`);
+  const quietId = crypto.randomUUID();
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${OTHER}', true)`);
+    await tx.query(`select public.start_session($1::uuid, $2::uuid, '2026-11-26T15:00:00Z', false, true)`, [quietId, sinai]);
+  });
+  const quiet = await db.query<{ required: string }>(
+    `select checklist_snapshot->'photo_audit'->>'required' as required from public.service_sessions where id = '${quietId}'`,
+  );
+  assert(quiet.rows[0].required === "false", "three completed photo audits still required photos");
+  await db.exec(`update public.service_sessions set status = 'voided' where person_id = '${OTHER}' and status = 'completed' and service_date >= '2026-10-01' and service_date < '2026-10-04'`);
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${OTHER}', true)`);
+    await tx.query(`select public.start_session($1::uuid, $2::uuid, '2026-11-26T15:00:00Z', false, true)`, [quietId, sinai]);
+  });
+  const notUpgraded = await db.query<{ required: string }>(
+    `select checklist_snapshot->'photo_audit'->>'required' as required from public.service_sessions where id = '${quietId}'`,
+  );
+  assert(notUpgraded.rows[0].required === "false", "a retry added a photo requirement to an existing visit");
+
+  await db.exec(`update public.people set mode = 'practice' where id = '${OTHER}'`);
+  let practiceLiveStart = false;
+  try {
+    await asUser(OTHER, `select public.start_session('${crypto.randomUUID()}'::uuid, '${sinai}'::uuid, '2026-11-27T15:00:00Z', false, true)`);
+  } catch (err) {
+    practiceLiveStart = String(err).includes("Switch Practice");
+    if (!practiceLiveStart) throw err;
+  }
+  assert(practiceLiveStart, "practice started a live visit");
+  const practiceStart = crypto.randomUUID();
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${OTHER}', true)`);
+    await tx.query(`select public.start_session($1::uuid, $2::uuid, '2026-11-27T15:00:00Z', false, true)`, [practiceStart, practiceSinai]);
+  });
+  const practiceRow = await db.query<{ required: string; sandbox: boolean }>(
+    `select checklist_snapshot->'photo_audit'->>'required' as required, is_sandbox as sandbox from public.service_sessions where id = '${practiceStart}'`,
+  );
+  assert(practiceRow.rows[0].required === "true" && practiceRow.rows[0].sandbox === true, "a practice visit used the live photo history");
+  await db.exec(`update public.people set mode = 'live' where id = '${OTHER}'`);
 
   console.log("RLS checks passed");
   await db.close();

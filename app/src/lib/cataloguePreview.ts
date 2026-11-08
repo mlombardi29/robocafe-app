@@ -34,7 +34,24 @@ export type CataloguePreview = {
   writes: 0;
 };
 
-const EXPECTED_COLUMNS = 15;
+const EXPECTED_HEADER = [
+  "legacyId",
+  "name",
+  "active",
+  "baseUnit",
+  "baseUnitNote",
+  "opt1Name",
+  "opt1PerBase",
+  "opt1Supplier",
+  "opt1LeadDays",
+  "opt2Name",
+  "opt2PerBase",
+  "opt2Supplier",
+  "opt2LeadDays",
+  "reorderThreshold",
+  "derivedLegacyDeltaSum_NOT_RECONCILED",
+];
+const EXPECTED_COLUMNS = EXPECTED_HEADER.length;
 
 function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
@@ -107,6 +124,21 @@ function packsFrom(cells: string[]): ProposedPack[] {
 
 export function previewCatalogue(csv: string): CataloguePreview {
   const table = parseCsv(csv.trim());
+  const header = table[0] ?? [];
+  if (header.length !== EXPECTED_HEADER.length || header.some((cell, index) => cell !== EXPECTED_HEADER[index])) {
+    return {
+      activeCount: 0,
+      skippedInactive: 0,
+      proposals: [],
+      issues: [{
+        legacyId: "",
+        name: "(header)",
+        code: "header_mismatch",
+        detail: "The header is not the expected catalogue columns. Nothing was read from the rows.",
+      }],
+      writes: 0,
+    };
+  }
   const body = table.slice(1);
   const issues: CatalogueIssue[] = [];
   const proposals: ProposedSku[] = [];

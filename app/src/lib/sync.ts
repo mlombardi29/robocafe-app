@@ -6,7 +6,6 @@ import {
   withoutRetiredVisit,
 } from "./freshPractice";
 import type { CompletionWrite } from "./queue";
-import { freezeFailureBlocksQueue } from "../../../supabase/functions/_shared/driveRelay";
 import { outcomeFromEndUpdate, queueAfterFailure, retriesSyncError } from "./serviceFlow";
 import { supabase } from "./supabase";
 
@@ -148,18 +147,40 @@ async function runFlush(): Promise<FlushResult> {
 
 class SyncRejected extends Error {}
 
+export function startRequest(job: Extract<SyncJob, { kind: "start" }>) {
+  const args: {
+    p_id: string;
+    p_site: string;
+    p_start: string;
+    p_estimated: boolean;
+    p_photo_audit?: true;
+  } = {
+    p_id: job.id,
+    p_site: job.siteId,
+    p_start: job.start,
+    p_estimated: job.estimated,
+  };
+  if (job.photoAudit) args.p_photo_audit = true;
+  return args;
+}
+
+export function acceptStartResult(
+  askedForPhotoAudit: boolean,
+  row: { checklist_snapshot?: { photo_audit?: { required?: boolean } } | null } | null,
+): boolean {
+  const snapshot = row?.checklist_snapshot;
+  if (!snapshot) return false;
+  if (!askedForPhotoAudit) return true;
+  if (!snapshot.photo_audit) return true;
+  return typeof snapshot.photo_audit.required === "boolean";
+}
+
 async function runJob(job: SyncJob): Promise<void> {
   if (job.kind === "start") {
-    const { error } = await supabase.rpc("start_session", {
-      p_id: job.id,
-      p_site: job.siteId,
-      p_start: job.start,
-      p_estimated: job.estimated,
-    });
+    const { data, error } = await supabase.rpc("start_session", startRequest(job));
     if (error) throw new Error(error.message);
-    if (job.photoAudit) {
-      const frozen = await supabase.rpc("freeze_photo_audit", { p_session: job.id });
-      if (freezeFailureBlocksQueue(frozen.error)) throw new Error(frozen.error?.message ?? "Could not record photo-audit eligibility.");
+    if (!acceptStartResult(Boolean(job.photoAudit), data as { checklist_snapshot?: { photo_audit?: { required?: boolean } } | null } | null)) {
+      throw new Error("Could not record photo-audit eligibility.");
     }
     return;
   }

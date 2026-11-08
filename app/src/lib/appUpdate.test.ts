@@ -47,7 +47,7 @@ describe("service worker update prompt", () => {
   });
 
   it("names this client build and never clears storage as part of an update", () => {
-    expect(UI_BUILD).toBe("ui-2026-11-08-preview");
+    expect(UI_BUILD).toBe("ui-2026-11-08-atomic");
     for (const action of ["available", "later", "blocked", "reload-ok"] as const) {
       expect(reducePrompt(hiddenPrompt, action).clearStorage).toBe(false);
     }

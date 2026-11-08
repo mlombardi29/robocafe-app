@@ -29,6 +29,14 @@ describe("catalogue preview", () => {
     expect(preview.proposals.find((row) => row.legacyId === "sample-spice")?.derivedRaw).toBe(-4);
   });
 
+  it("does not read rows when the header is reordered", () => {
+    const swapped = SYNTHETIC_CATALOGUE.replace("legacyId,name,active", "name,legacyId,active");
+    const wrong = previewCatalogue(swapped);
+    expect(wrong.writes).toBe(0);
+    expect(wrong.proposals).toEqual([]);
+    expect(wrong.issues.some((issue) => issue.code === "header_mismatch")).toBe(true);
+  });
+
   it("does not guess reorder or stock when a row has the wrong number of fields", () => {
     expect(preview.proposals.some((row) => row.legacyId === "sample-spice-short")).toBe(false);
     expect(preview.issues.some((issue) => issue.code === "ambiguous_columns" && issue.legacyId === "sample-spice-short")).toBe(true);
