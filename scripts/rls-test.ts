@@ -58,6 +58,7 @@ async function main() {
     "0013_preview_relay_guards.sql",
     "0014_atomic_photo_relay.sql",
     "0015_servicing_feedback.sql",
+    "0016_servicing_ops_facts.sql",
   ]) {
     const sql = readFileSync(resolve(root, "supabase/migrations", file), "utf8");
     await db.exec(sql);
@@ -230,14 +231,25 @@ async function main() {
   }
   assert(locked, "tech changed a submitted time");
 
-  const sensor = await db.query<{ details: string; status: string }>(
-    "select details, status from public.checklist_items where key = 'arm_sensor' limit 1",
-  );
-  assert(sensor.rows[0].status === "pending_validation", "arm sensor is not pending");
-  assert(
-    sensor.rows[0].details.includes("Albert Kim"),
-    "arm sensor placeholder missing",
-  );
+  const sensorSinai = await db.query<{ details: string; status: string }>(`
+    select i.details, i.status
+    from public.checklist_items i
+    join public.checklist_sections s on s.id = i.section_id
+    join public.checklist_templates t on t.id = s.template_id
+    join public.models m on m.id = t.model_id
+    where i.key = 'arm_sensor' and m.code = 's35' limit 1
+  `);
+  assert(sensorSinai.rows[0].status === "active", "Sinai arm sensor should be active");
+  assert(sensorSinai.rows[0].details.includes("solid green"), "Sinai arm sensor criteria missing");
+  const sensorRbc = await db.query<{ details: string }>(`
+    select i.details
+    from public.checklist_items i
+    join public.checklist_sections s on s.id = i.section_id
+    join public.checklist_templates t on t.id = s.template_id
+    join public.models m on m.id = t.model_id
+    where i.key = 'arm_sensor' and m.code = 's5' limit 1
+  `);
+  assert(sensorRbc.rows[0].details.includes("Mount Sinai only"), "RBC arm sensor must stay Sinai-only");
   const opening = await db.query<{ opening_time: string | null }>(
     "select opening_time from public.sites where short_name = 'UofT' and is_sandbox = false",
   );

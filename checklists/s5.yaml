@@ -22,8 +22,7 @@ sections:
         title: Arm sensor check
         cadence: weekly
         required: true
-        status: pending_validation
-        details: "Pass/fail criteria are being confirmed with KioCafe (Albert Kim). For now, note what you see."
+        details: "This arm sensor solid-green check is for Mount Sinai only. At RBC, mark Not needed.\n\nAdditional info\nDo not invent Sinai sensor criteria at RBC. Robot arm weight / Auto Calibrate remains the weekly weight check on this model."
 
   - phase: prep
     title: Get the Cameo ready
@@ -40,6 +39,7 @@ sections:
         required: true
         blocks_clean_start: true
         locked_during_clean: true
+        details: "Minimum two-thirds full. If below two-thirds, refill. If at or above two-thirds, leave alone. Exactly two-thirds is not below, so do not refill."
       - key: empty_pucks
         title: Empty pucks, if needed
         cadence: check_decide
@@ -69,7 +69,7 @@ sections:
         title: Start milk cleaning
         cadence: every_visit
         required: true
-        details: "1. Cameo menu, top middle, Clean.\n2. Follow the prompts on the screen.\n\nAdditional info\nThe cleaning runs about 18 minutes."
+        details: "1. Cameo menu, top middle, Clean.\n2. Follow the prompts on the screen.\n3. Use a container with 30 mL of EverClean (not Rinza) when the Cameo asks for cleaner.\n\nAdditional info\nThe cleaning runs about 18 minutes. EverClean is required here — do not use blue Rinza for this Cameo milk clean."
 
   - phase: during_clean
     title: While the cleaning runs
@@ -79,7 +79,7 @@ sections:
         cadence: every_n_days
         days: 4
         required: true
-        details: "No milk stays in a bag more than 4 days. Count days since the fresh bag, not shows. Don't touch the tubes. During cleaning the tubes are in the hot water and Everclean container, so you can change the bag."
+        details: "No milk stays in a bag more than 4 days. Count days since the fresh bag, not shows. Don't touch the tubes. During cleaning the tubes are in the hot water and EverClean container (30 mL EverClean, not Rinza), so you can change the bag."
       - key: milk_topup
         title: Top up 2% and oat
         cadence: every_visit
@@ -89,7 +89,7 @@ sections:
         title: Grey water
         cadence: every_visit
         required: true
-        details: "Grey-water bin (lower half of the kiosk). Unroll the hose and point it at the drain beside the kiosk. Turn the clasp parallel to the hose to open it and drain. Then turn the clasp back to perpendicular (closed) BEFORE you bring the hose in, and roll the hose back up. If it's left open, the next drink's grey water floods inside the kiosk."
+        details: "RBC / PRACTICE RBC only. Grey water collects in a container underneath the kiosk with a coiled hose (not a fixed direct drain into plumbing).\n1. Uncoil the hose and position the end near the ground drain.\n2. Turn the handle/clasp so the container drains through the hose into that drain.\n3. Turn the clasp back to perpendicular (closed) BEFORE you bring the hose in, and coil the hose back up.\n\nAdditional info\nIf the clasp stays open, the next drink's grey water floods inside the kiosk."
       - key: syrup
         title: Syrup cleaning and top-ups
         cadence: every_visit
@@ -99,16 +99,17 @@ sections:
         title: Clean the powder nozzles
         cadence: every_visit
         required: true
-        details: "1. Lay a damp paper towel under the dispenser first to catch fallout.\n2. Turn the nozzles upward and take out the funnels.\n3. Check for powder buildup or residue. If there is residue, deep clean it, and it must be completely dry before you put it back. Wetness causes more buildup.\n4. Vacuum any loose powder with the handheld vacuum.\n5. Turn all three powder spouts back to down-facing, or powder drinks come out as plain hot water."
+        details: "1. Lay a damp paper towel under the dispenser first to catch fallout.\n2. Turn the nozzles upward and take out the funnels.\n3. Check for powder buildup or residue. If there is residue, deep clean it, and it must be completely dry before you put it back. Wetness causes more buildup.\n4. Vacuum any loose powder with the handheld vacuum.\n5. Turn all three powder spouts back to down-facing, or powder drinks come out as plain hot water.\n\nAdditional info\nPowdered matcha is not in use right now — do not spend time servicing an unused matcha container. Do not delete history for past matcha rows."
       - key: powder_fill
         title: Powders
         cadence: below_threshold
         required: true
+        details: "Fill only if below half. Matcha is unused — leave that container alone."
       - key: cups_lids
         title: Cups and lids
         cadence: below_threshold
         required: true
-        details: "Gently twist stuck 16 oz cold cups apart before loading, then seat them lightly in the cup holder. Otherwise they jam at the top and won't dispense."
+        details: "Fill cups and lids to the top. Gently twist stuck 16 oz cold cups apart before loading, then seat them lightly in the cup holder. Otherwise they jam at the top and won't dispense."
       - key: garbage
         title: Cup and drink garbage
         cadence: check_decide
@@ -147,6 +148,7 @@ sections:
         title: Update consumables in KC Manager
         cadence: every_visit
         required: true
+        details: "Enter what you filled. Confirm updates in command history.\n\nAdditional info\nFor milk in the Kiosoft consumables app only: enter the actual amount added minus 500 mL (example: add 8,000 mL → enter 7,500 mL). This does not change how much milk you actually add, and it does not change KioskOps inventory or rewrite history. Do not use the old 1,000–1,500 mL under-report text."
       - key: exit_maint
         title: Exit maintenance mode
         cadence: every_visit

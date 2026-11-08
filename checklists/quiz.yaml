@@ -75,14 +75,30 @@ models:
         - Monthly, during milk cleaning
       answer: 1
       explanation: They are weekly and cannot be done in maintenance mode, so they come first.
-    - prompt: What do you do on the arm sensor check for now?
+    - prompt: What do you do on the Sinai arm sensor check?
       choices:
         - Fail the visit if you are unsure
-        - Pass it when the location sensors stay solid green
+        - Confirm solid green at hot and cold positions; gently wipe the reflective surface only if needed
         - The pass/fail criteria are not confirmed yet. Note what you see
         - Skip the step until next season
-      answer: 2
-      explanation: Albert Kim at KioCafe has not confirmed the pass/fail criteria. Do not invent a pass. Note what you see.
+      answer: 1
+      explanation: Mount Sinai only. Solid green at single hot and single cold. This is not the Auto Calibrate weight check (190–210 g).
+    - prompt: When do you refill beans?
+      choices:
+        - Whenever the hopper is not completely full
+        - Only if below two-thirds; at or above two-thirds leave alone
+        - Only if below half
+        - Only after milk cleaning
+      answer: 1
+      explanation: Beans use a two-thirds minimum. Exactly two-thirds is not below, so do not refill.
+    - prompt: What cleaner do you use for the Sinai Cameo milk clean?
+      choices:
+        - 30 mL blue Rinza
+        - 30 mL EverClean (not Rinza)
+        - 750 mL water only
+        - Whatever is under the sink
+      answer: 1
+      explanation: Sinai and RBC Cameo milk cleaning uses 30 mL EverClean, not Rinza.
 
   s22:
     - prompt: How long is the UofT milk-module cleaning?
@@ -109,14 +125,22 @@ models:
         - Rinse the tubes in the sink
       answer: 0
       explanation: You can change the bag and top up during the cleaning. UofT is 2% only. Don't touch the tubes.
-    - prompt: Where do the milk tubes sit in the bag?
+    - prompt: Where do the milk tubes sit in the bag at UofT?
       choices:
         - Both tubes touch the bottom of the bag
-        - The suction tube is about 2 cm above the bag bottom. The sensor tube is about 4 cm above the bag bottom. Neither touches the bottom
+        - The suction tube sits 1 inch lower than the sensor tube
         - The sensor tube sits on the bottom and the suction tube floats
         - Tube height does not matter on the 2.2
       answer: 1
-      explanation: Suction tube 2 cm above the bottom. Sensor tube about 4 cm above the bottom. Neither touches the bottom.
+      explanation: When tubes go back in the milk, suction must sit 1 inch lower than the sensor tube.
+    - prompt: What cleaner mix does the UofT milk frother use?
+      choices:
+        - 30 mL EverClean only
+        - 750 mL water and 30 mL blue Rinza
+        - Hot water from the Cameo twice
+        - No cleaner — water rinse only
+      answer: 1
+      explanation: UofT uses 750 mL water + 30 mL Rinza. EverClean is for Sinai/RBC Cameo milk cleaning.
     - prompt: What happens if the three powder spouts are left facing up?
       choices:
         - Nothing changes
@@ -145,10 +169,10 @@ models:
       choices:
         - First, to see what is broken
         - During the milk cleaning
-        - Last, after you exit maintenance mode
+        - Last, after you exit maintenance mode, with a milk-based drink
         - Only if a customer asks
       answer: 2
-      explanation: The test drink is the last thing before you leave, after maintenance mode is off.
+      explanation: Last step after exit maintenance. At UofT the test drink must be milk-based so the frother self-rinses.
     - prompt: Which of these is not a UofT step?
       choices:
         - Coffee concentrate
@@ -165,6 +189,14 @@ models:
         - Leave and come back tomorrow
       answer: 1
       explanation: Use the cleaning time. Finish the other tasks close to when it is done.
+    - prompt: You added 8,000 mL of milk. What do you enter in Kiosoft consumables?
+      choices:
+        - "8,000 mL"
+        - "7,500 mL (actual added minus 500 mL)"
+        - "6,500–7,000 mL (old 1,000–1,500 under-report)"
+        - "Nothing — KioskOps inventory subtracts it automatically"
+      answer: 1
+      explanation: "Manual Kiosoft entry only — actual added minus 500 mL. Does not change how much you pour or KioskOps inventory."
 
   s5:
     - prompt: How long is the Cameo milk cleaning at RBC?
@@ -190,7 +222,15 @@ models:
         - Removed
         - Pointed at the drain
       answer: 1
-      explanation: Perpendicular means closed. If you leave it open, the next drink's grey water floods inside the kiosk.
+      explanation: RBC grey water sits in a container under the kiosk with a coiled hose. Drain via the hose to the ground drain, then close the clasp before coiling the hose back.
+    - prompt: You added 8,000 mL of milk. What do you enter in Kiosoft consumables?
+      choices:
+        - "8,000 mL"
+        - "7,500 mL (actual added minus 500 mL)"
+        - "6,500–7,000 mL (old 1,000–1,500 under-report)"
+        - "Nothing — KioskOps inventory subtracts it automatically"
+      answer: 1
+      explanation: "Manual Kiosoft entry only — actual added minus 500 mL. Does not change how much you pour or KioskOps inventory."
     - prompt: Why do beans, pucks, and cleaning balls come before milk cleaning?
       choices:
         - They are optional
@@ -230,15 +270,15 @@ models:
         - Only in the off season
         - After the test drink
       answer: 0
-      explanation: Weekly, early, before maintenance mode. The arm sensor pass/fail is not confirmed yet. Note what you see.
-    - prompt: What should you do on the arm sensor check for now?
+      explanation: Weekly, early, before maintenance mode. Auto Calibrate weight stays 190–210 g inclusive.
+    - prompt: What should you do on the arm sensor check at RBC?
       choices:
-        - Treat solid green sensors as a confirmed pass
-        - The pass/fail criteria are not confirmed yet. Note what you see
-        - Skip it because RBC is seasonal
+        - Treat solid green sensors as a confirmed pass using Sinai criteria
+        - Mark Not needed — the solid-green sensor check is Mount Sinai only
+        - Skip the whole weekly arm calibration
         - Fail the kiosk if you see a laser
       answer: 1
-      explanation: Waiting on Albert Kim. Do not invent pass/fail criteria.
+      explanation: Sinai-only sensor check. RBC still does the weekly Auto Calibrate weight procedure.
     - prompt: When do you have the test drink?
       choices:
         - Before the show, as the last step, after maintenance mode is off

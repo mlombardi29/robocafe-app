@@ -14,10 +14,11 @@ Human-readable servicing steps for each kiosk model. Edit `checklists/*.yaml` fi
 |---|---|
 | Wording techs follow | `checklists/s35.yaml`, `checklists/s22.yaml`, `checklists/s5.yaml` |
 | Greenfield seed SQL | `npm run gen:seed` → `supabase/migrations/0003_seed_content.sql` and `0004_sandbox.sql` (do **not** re-apply rewritten `0003` on a database that already ran it) |
-| Live template text + new-visit Not needed rules | `supabase/migrations/0015_servicing_feedback.sql` (after the pinned `0011`–`0014` bundle; does not rewrite visit snapshots) |
-| Arm sensor placeholder guard | `scripts/gen-seed.ts` refuses to ship a made-up arm-sensor pass |
+| Current live template + thresholds candidate | `supabase/migrations/0016_servicing_ops_facts.sql` (on DB through 0010; does not rewrite visit snapshots) |
+| Frozen historical 0015 | `supabase/migrations/0015_servicing_feedback.sql` (immutable; superseded for new apply by 0016) |
 
 ## Held separately
 
-- Cup presence / arm sensor pass-fail criteria still await confirmation. Do not treat an unconfirmed Albert reply as procedure.
-- Applying `0011`–`0015` to the hosted database, Netlify publish of the phone app, Google/Drive setup, and live imports or sends stay on their own approvals.
+- Volumes under 500 mL when applying the Kiosoft milk entry rule are not specified — flag if a visit needs that case; do not invent handling.
+- Google Doc sync and inaccessible `shes-wired-in/certain-ventures` manual copy — not claimed synced here.
+- Applying `0011`–`0014`, hosted `0016`, Netlify publish, Google/Drive, and live imports/sends stay on their own approvals.

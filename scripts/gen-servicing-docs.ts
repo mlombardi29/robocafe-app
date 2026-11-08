@@ -15,7 +15,7 @@ const { parse } = require("yaml") as { parse: (src: string) => unknown };
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** Keys stamped not_needed_allowed=false on NEW visits after 0015. Historical snapshots omit the flag. */
+/** Keys stamped not_needed_allowed=false on NEW visits after 0015/0016. Historical snapshots omit the flag. */
 const MANDATORY_KEYS = [
   "kc_sign_in",
   "gloves",
@@ -104,14 +104,17 @@ function renderModel(model: ModelFile): string {
   lines.push(`Milk cleaning runs about **${model.milk_clean_minutes} minutes**.`);
   lines.push("");
   lines.push("Source of truth: `checklists/" + model.code + ".yaml`. This page is generated for reading on GitHub.");
-  lines.push("Template text for databases that already have seed history is updated by `supabase/migrations/0015_servicing_feedback.sql` (apply only when approved; it does not rewrite open or offline visit snapshots).");
+  lines.push(
+    "Template text + runtime thresholds for databases that already have seed history are updated by `supabase/migrations/0016_servicing_ops_facts.sql` (apply only when approved; does not rewrite open or offline visit snapshots). Frozen `0015_servicing_feedback.sql` stays historical provenance.",
+  );
   lines.push("");
   lines.push("## Read this first");
   lines.push("");
   lines.push("- Follow the section order below. Do not invent a new required sequence.");
-  lines.push("- **Robot arm calibration** (Sinai and RBC only) uses the seven-step Auto Calibrate weight check. That is **not** the cup presence / arm sensor check.");
-  lines.push("- **Arm sensor check** (Sinai and RBC only) still awaits confirmed pass/fail criteria from KioCafe. Note what you see. Do not invent a pass.");
-  lines.push("- After migration `0015`, new visits disallow **Not needed** on the mandatory keys listed at the bottom. Older and offline snapshots without that flag stay finishable as they were.");
+  lines.push("- **Robot arm calibration** (Sinai and RBC only) uses the seven-step Auto Calibrate weight check (**190–210 g inclusive**). That is **not** the cup presence / arm sensor check.");
+  lines.push("- **Arm sensor check**: Mount Sinai uses solid-green hot/cold criteria. At RBC mark Not needed (Sinai-only).");
+  lines.push("- After migration `0016`, new visits disallow **Not needed** on the mandatory keys listed at the bottom. Older and offline snapshots without that flag stay finishable as they were.");
+  lines.push("- Beans refill only below two-thirds. Powder stays below half. Kiosoft milk entry: actual added minus 500 mL (manual entry only; not a KioskOps inventory change).");
   lines.push("- No lock-box codes, fridge codes, key-card PINs, or private catalogue data belong in these instructions.");
   lines.push("");
 
@@ -122,11 +125,12 @@ function renderModel(model: ModelFile): string {
       const flags: string[] = [cadenceLabel(item)];
       if (item.required !== false) flags.push("required");
       if (MANDATORY_KEYS.includes(item.key as (typeof MANDATORY_KEYS)[number])) {
-        flags.push("Not needed blocked on new visits after 0015");
+        flags.push("Not needed blocked on new visits after 0016");
       }
       if (item.status === "pending_validation") flags.push("criteria pending confirmation");
       if (item.key === "arm_calibration") flags.push("Auto Calibrate weight procedure");
-      if (item.key === "arm_sensor") flags.push("cup / arm sensor — awaiting confirmation");
+      if (item.key === "arm_sensor" && model.code === "s35") flags.push("Sinai solid-green criteria");
+      if (item.key === "arm_sensor" && model.code === "s5") flags.push("Sinai-only — Not needed at RBC");
       lines.push(`### ${item.title}`);
       lines.push("");
       lines.push(`\`${item.key}\` · ${flags.join(" · ")}`);
@@ -139,9 +143,9 @@ function renderModel(model: ModelFile): string {
   const presentMandatory = MANDATORY_KEYS.filter((key) =>
     model.sections.some((section) => section.items.some((item) => item.key === key)),
   );
-  lines.push("## Mandatory on new visits (after 0015)");
+  lines.push("## Mandatory on new visits (after 0016)");
   lines.push("");
-  lines.push("These keys on this model get `not_needed_allowed: false` when a **new** visit is created after `0015` is applied:");
+  lines.push("These keys on this model get `not_needed_allowed: false` when a **new** visit is created after `0016` is applied:");
   lines.push("");
   for (const key of presentMandatory) {
     const item = model.sections.flatMap((s) => s.items).find((i) => i.key === key)!;
@@ -174,26 +178,31 @@ ${models
 |---|---|
 | Wording techs follow | \`checklists/s35.yaml\`, \`checklists/s22.yaml\`, \`checklists/s5.yaml\` |
 | Greenfield seed SQL | \`npm run gen:seed\` → \`supabase/migrations/0003_seed_content.sql\` and \`0004_sandbox.sql\` (do **not** re-apply rewritten \`0003\` on a database that already ran it) |
-| Live template text + new-visit Not needed rules | \`supabase/migrations/0015_servicing_feedback.sql\` (after the pinned \`0011\`–\`0014\` bundle; does not rewrite visit snapshots) |
-| Arm sensor placeholder guard | \`scripts/gen-seed.ts\` refuses to ship a made-up arm-sensor pass |
+| Current live template + thresholds candidate | \`supabase/migrations/0016_servicing_ops_facts.sql\` (on DB through 0010; does not rewrite visit snapshots) |
+| Frozen historical 0015 | \`supabase/migrations/0015_servicing_feedback.sql\` (immutable; superseded for new apply by 0016) |
 
 ## Held separately
 
-- Cup presence / arm sensor pass-fail criteria still await confirmation. Do not treat an unconfirmed Albert reply as procedure.
-- Applying \`0011\`–\`0015\` to the hosted database, Netlify publish of the phone app, Google/Drive setup, and live imports or sends stay on their own approvals.
+- Volumes under 500 mL when applying the Kiosoft milk entry rule are not specified — flag if a visit needs that case; do not invent handling.
+- Google Doc sync and inaccessible \`shes-wired-in/certain-ventures\` manual copy — not claimed synced here.
+- Applying \`0011\`–\`0014\`, hosted \`0016\`, Netlify publish, Google/Drive, and live imports/sends stay on their own approvals.
 `;
 }
 
 const files = ["s35.yaml", "s22.yaml", "s5.yaml"];
 const models = files.map(load);
 
-const sensorDetails =
-  "Pass/fail criteria are being confirmed with KioCafe (Albert Kim). For now, note what you see.";
 for (const code of ["s35", "s5"] as const) {
   const model = models.find((m) => m.code === code)!;
   const sensor = model.sections.flatMap((s) => s.items).find((i) => i.key === "arm_sensor");
-  if (!sensor || sensor.status !== "pending_validation" || sensor.details !== sensorDetails) {
-    throw new Error(`${code} arm_sensor must stay pending_validation with the confirmation placeholder`);
+  if (!sensor || sensor.status === "pending_validation") {
+    throw new Error(`${code} arm_sensor must not remain pending_validation after Sinai solid-green approval`);
+  }
+  if (code === "s35" && !sensor.details?.includes("solid green")) {
+    throw new Error("s35 arm_sensor must include solid-green criteria");
+  }
+  if (code === "s5" && !sensor.details?.includes("Mount Sinai only")) {
+    throw new Error("s5 arm_sensor must stay Sinai-only / Not needed at RBC");
   }
   const cal = model.sections.flatMap((s) => s.items).find((i) => i.key === "arm_calibration");
   if (!cal?.details?.includes("Auto Calibrate") || !cal.details.includes("190–210")) {
