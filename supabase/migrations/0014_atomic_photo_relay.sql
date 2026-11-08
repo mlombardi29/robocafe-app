@@ -181,6 +181,11 @@ begin
       if not found then
         raise exception 'A visit is already open.';
       end if;
+      -- Same gate as the existing-row return above. A same-person retry still
+      -- gets that unchanged snapshot. Another person does not.
+      if v_row.person_id <> v_person and not private.is_admin() then
+        raise exception 'Not allowed.';
+      end if;
   end;
 
   if v_inserted and p_photo_audit is true and not (v_row.checklist_snapshot ? 'photo_audit') then
@@ -761,6 +766,7 @@ declare
   v_row public.notification_outbox;
   v_recipients jsonb := '[]'::jsonb;
   v_note text;
+  v_sender text := private.configured_notification_sender();
 begin
   if not private.is_admin() then
     raise exception 'Not allowed.';
@@ -794,7 +800,7 @@ begin
   ) values (
     p_kind,
     'disabled',
-    'michael@certainventures.ca',
+    v_sender,
     v_recipients,
     jsonb_build_object(
       'requested_send', coalesce(p_request_send, false),
@@ -813,7 +819,7 @@ begin
     'sent', false,
     'status', 'disabled',
     'id', v_row.id,
-    'sender', 'michael@certainventures.ca',
+    'sender', v_row.sender,
     'recipient_count', jsonb_array_length(v_row.recipients)
   );
 end;

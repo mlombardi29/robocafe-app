@@ -485,6 +485,34 @@ create table if not exists public.notification_outbox (
   sent boolean not null default false check (sent = false)
 );
 
+create table if not exists private.notification_sender (
+  id boolean primary key default true check (id),
+  email text
+);
+revoke all on table private.notification_sender from public, anon, authenticated;
+
+create or replace function private.configured_notification_sender()
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((
+    select case
+      when email is not null
+       and length(trim(email)) > 3
+       and position('@' in email) > 1
+      then lower(trim(email))
+      else ''
+    end
+    from private.notification_sender
+    limit 1
+  ), '')
+$$;
+
+revoke all on function private.configured_notification_sender() from public, anon, authenticated;
+
 create or replace function public.preview_ops_notification(
   p_kind text,
   p_key uuid,
@@ -498,6 +526,7 @@ as $$
 declare
   v_row public.notification_outbox;
   v_recipients jsonb;
+  v_sender text := private.configured_notification_sender();
 begin
   if not private.is_admin() then
     raise exception 'Not allowed.';
@@ -521,7 +550,7 @@ begin
   ) values (
     p_kind,
     'disabled',
-    'michael@certainventures.ca',
+    v_sender,
     v_recipients,
     jsonb_build_object(
       'requested_send', coalesce(p_request_send, false),
@@ -543,7 +572,7 @@ begin
     'sent', false,
     'status', 'disabled',
     'id', v_row.id,
-    'sender', 'michael@certainventures.ca',
+    'sender', v_row.sender,
     'recipient_count', jsonb_array_length(v_row.recipients)
   );
 end;

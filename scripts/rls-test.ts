@@ -903,6 +903,10 @@ async function main() {
     `select jsonb_array_length(recipients) as n from public.notification_outbox where idempotency_key = '${noticeKey}'`,
   );
   assert(unconfigured.rows[0].n === 0, "reorder recipients were guessed before they were configured");
+  const unconfiguredSender = await db.query<{ sender: string }>(
+    `select sender from public.notification_outbox where idempotency_key = '${noticeKey}'`,
+  );
+  assert(unconfiguredSender.rows[0].sender === "", "a sender address was stored before it was configured");
   await db.exec(`
     update public.people set email = 'admin-list@example.com' where id = '${ADMIN}';
     insert into private.notification_recipients (kind, slot, email) values
