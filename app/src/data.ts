@@ -1,6 +1,6 @@
 import { supabase } from "./lib/supabase";
 import type { CompletionWrite } from "./lib/queue";
-import { completionsForOpenVisit, mergeCompletions, mergedMilkTimes, unsyncedCompletions } from "./lib/queue";
+import { completionsForOpenVisit, keptVisitTimes, mergeCompletions, mergedMilkTimes, unsyncedCompletions } from "./lib/queue";
 import { recallVisit } from "./lib/sync";
 import type { SessionRow, SiteRow, Snapshot, SnapItem, SnapSection } from "./lib/types";
 
@@ -14,6 +14,7 @@ export type LocalVisit = {
   completions: CompletionWrite[];
   milkStartedAt: string | null;
   milkDoneAt: string | null;
+  pausedAt?: string | null;
 };
 
 export async function loadSites(): Promise<SiteRow[]> {
@@ -123,10 +124,11 @@ export async function loadService(siteId: string, personId: string) {
     }));
   }
   const local = await recallVisit<LocalVisit>(siteId);
-  const localWrites = completionsForOpenVisit(local, session?.id ?? null);
+  const serverSessionId = session?.id ?? null;
+  const localWrites = completionsForOpenVisit(local, serverSessionId);
   const milk = mergedMilkTimes(
     {
-      sessionId: session?.id ?? null,
+      sessionId: serverSessionId,
       startedAt: session?.milk_clean_started_at ?? null,
       doneAt: session?.milk_clean_done_at ?? null,
     },
@@ -134,16 +136,24 @@ export async function loadService(siteId: string, personId: string) {
       ? { sessionId: local.sessionId, startedAt: local.milkStartedAt, doneAt: local.milkDoneAt }
       : null,
   );
+  const sameVisit = Boolean(local?.sessionId && serverSessionId && local.sessionId === serverSessionId);
+  const localDraft = sameVisit || !serverSessionId ? local : null;
+  const times = keptVisitTimes(
+    { startedAt: milk.startedAt, doneAt: milk.doneAt, pausedAt: null },
+    { pausedAt: session?.end_at ?? localDraft?.pausedAt ?? null },
+  );
   return {
     site: normalized,
     session,
+    localSessionId: session?.id ?? localDraft?.sessionId ?? null,
     snapshot,
     settings: settings ?? [],
     state: state ?? [],
     completions: mergeCompletions(serverWrites, localWrites),
     serverCompletions: serverWrites,
     pendingWrites: unsyncedCompletions(serverWrites, localWrites),
-    milkStartedAt: milk.startedAt,
-    milkDoneAt: milk.doneAt,
+    milkStartedAt: times.startedAt,
+    milkDoneAt: times.doneAt,
+    pausedAt: times.pausedAt,
   };
 }

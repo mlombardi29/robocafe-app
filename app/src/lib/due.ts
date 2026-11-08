@@ -185,7 +185,7 @@ export function visitStatus(input: VisitInput): VisitStatus {
       missed: false,
       beforeOpening: false,
       lateForShow: false,
-      label: "Visit in progress",
+      label: "Resume this visit.",
     };
   }
   if (input.incompleteToday) {

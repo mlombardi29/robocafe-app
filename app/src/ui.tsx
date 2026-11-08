@@ -52,6 +52,31 @@ export function Field({
 export const inputClass =
   "min-h-12 w-full rounded-2xl border border-stone-200 bg-white px-4 text-base outline-none focus:border-[var(--accent)]";
 
+export function StepDetails({ text }: { text: string }) {
+  const [main, extra] = text.split(/\n\nAdditional info\n/);
+  const lines = (main ?? "").split("\n").map((line) => line.trim()).filter(Boolean);
+  const steps = lines.length > 1 || /^\d+\.\s/.test(lines[0] ?? "") || /^-\s/.test(lines[0] ?? "");
+  return (
+    <div className="mt-1 text-sm leading-relaxed text-stone-700">
+      {steps ? (
+        <ol className="list-decimal space-y-1 pl-5">
+          {lines.map((line) => (
+            <li key={line}>{line.replace(/^\d+\.\s|^-\s/, "")}</li>
+          ))}
+        </ol>
+      ) : (
+        <p>{main}</p>
+      )}
+      {extra ? (
+        <p className="mt-2 text-stone-600">
+          <span className="font-semibold text-stone-700">Additional info. </span>
+          {extra}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function ErrorText({ children }: { children: ReactNode }) {
   if (!children) return null;
   return <p className="mt-3 text-sm font-medium text-red-700">{children}</p>;
@@ -118,6 +143,7 @@ export function CheckItem({
   onDone,
   onSkip,
   onNote,
+  allowSkip = true,
   disabled,
   stepId,
   highlighted,
@@ -139,6 +165,7 @@ export function CheckItem({
   onDone?: () => void;
   onSkip?: () => void;
   onNote?: (value: string) => void;
+  allowSkip?: boolean;
   disabled?: boolean;
   stepId?: string;
   highlighted?: boolean;
@@ -181,15 +208,17 @@ export function CheckItem({
         >
           Done
         </Button>
-        <Button
-          tone={skipSelected ? "primary" : "quiet"}
-          className={actionButtonClass}
-          disabled={disabled || blockSkip}
-          aria-pressed={skipSelected}
-          onClick={onSkip}
-        >
-          Not needed
-        </Button>
+        {allowSkip ? (
+          <Button
+            tone={skipSelected ? "primary" : "quiet"}
+            className={actionButtonClass}
+            disabled={disabled || blockSkip}
+            aria-pressed={skipSelected}
+            onClick={onSkip}
+          >
+            Not needed
+          </Button>
+        ) : null}
         <button
           type="button"
           className={disclosureClass}
@@ -225,9 +254,9 @@ export function CheckItem({
         />
       ) : null}
       {detailsOpen && howTo ? (
-        <p id={detailsId} className="mt-1 text-sm leading-relaxed text-stone-700">
-          {howTo}
-        </p>
+        <div id={detailsId}>
+          <StepDetails text={howTo} />
+        </div>
       ) : null}
     </article>
   );
@@ -277,6 +306,7 @@ export function MilkStepCard({
   guidance,
   onStart,
   onSkip,
+  allowSkip = true,
   initialDetailsOpen = false,
 }: {
   stepId?: string;
@@ -292,6 +322,7 @@ export function MilkStepCard({
   guidance?: string | null;
   onStart?: () => void;
   onSkip?: () => void;
+  allowSkip?: boolean;
   initialDetailsOpen?: boolean;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(initialDetailsOpen);
@@ -306,15 +337,17 @@ export function MilkStepCard({
         <Button className="min-w-[12rem] flex-[1.6] !px-3" disabled={startDisabled} aria-pressed={started} onClick={onStart}>
           {started ? "Cleaning started" : "Start milk cleaning"}
         </Button>
-        <Button
-          tone={notNeeded ? "primary" : "quiet"}
-          className={actionButtonClass}
-          disabled={skipDisabled}
-          aria-pressed={notNeeded}
-          onClick={onSkip}
-        >
-          Not needed
-        </Button>
+        {allowSkip ? (
+          <Button
+            tone={notNeeded ? "primary" : "quiet"}
+            className={actionButtonClass}
+            disabled={skipDisabled}
+            aria-pressed={notNeeded}
+            onClick={onSkip}
+          >
+            Not needed
+          </Button>
+        ) : null}
         {details ? (
           <button
             type="button"
@@ -328,9 +361,9 @@ export function MilkStepCard({
         ) : null}
       </div>
       {detailsOpen && details ? (
-        <p id={detailsId} className="mt-1 text-sm leading-relaxed text-stone-700">
-          {details}
-        </p>
+        <div id={detailsId}>
+          <StepDetails text={details} />
+        </div>
       ) : null}
     </div>
   );

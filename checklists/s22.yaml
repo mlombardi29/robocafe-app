@@ -22,6 +22,7 @@ sections:
         cadence: every_visit
         required: true
         blocks_clean_start: true
+        details: "1. Scan in with the KCM app. The options appear after that scan.\n2. On the order pickup tablet, press Maintenance Mode."
 
   - phase: clean_start
     title: Milk cleaning
@@ -30,7 +31,7 @@ sections:
         title: Start milk module cleaning
         cadence: every_visit
         required: true
-        details: "Follow the milk module screen. The cleaning runs about 9 minutes. Don't touch the module while it runs."
+        details: "1. Follow the prompts on the milk module screen.\n\nAdditional info\nThe cleaning runs about 9 minutes. Don't touch the module while it runs."
 
   - phase: during_clean
     title: While the cleaning runs
@@ -54,12 +55,12 @@ sections:
         title: Syrup cleaning and top-ups
         cadence: every_visit
         required: true
-        details: "Wipe the bottles with hot water. Push the nozzles (at the end of the tubes) fully down so they reach deep into the liquid, not just the surface. Caps tight on top. Press Stop during a refill so syrup doesn't keep pouring. Run a pipe cleaner through the syrup nozzles so they don't clog. At UofT (2.2), move the cup holder out of the way. At Sinai (3.5) and RBC (S5), park the robotic arm out of the way."
+        details: "1. Open the syrup drawer.\n2. Press Clean.\n3. Follow the prompts on the syrup containers.\n4. At the final tube refill, when syrup is visible from all spouts, press OK so it does not keep pouring.\n5. Wipe the bottles with hot water.\n6. Push the nozzles at the end of the tubes fully down so they reach deep into the liquid, not just the surface.\n7. Caps tight on top.\n8. Run a pipe cleaner through the syrup nozzles so they don't clog.\n\nAdditional info\nAt UofT (2.2), move the cup holder out of the way. At Sinai (3.5) and RBC (S5), park the robotic arm out of the way."
       - key: powder_clean
-        title: Clean the powder module
+        title: Clean the powder nozzles
         cadence: every_visit
         required: true
-        details: "Lay a damp paper towel under the dispenser first to catch fallout. Turn the nozzles upward and take out the funnels. Check for powder buildup or residue. If there is residue, deep clean it, and it must be completely dry before you put it back (wetness causes more buildup). Vacuum any loose powder with the handheld vacuum. At the end, turn ALL THREE powder spouts back to down-facing, or powder drinks will come out as plain hot water."
+        details: "1. Lay a damp paper towel under the dispenser first to catch fallout.\n2. Turn the nozzles upward and take out the funnels.\n3. Check for powder buildup or residue. If there is residue, deep clean it, and it must be completely dry before you put it back. Wetness causes more buildup.\n4. Vacuum any loose powder with the handheld vacuum.\n5. Turn all three powder spouts back to down-facing, or powder drinks come out as plain hot water."
       - key: powder_fill
         title: Powders
         cadence: below_threshold

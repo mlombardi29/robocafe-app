@@ -1,12 +1,12 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth";
-import { loadRecentSessions, loadShowDays, loadSites } from "../data";
+import { loadRecentSessions, loadShowDays, loadSites, type LocalVisit } from "../data";
+import { recallVisit } from "../lib/sync";
 import { formatTorontoTime, torontoNow } from "../lib/dates";
 import { addDays, parseClock, previousMwf, visitStatus } from "../lib/due";
 import { inPractice } from "../lib/access";
 import { supabase } from "../lib/supabase";
-import { SiteGuidance } from "./VisitOps";
 import { Button, Card, ErrorText, Screen, Title } from "../ui";
 
 export function HomePage() {
@@ -35,6 +35,14 @@ export function HomePage() {
   }
 
   const visible = (sites.data ?? []).filter((site) => site.is_sandbox === practice);
+  const drafts = useQuery({
+    queryKey: ["drafts", profile?.id, visible.map((site) => site.id).join(",")],
+    enabled: visible.length > 0,
+    queryFn: async () => {
+      const entries = await Promise.all(visible.map(async (site) => [site.id, await recallVisit<LocalVisit>(site.id)] as const));
+      return Object.fromEntries(entries);
+    },
+  });
   const error = sites.error instanceof Error ? sites.error.message : "";
 
   return (
@@ -68,7 +76,10 @@ export function HomePage() {
             .sort((a, b) => String(b.end_at ?? b.submitted_at ?? "").localeCompare(String(a.end_at ?? a.submitted_at ?? "")));
           const completedTodayTime = formatTorontoTime(completedToday[0]?.end_at ?? completedToday[0]?.submitted_at ?? null);
           const openVisit = siteSessions.find((row) => row.status === "open");
-          const pausedTime = openVisit?.end_at ? formatTorontoTime(openVisit.end_at) : null;
+          const draft = drafts.data?.[site.id];
+          const draftMatches = Boolean(draft?.sessionId && (!openVisit || openVisit.id === draft.sessionId));
+          const pausedSource = openVisit?.end_at ?? (draftMatches ? draft?.pausedAt : null);
+          const pausedTime = pausedSource ? formatTorontoTime(pausedSource) : null;
           const incompleteToday = !openVisit && completedToday.length === 0 && siteSessions.some((row) => row.status === "voided" && row.service_date === clock.today);
           const show = (shows.data ?? []).find((row) => row.site_id === site.id && row.date === clock.today);
           const previous =
@@ -86,23 +97,16 @@ export function HomePage() {
             previousServiceDate: previous,
             completedTodayTime: openVisit ? null : completedTodayTime || null,
             pausedTime: pausedTime || null,
-            visitInProgress: Boolean(openVisit && !openVisit.end_at),
+            visitInProgress: Boolean((openVisit && !openVisit.end_at) || (draftMatches && draft?.sessionId && !pausedSource)),
             incompleteToday,
           });
           return (
-            <div key={site.id} className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-black/5">
-              <Link to={`/service/${site.id}`} className="block">
-                <div className="text-xl font-semibold">{site.short_name}</div>
-                <div className="text-sm text-stone-500">{site.name}</div>
-                <div className={`mt-2 text-base font-semibold ${status.beforeOpening || status.lateForShow ? "text-red-700" : "text-stone-800"}`}>
-                  {status.label}
-                </div>
-              </Link>
-              <SiteGuidance siteId={site.id} />
-              {!site.active && !site.is_sandbox ? (
-                <p className="mt-1 text-sm text-stone-500">Offline since Oct 15, 2026.</p>
-              ) : null}
-            </div>
+            <Link key={site.id} to={`/service/${site.id}`} className="block rounded-3xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+              <div className="text-xl font-semibold">{site.short_name}</div>
+              <div className={`mt-2 text-base font-semibold ${status.beforeOpening || status.lateForShow ? "text-red-700" : "text-stone-800"}`}>
+                {status.label}
+              </div>
+            </Link>
           );
         })}
         {sites.isLoading ? <p className="text-stone-600">Loading sites…</p> : null}

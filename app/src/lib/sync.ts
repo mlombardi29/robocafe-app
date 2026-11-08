@@ -7,7 +7,7 @@ import {
 } from "./freshPractice";
 import type { CompletionWrite } from "./queue";
 import { outcomeFromEndUpdate, queueAfterFailure, retriesSyncError } from "./serviceFlow";
-import { acceptStartResult, startRequest } from "./startRequest";
+import { acceptStartResult, photoAuditArgMissing, startRequest, withoutPhotoArg } from "./startRequest";
 import { supabase } from "./supabase";
 
 export type FlushResult = {
@@ -150,9 +150,17 @@ class SyncRejected extends Error {}
 
 async function runJob(job: SyncJob): Promise<void> {
   if (job.kind === "start") {
-    const { data, error } = await supabase.rpc("start_session", startRequest(job));
+    const asked = startRequest(job);
+    let { data, error } = await supabase.rpc("start_session", asked);
+    let grandfathered = false;
+    if (error && job.photoAudit && photoAuditArgMissing(error)) {
+      const fallback = await supabase.rpc("start_session", withoutPhotoArg(asked));
+      data = fallback.data;
+      error = fallback.error;
+      grandfathered = !fallback.error;
+    }
     if (error) throw new Error(error.message);
-    if (!acceptStartResult(Boolean(job.photoAudit), data as { checklist_snapshot?: { photo_audit?: { required?: boolean } } | null } | null)) {
+    if (!acceptStartResult(Boolean(job.photoAudit) && !grandfathered, data as { checklist_snapshot?: { photo_audit?: { required?: boolean } } | null } | null)) {
       throw new Error("Could not record photo-audit eligibility.");
     }
     return;
