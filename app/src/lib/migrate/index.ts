@@ -36,6 +36,17 @@ export {
   countByCollection,
   preexistingFingerprints,
 } from "./localSnapshot";
+export {
+  SQL_LOCAL_LIMITATION,
+  classifySqlReadiness,
+  summarizeSqlReadiness,
+  skuInsertPlan,
+  sanitizeCurrentForSeed,
+  modelCodeForSiteName,
+  type SqlReadiness,
+  type SqlDependencyReport,
+  type ResolvedIdentityMaps,
+} from "./sqlLocalApply";
 export type {
   Finding,
   MappingTables,

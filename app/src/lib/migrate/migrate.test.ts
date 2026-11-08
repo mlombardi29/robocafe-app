@@ -24,6 +24,12 @@ import { interpretLegacyStep, listClearEquivalences } from "./stepEquivalence";
 import { MigrateStore } from "./store";
 import { LEGACY_HEADERS, LEGACY_TABS } from "./tabs";
 import { buildTransferPreview } from "./transferPreview";
+import {
+  classifySqlReadiness,
+  skuInsertPlan,
+  summarizeSqlReadiness,
+  SQL_LOCAL_LIMITATION,
+} from "./sqlLocalApply";
 
 describe("eleven-tab migration rehearsal kit", () => {
   it("covers all eleven Code.gs tabs with exact headers", () => {
@@ -396,5 +402,54 @@ describe("eleven-tab migration rehearsal kit", () => {
     const undone = undoLastBatch(local);
     expect(undone.ok).toBe(true);
     expect(preexistingFingerprints(local)).toEqual(before);
+  });
+
+  it("classifies SQL readiness without fabricating person/site maps", () => {
+    expect(SQL_LOCAL_LIMITATION).toMatch(/Local PostgreSQL/);
+    const parsed = parseWorkbook(syntheticWorkbook());
+    const current = {
+      people: [{ id: "cur-person", goes_by: "Alex", role: "tech", active: true }],
+      sites: [{ id: "cur-site", name: "Sample Sinai", short_name: "Sinai", is_sandbox: false }],
+      visits: [],
+      skus: [] as Array<Record<string, unknown>>,
+      payments: [] as Array<Record<string, unknown>>,
+      charges: [] as Array<Record<string, unknown>>,
+    };
+    const comparison = {
+      entity_candidates: {
+        people: [
+          {
+            legacy_name: "Alex Tech",
+            current_candidates: [{ id: "cur-person", name: "Alex" }],
+            confidence: "candidate",
+          },
+          { legacy_name: "Unmapped Person", current_candidates: [], confidence: "none" },
+        ],
+      },
+      site_alias_candidates: [],
+      legacy_duplicate_candidate_detail: [],
+      legacy_person_unmatched_visits: [{ name: "Unmapped Person", visits: 1 }],
+    };
+    const preview = buildTransferPreview({ tabs: parsed.tabs, current, comparison });
+    const reports = [...preview.addCandidates, ...preview.reviewQueue].map((d) => classifySqlReadiness(d, {}));
+    const summary = summarizeSqlReadiness(reports);
+    expect(summary.ready).toBeGreaterThan(0);
+    expect(reports.some((r) => r.tab === "SKUs" && r.readiness === "ready")).toBe(true);
+    expect(reports.some((r) => r.tab === "ServiceSessions" && r.readiness === "blocked_pending_decision")).toBe(
+      true,
+    );
+    expect(reports.some((r) => r.tab === "Transactions" && r.readiness === "withheld_review")).toBe(true);
+    expect(summary.smallestDecisions.length).toBeGreaterThan(0);
+    const sku = preview.addCandidates.find((d) => d.tab === "SKUs" && d.action === "ADD");
+    expect(skuInsertPlan(sku!)?.name).toBeTruthy();
+    // With explicit maps, a visit can become ready — still not inferred.
+    const visit = preview.addCandidates.find((d) => d.tab === "ServiceSessions")!;
+    const tech = String(visit.payload?.technicianName ?? "").toLowerCase();
+    const kiosk = String((visit.payload?.original as { kioskId?: string })?.kioskId ?? "");
+    const mapped = classifySqlReadiness(visit, {
+      personByLegacyName: { [tech]: "cur-person" },
+      siteByLegacyKioskId: { [kiosk]: "cur-site" },
+    });
+    expect(mapped.readiness).toBe("ready");
   });
 });
