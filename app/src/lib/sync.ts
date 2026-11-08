@@ -6,6 +6,7 @@ import {
   withoutRetiredVisit,
 } from "./freshPractice";
 import type { CompletionWrite } from "./queue";
+import { freezeFailureBlocksQueue } from "../../../supabase/functions/_shared/driveRelay";
 import { outcomeFromEndUpdate, queueAfterFailure, retriesSyncError } from "./serviceFlow";
 import { supabase } from "./supabase";
 
@@ -158,9 +159,7 @@ async function runJob(job: SyncJob): Promise<void> {
     if (error) throw new Error(error.message);
     if (job.photoAudit) {
       const frozen = await supabase.rpc("freeze_photo_audit", { p_session: job.id });
-      if (frozen.error && frozen.error.code !== "PGRST202" && !/freeze_photo_audit|does not exist|schema cache/i.test(frozen.error.message)) {
-        throw new Error(frozen.error.message);
-      }
+      if (freezeFailureBlocksQueue(frozen.error)) throw new Error(frozen.error?.message ?? "Could not record photo-audit eligibility.");
     }
     return;
   }

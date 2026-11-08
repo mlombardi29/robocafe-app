@@ -31,14 +31,19 @@ Vitest covers:
 - a fresh practice start keeps the old attempt, starts an empty visit, and does not change live or practice last-done dates
 - live mode, another person, a trainee, and a finished or live visit cannot use that start to change the wrong row
 - the arm sensor row is `pending_validation` and UofT `opening_time` is null
-- migrations `0009`, `0010`, `0011`, and `0012` apply on top of `0008`
+- migrations `0009` through `0013` apply on top of `0008`
 - a visit with no `photo_audit` snapshot field completes without photo shots
 - a visit whose snapshot says photo audit is required does not complete until seven shots are registered
 - that grandfathering still rejects a visit with a required step open, and still requires a KC confirmation when a max is saved
 - milk cleaning can start before prep is saved, and cannot be marked done before it starts
 - Complete service rejects a visit with required steps still open
 - a Dupont pickup with the same idempotency key takes stock once
-- a person in practice cannot take live Dupont stock for a live kiosk
+- another person cannot replay that pickup key
+- a person in practice cannot take live Dupont stock, complete a live visit, or confirm KC on a live visit
+- replacing a photo clears its approval and Drive file; sending the same photo again keeps them
+- a path or a made-up acknowledgement cannot mark a photo stored
+- a voided visit with seven approved photos does not turn photo audit off for the next visit
+- a reorder or pickup preview stays disabled when the caller asks to send, and a second save does not add a row
 
 ## Manual, on a phone
 

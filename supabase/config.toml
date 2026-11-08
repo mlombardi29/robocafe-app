@@ -53,3 +53,9 @@ verify_jwt = true
 
 [functions.admin-person]
 verify_jwt = true
+
+[functions.photo-audit-upload]
+verify_jwt = true
+
+[functions.reorder-check]
+verify_jwt = true

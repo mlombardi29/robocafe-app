@@ -6,6 +6,7 @@ import { trainingContent } from "../content/trainingContent";
 import { useAuth } from "../auth";
 import { loadSites } from "../data";
 import { NOT_TURNED_ON, turnedOff } from "../lib/rpcError";
+import { driveFileIdOk } from "../../../supabase/functions/_shared/driveRelay";
 import { dupontGuidance, kcInstruction, kcLines, shotsForLabels } from "../lib/opsRules";
 import { compressPhoto } from "../lib/photoFile";
 import { supabase } from "../lib/supabase";
@@ -205,20 +206,32 @@ function PhotoCapture({ sessionId, modelCode, required }: { sessionId: string | 
       await queryClient.invalidateQueries({ queryKey: ["photo-audit", sessionId] });
       return;
     }
-    const body = new FormData();
-    body.set("file", blob, `${shotKey}.jpg`);
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let binary = "";
+    bytes.forEach((value) => { binary += String.fromCharCode(value); });
     const response = await fetch(`${base}/functions/v1/photo-audit-upload`, {
       method: "POST",
-      headers: { authorization: `Bearer ${token}` },
-      body,
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "photo_audit",
+        parts: ["tech", `${new Date().toISOString().slice(0, 10)}-site`],
+        idempotencyKey: shot.id,
+        name: `${shotKey}.jpg`,
+        base64: btoa(binary),
+      }),
     });
-    const payload = await response.json().catch(() => ({ configured: false }));
-    if (!response.ok || !payload.configured || !payload.fileId) {
+    const payload = await response.json().catch(() => ({ configured: false, stored: false }));
+    if (!response.ok || payload.configured !== true || payload.stored !== true || !driveFileIdOk(payload.fileId)) {
       setNotice("Photo saved on this phone. Drive upload is not set up yet.");
       await queryClient.invalidateQueries({ queryKey: ["photo-audit", sessionId] });
       return;
     }
-    await supabase.rpc("mark_photo_stored", { p_id: shot.id, p_drive_file_id: payload.fileId });
+    const stored = await supabase.rpc("mark_photo_stored", { p_id: shot.id, p_drive_file_id: payload.fileId });
+    if (stored.error) {
+      setNotice("Photo saved on this phone. Drive upload is not set up yet.");
+      await queryClient.invalidateQueries({ queryKey: ["photo-audit", sessionId] });
+      return;
+    }
     setNotice("Photo uploaded.");
     await queryClient.invalidateQueries({ queryKey: ["photo-audit", sessionId] });
   }

@@ -19,6 +19,7 @@ import {
 } from "./screens/Admin";
 import { HistoryPage, HistoryVisitPage } from "./screens/History";
 import { InventoryPage } from "./screens/Inventory";
+import { ImportPreviewPage } from "./screens/ImportPreview";
 import { FlagsPage, PhotoReviewPage, PickupPage } from "./screens/VisitOps";
 import { PayRatesPage, PayrollPage, TechPayPage } from "./screens/Payroll";
 import { HomePage } from "./screens/Home";
@@ -73,6 +74,7 @@ export function App() {
                 <Route path="/admin/offboarding" element={<AdminOnly><OffboardingPage /></AdminOnly>} />
                 <Route path="/admin/access" element={<AdminOnly><AccessPage /></AdminOnly>} />
                 <Route path="/admin/photos" element={<AdminOnly><PhotoReviewPage /></AdminOnly>} />
+                <Route path="/admin/import" element={<AdminOnly><ImportPreviewPage /></AdminOnly>} />
               </Route>
             </Route>
           </Routes>

@@ -45,6 +45,7 @@ async function main() {
     "0010_milk_order_guidance.sql",
     "0011_ops_batch.sql",
     "0012_photo_audit_grandfather.sql",
+    "0013_preview_relay_guards.sql",
   ]) {
     const sql = readFileSync(resolve(root, "supabase/migrations", file), "utf8");
     await db.exec(sql);
@@ -766,6 +767,131 @@ async function main() {
     from unnest(array['overall','cleaning','beans','powders','cups','closed','spouts']) as shot
   `);
   await asUser(ADMIN, `select public.complete_session('${photoVisit}', null, null)`);
+
+  const shot = await db.query<{ id: string }>(
+    `select id from public.photo_audit_shots where session_id = '${photoVisit}' and shot_key = 'overall'`,
+  );
+  const fileId = "abcdef1234567890";
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${ADMIN}', true)`);
+    await tx.query(`select public.register_photo_shot($1, 'overall', 'Overall', 'same-sha', 20, $2)`, [photoVisit, crypto.randomUUID()]);
+  });
+  await db.exec(`insert into private.drive_file_acks (shot_id, file_id) values ('${shot.rows[0].id}', '${fileId}')`);
+  await asUser(ADMIN, `select public.mark_photo_stored('${shot.rows[0].id}', '${fileId}')`);
+  await asUser(ADMIN, `select public.review_photo_shot('${shot.rows[0].id}', 'ok', null)`);
+  await asUser(ADMIN, `select public.mark_photo_stored('${shot.rows[0].id}', '${fileId}')`);
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${ADMIN}', true)`);
+    await tx.query(`select public.register_photo_shot($1, 'overall', 'Overall', 'same-sha', 20, $2)`, [photoVisit, crypto.randomUUID()]);
+  });
+  const retried = await db.query<{ review_status: string; storage_state: string }>(
+    `select review_status, storage_state from public.photo_audit_shots where id = '${shot.rows[0].id}'`,
+  );
+  assert(retried.rows[0].review_status === "ok" && retried.rows[0].storage_state === "stored", "the same photo was sent again and lost its approval");
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${ADMIN}', true)`);
+    await tx.query(`select public.register_photo_shot($1, 'overall', 'Overall', 'different-sha', 20, $2)`, [photoVisit, crypto.randomUUID()]);
+  });
+  const replaced = await db.query<{ review_status: string; drive_file_id: string | null; storage_state: string }>(
+    `select review_status, drive_file_id, storage_state from public.photo_audit_shots where id = '${shot.rows[0].id}'`,
+  );
+  assert(replaced.rows[0].review_status === "pending" && replaced.rows[0].drive_file_id === null && replaced.rows[0].storage_state === "local_only", "replacing a photo kept the old approval");
+  let badProof = false;
+  try {
+    await asUser(ADMIN, `select public.mark_photo_stored('${shot.rows[0].id}', '${fileId}')`);
+  } catch (err) {
+    badProof = String(err).includes("did not confirm");
+    if (!badProof) throw err;
+  }
+  assert(badProof, "a made-up Drive acknowledgement was accepted");
+  const forgedAck = await fails(ADMIN, `select public.record_drive_ack('${shot.rows[0].id}', '${fileId}')`);
+  assert(forgedAck, "a signed-in person wrote a Drive acknowledgement");
+  let badFile = false;
+  try {
+    await asUser(ADMIN, `select public.mark_photo_stored('${shot.rows[0].id}', '../secret')`);
+  } catch (err) {
+    badFile = String(err).includes("Drive did not return");
+    if (!badFile) throw err;
+  }
+  assert(badFile, "a path was accepted as a Drive file");
+  const directStored = await fails(ADMIN, `update public.photo_audit_shots set storage_state = 'stored', review_status = 'ok', drive_file_id = '${fileId}' where id = '${shot.rows[0].id}'`);
+  assert(directStored, "a photo was marked stored without the Drive acknowledgement");
+
+  await db.exec(`insert into public.person_sites (person_id, site_id) values ('${OTHER}', '${sinai}') on conflict do nothing`);
+  let stolen = false;
+  try {
+    await asUser(OTHER, `select public.record_dupont_pickup('${cups}', '${sinai}', 1, 'no', '${pickupKey}')`);
+  } catch (err) {
+    stolen = String(err).includes("another pickup");
+    if (!stolen) throw err;
+  }
+  assert(stolen, "another person replayed a pickup save");
+
+  const noticeKey = crypto.randomUUID();
+  const firstNotice = await asUser<{ preview_ops_notification: { sent: boolean } }>(
+    ADMIN,
+    `select public.preview_ops_notification('reorder', '${noticeKey}', true) as preview_ops_notification`,
+  );
+  await asUser(ADMIN, `select public.preview_ops_notification('reorder', '${noticeKey}', true)`);
+  const notices = await db.query<{ n: number; sent: boolean }>(
+    `select count(*)::int as n, bool_or(sent) as sent from public.notification_outbox where idempotency_key = '${noticeKey}'`,
+  );
+  assert(firstNotice.rows[0].preview_ops_notification.sent === false, "a preview notification was sent");
+  assert(notices.rows[0].n === 1 && notices.rows[0].sent === false, "a disabled notification was stored more than once or marked sent");
+  const techNotice = await fails(TECH, `select public.preview_ops_notification('reorder', '${crypto.randomUUID()}', true)`);
+  assert(techNotice, "a tech queued a notification");
+
+  const noticeSku = crypto.randomUUID();
+  await db.exec(`
+    insert into public.skus (id, name, base_unit, source, is_sandbox) values ('${noticeSku}', 'Notice cups', 'cups', 'grocery', false);
+    insert into public.reorder_notices (site_id, sku_id, on_hand, low_threshold, notice_on, status, is_sandbox)
+    values ('${sinai}', '${noticeSku}', 1, 2, '2026-11-08', 'held', false);
+  `);
+  const sentNotice = await fails(ADMIN, `update public.reorder_notices set status = 'sent' where sku_id = '${noticeSku}'`);
+  assert(sentNotice, "a reorder notice was marked sent");
+
+  const voidedVisit = crypto.randomUUID();
+  await db.exec(`
+    insert into public.service_sessions (id, site_id, person_id, service_date, status, is_sandbox, checklist_snapshot)
+    values ('${voidedVisit}', '${sinai}', '${ADMIN}', '2020-01-01', 'voided', false, '{"photo_audit":{"required":true}}'::jsonb);
+    insert into public.photo_audit_shots (session_id, person_id, site_id, shot_key, shot_label, storage_state, review_status, drive_file_id, is_sandbox)
+    select '${voidedVisit}', '${ADMIN}', '${sinai}', shot, shot, 'stored', 'ok', 'abcdef1234567890', false
+    from unnest(array['overall','cleaning','beans','powders','cups','closed','spouts']) as shot;
+  `);
+  const afterVoid = crypto.randomUUID();
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${ADMIN}', true)`);
+    await tx.query(`select public.start_session($1::uuid, $2::uuid, '2026-11-22T15:00:00Z')`, [afterVoid, sinai]);
+    await tx.query(`select public.freeze_photo_audit($1)`, [afterVoid]);
+  });
+  const stillRequired = await db.query<{ required: string | null }>(
+    `select checklist_snapshot->'photo_audit'->>'required' as required from public.service_sessions where id = '${afterVoid}'`,
+  );
+  assert(stillRequired.rows[0].required === "true", "a voided photo audit counted toward the three approved visits");
+
+  const liveOpen = crypto.randomUUID();
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${TECH}', true)`);
+    await tx.query(`select public.start_session($1::uuid, $2::uuid, '2026-11-23T15:00:00Z')`, [liveOpen, sinai]);
+  });
+  await db.exec(`update public.people set mode = 'practice' where id = '${TECH}'`);
+  let practiceComplete = false;
+  try {
+    await asUser(TECH, `select public.complete_session('${liveOpen}', null, null)`);
+  } catch (err) {
+    practiceComplete = String(err).includes("Practice cannot");
+    if (!practiceComplete) throw err;
+  }
+  assert(practiceComplete, "practice completed a live visit");
+  let practiceKc = false;
+  try {
+    await asUser(TECH, `select public.save_kc_confirmation('${liveOpen}', '${cups}', true, null, true, '${crypto.randomUUID()}')`);
+  } catch (err) {
+    practiceKc = String(err).includes("Practice cannot");
+    if (!practiceKc) throw err;
+  }
+  assert(practiceKc, "practice confirmed KC on a live visit");
+  await db.exec(`update public.people set mode = 'live' where id = '${TECH}'`);
 
   console.log("RLS checks passed");
   await db.close();
