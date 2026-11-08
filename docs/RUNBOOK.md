@@ -9,7 +9,7 @@ If the Supabase project is paused, open the dashboard and click Restore. Then co
 
 ## 1. Apply the database
 
-In the Supabase dashboard, open SQL Editor. Run these files **one at a time, in this order**, pasting the whole file:
+In the Supabase dashboard, open SQL Editor. Run `0001` through `0010` one file at a time, in this order. `0011` through `0014` are the exception: they go in one query, as the next paragraph says.
 
 1. `supabase/migrations/0001_schema.sql`
 2. `supabase/migrations/0002_rls_grants.sql`
@@ -25,6 +25,13 @@ In the Supabase dashboard, open SQL Editor. Run these files **one at a time, in 
 12. `supabase/migrations/0012_photo_audit_grandfather.sql`
 13. `supabase/migrations/0013_preview_relay_guards.sql`
 14. `supabase/migrations/0014_atomic_photo_relay.sql`
+
+`0009` and `0010` are already applied. Do not run them again. `0011` through `0014` are not applied. When you approve them, paste all four files into **one** SQL Editor query, in that order, and run that query once. The editor commits the whole query together. None of the four files contains its own `COMMIT`, so a failure rolls the whole paste back and no intermediate function is left callable. Do not run `0011`, `0012`, or `0013` as its own query and come back later for the next file. Each file replaces functions that are callable as soon as that file commits:
+
+- After `0011` alone, a photo can be marked stored with any non-empty file id, and a Dupont pickup key returns the earlier row before the site and person checks.
+- After `0012` alone, `freeze_photo_audit` can write the photo field onto an open visit, and a voided visit with seven stored OK shots counts toward the three-visit limit.
+- After `0013` alone, the practice guard blocks practice from editing a live visit but not the other way around, a Drive acknowledgement is only the shot id and file id, and a reorder preview selects every active admin email.
+- `0014` is the definition to leave in place: photo eligibility is part of the new start, acknowledgements match the current bytes and version, mode checks go both ways, and reorder recipients are the two empty slots.
 
 If a later file fails, stop. Do not re-run an earlier file that already succeeded. If 0001 through 0005 are already applied, run `0006_fresh_practice.sql`, then `0007_milk_lock_not_needed.sql`. `0006` adds `start_fresh_practice` and does not delete rows or change last-done dates. `0007` rejects Done on timer-locked steps while milk cleaning is running, and still allows Not needed on Wipe the Cameo. The phone already does this before `0007` is applied. No edge function redeploy is required for these files.
 
@@ -119,7 +126,7 @@ Admin → Reset practice data. This deletes practice visits and restores the pra
 
 Admin → Order thresholds. The sentence under each site is what techs see. A blank number with no instruction still says "Check. Fill if low." A saved 50% reads as below half, 67% as below two-thirds, and a stored instruction with no number is shown as written.
 
-Photo audit, stock flags, Dupont pickup, and KC Manager lines stay quiet until `0011_ops_batch.sql`, `0012_photo_audit_grandfather.sql`, `0013_preview_relay_guards.sql`, and `0014_atomic_photo_relay.sql` are applied, in that order. Do not stop between them. None of these files updates existing visit rows. `0014` adds an optional `p_photo_audit` argument to `start_session`. Old callers omit it, and the visit is created without a photo requirement. This app passes true, and the requirement is written in the same insert. A retry of an existing visit does not add or remove that field. A phone still running the previous build can call `freeze_photo_audit` afterwards; this build does not. Required checklist steps and KC lines still apply.
+Photo audit, stock flags, Dupont pickup, and KC Manager lines stay quiet until `0011_ops_batch.sql`, `0012_photo_audit_grandfather.sql`, `0013_preview_relay_guards.sql`, and `0014_atomic_photo_relay.sql` are applied together, as one SQL Editor query, in that order. Stopping after `0011`, `0012`, or `0013` leaves a callable function from that file. None of these files updates existing visit rows. `0014` adds an optional `p_photo_audit` argument to `start_session`. Old callers omit it, and the visit is created without a photo requirement. This app passes true, and the requirement is written in the same insert. A retry of an existing visit does not add or remove that field. A phone still running the previous build can call `freeze_photo_audit` afterwards; this build does not. Required checklist steps and KC lines still apply.
 
 Nothing in these files sends email or uploads a photo. Catalogue preview writes nothing. Pickup and reorder previews stay disabled even if the phone asks to send. The sender, when sending is later approved, is `michael@certainventures.ca`. Reorder recipients are the two slots `michael` and `kajsa` in `private.notification_recipients`. That table is empty here. If either address is missing, the preview stores no recipients. Pickup has no assigned next tech, so the preview names nobody. Do not put those addresses in the repo.
 
