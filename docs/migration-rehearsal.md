@@ -53,9 +53,13 @@ KIOSKOPS_MIGRATE_MODE=local_apply KIOSKOPS_MIGRATE_FIXTURES=/path/to/private/csv
 - Stable legacy ids (`id`, or derived keys for People/Config/LocationSKUs/ScheduleOverrides).
 - Idempotent replay: second apply inserts **zero** duplicates when payloads match.
 - Preexisting KioskOps visits and payments are never overwritten; conflicts stay explicit.
-- PINs are stripped and reported; secrets-looking Config rows are held.
+- People CSV may omit the `pin` column (PIN-less export). If a pin value is present it is cleared and flagged; PINs are never imported.
+- `buildEvidenceMaps()` matches staff/kiosks/SKUs only from clear in-workbook evidence (exact names/ids; short kiosk codes only when consistently paired with an exact Locations name). Ambiguous rows stay unresolved.
+- Legacy completion JSON may use `itemId`/`label` (older shape) or `key`/`itemKey`. Only exact checklist key overlaps map; everything else stays in `legacy_completions`.
+- Blank source foreign keys are `missing_source_ref` (corrupt/incomplete export), distinct from `unmapped_*` (no target map).
 - Sleeve→cup (×50) / sleeve→lid (×100) may be **proposed** only, never auto-applied as corrections.
 - Reconciliation reports rowcounts, transaction delta sums, charge hours, payment presence counts, and charge amount totals — mismatches are surfaced, not forced equal.
+- Live KioskOps comparison is **not** claimed unless a separate approved read of the hosted database is performed.
 
 ## Seed / migration history
 

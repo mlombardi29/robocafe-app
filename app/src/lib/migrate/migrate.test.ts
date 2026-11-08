@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { adapterCoverage, parseWorkbook } from "./adapters";
-import { preexistingRecords, syntheticMappings, syntheticWorkbook } from "./fixtures";
+import { csvLine } from "./csv";
+import { buildEvidenceMaps } from "./evidence";
+import {
+  pinlessPeopleCsv,
+  preexistingRecords,
+  SYNTHETIC_CHECKLIST_KEYS,
+  syntheticMappings,
+  syntheticWorkbook,
+} from "./fixtures";
+import { mapLegacyRole } from "./mappings";
 import { reconcileWorkbook } from "./reconcile";
 import { NOT_A_LIVE_MIGRATION, rehearseImport, resolveMode, rollbackLastApply } from "./rehearse";
 import { MigrateStore } from "./store";
@@ -136,5 +145,134 @@ describe("eleven-tab migration rehearsal kit", () => {
     const parsed = parseWorkbook(bad);
     expect(parsed.tabs.SKUs.findings[0]?.code).toBe("header_mismatch");
     expect(parsed.tabs.SKUs.rows).toHaveLength(0);
+  });
+
+  it("accepts PIN-less People headers and never imports PIN values", () => {
+    const parsed = parseWorkbook({ ...syntheticWorkbook(), People: pinlessPeopleCsv() });
+    expect(parsed.tabs.People.findings.some((f) => f.code === "header_mismatch")).toBe(false);
+    expect(parsed.tabs.People.rows).toHaveLength(2);
+    expect(parsed.tabs.People.rows.every((row) => row.fields.pin === "")).toBe(true);
+    expect(parsed.tabs.People.findings.some((f) => f.code === "pin_not_migrated")).toBe(false);
+    expect(mapLegacyRole("technician")).toEqual({ role: "tech" });
+    expect(mapLegacyRole("manager")).toEqual({ role: "admin" });
+  });
+
+  it("understands legacy completion itemId/label JSON and only exact checklist keys", () => {
+    const store = new MigrateStore();
+    const result = rehearseImport({
+      csvByTab: syntheticWorkbook(),
+      maps: syntheticMappings(),
+      store,
+      mode: "dry_run",
+    });
+    expect(result.findings.some((f) => f.code === "unmapped_item_key" && /legacy_only_step/.test(f.detail))).toBe(
+      true,
+    );
+    const visit = result.findings.find((f) => f.tab === "ServiceSessions" && f.legacyId === "visit-legacy-1");
+    expect(visit).toBeTruthy();
+  });
+
+  it("builds evidence maps only from clear workbook provenance", () => {
+    const base = syntheticWorkbook();
+    const workbook = {
+      ...base,
+      Transactions: `${base.Transactions}\ntx-blank,2026-01-05T12:00:00Z,adjust,sku-cups,Sample cups,1,1,sleeve,Alex Tech,tech,,`,
+      ServiceSessions: [
+        LEGACY_HEADERS.ServiceSessions.join(","),
+        csvLine([
+          "visit-a",
+          "loc-sinai",
+          "Sample Sinai",
+          "s35",
+          "1",
+          "Alex Tech",
+          "2026-01-06T10:00:00Z",
+          "2026-01-06T11:00:00Z",
+          "complete",
+          "100",
+          "0",
+          "",
+          "",
+          JSON.stringify([
+            { itemId: "powder_clean", label: "Powder", completed: true },
+            { itemId: "milk_clean", label: "Milk", completed: true },
+          ]),
+          "2026-01-06",
+          "10:00",
+          "11:00",
+          "FALSE",
+          "FALSE",
+          "",
+          "2026-01-06T11:01:00Z",
+          "[]",
+        ]),
+        csvLine([
+          "visit-b",
+          "loc-sinai",
+          "Sample Sinai",
+          "s35",
+          "1",
+          "Alex Tech",
+          "2026-01-07T10:00:00Z",
+          "2026-01-07T11:00:00Z",
+          "complete",
+          "100",
+          "0",
+          "",
+          "",
+          "[]",
+          "2026-01-07",
+          "10:00",
+          "11:00",
+          "FALSE",
+          "FALSE",
+          "",
+          "2026-01-07T11:01:00Z",
+          "[]",
+        ]),
+        csvLine([
+          "visit-c",
+          "loc-sinai",
+          "Almost Sinai",
+          "s35",
+          "1",
+          "Alex Tech",
+          "2026-01-08T10:00:00Z",
+          "2026-01-08T11:00:00Z",
+          "complete",
+          "100",
+          "0",
+          "",
+          "",
+          "[]",
+          "2026-01-08",
+          "10:00",
+          "11:00",
+          "FALSE",
+          "FALSE",
+          "",
+          "2026-01-08T11:01:00Z",
+          "[]",
+        ]),
+      ].join("\n"),
+      People: pinlessPeopleCsv(),
+    };
+    const parsed = parseWorkbook(workbook);
+    const evidence = buildEvidenceMaps(parsed.tabs, SYNTHETIC_CHECKLIST_KEYS);
+    expect(evidence.maps.peopleByName["alex tech"]).toBe("person:alex tech");
+    expect(evidence.maps.sitesByLegacyId["loc-sinai"]).toBe("loc-sinai");
+    expect(evidence.maps.skusByLegacyId["sku-cups"]).toBe("sku-cups");
+    expect(evidence.maps.itemKeys.powder_clean).toBe("powder_clean");
+    expect(evidence.maps.itemKeys.milk_clean).toBeUndefined();
+    expect(evidence.findings.some((f) => f.code === "ambiguous_match" && /Almost Sinai/.test(f.detail))).toBe(true);
+
+    const result = rehearseImport({
+      csvByTab: workbook,
+      maps: evidence.maps,
+      store: new MigrateStore(),
+      mode: "dry_run",
+    });
+    expect(result.findings.some((f) => f.code === "missing_source_ref")).toBe(true);
+    expect(result.writesApplied).toBe(0);
   });
 });

@@ -32,7 +32,7 @@ export function syntheticWorkbook(): WorkbookCsv {
       ["flag-1", "2026-01-05T12:00:00Z", "loc-sinai", "Sample Sinai", "sku-cups", "Sample cups", "low", "Alex Tech", "note", "FALSE", "", ""],
     ]),
     People: tabCsv("People", [
-      ["Alex Tech", "tech", "TRUE", ""],
+      ["Alex Tech", "technician", "TRUE", ""],
       ["Casey Manager", "manager", "TRUE", "9999"],
       ["Unmapped Person", "tech", "TRUE", ""],
     ]),
@@ -55,7 +55,11 @@ export function syntheticWorkbook(): WorkbookCsv {
         "0",
         "",
         "",
-        JSON.stringify([{ key: "gloves", state: "done" }, { key: "legacy_only_step", state: "done" }]),
+        JSON.stringify([
+          { key: "gloves", state: "done" },
+          { itemId: "powder_clean", label: "Clean powder", completed: true },
+          { itemId: "legacy_only_step", label: "Old step", completed: true },
+        ]),
         "2026-01-06",
         "10:00",
         "11:00",
@@ -139,10 +143,19 @@ export function syntheticMappings(): MappingTables {
       "sku-frac": "sku-3",
     },
     itemKeys: {
-      gloves: "item-gloves",
+      gloves: "gloves",
+      powder_clean: "powder_clean",
     },
   };
 }
+
+/** PIN-less People header (production sanitized export shape). */
+export function pinlessPeopleCsv(): string {
+  return ["name,role,active", "Alex Tech,technician,true", "Casey Manager,manager,true"].join("\n");
+}
+
+/** Checklist keys the evidence builder may exact-match (synthetic + current overlap). */
+export const SYNTHETIC_CHECKLIST_KEYS = ["gloves", "powder_clean", "powder_fill", "syrup"];
 
 /** Preexisting KioskOps visit + payment that must not be overwritten. */
 export function preexistingRecords(): ExistingRecord[] {

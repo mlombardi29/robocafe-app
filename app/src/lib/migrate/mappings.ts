@@ -24,7 +24,21 @@ export function emptyMappings(): MappingTables {
   };
 }
 
-/** Resolve person/site/sku/item refs. Unmapped stay explicit findings — never invented. */
+/** Legacy sheet roles → KioskOps roles. Only clear synonyms. */
+export function mapLegacyRole(roleRaw: string): { role: string } | { unresolved: string } {
+  const role = roleRaw.trim().toLowerCase();
+  if (role === "manager" || role === "admin") return { role: "admin" };
+  if (role === "technician" || role === "tech") return { role: "tech" };
+  if (role === "trainee" || role === "visitor") return { role };
+  return { unresolved: roleRaw };
+}
+
+function completionLegacyKey(item: object): string {
+  const rec = item as { key?: string; itemKey?: string; itemId?: string };
+  return String(rec.key ?? rec.itemKey ?? rec.itemId ?? "").trim();
+}
+
+/** Resolve person/site/sku/item refs. Unmapped/ambiguous stay explicit — never invented. */
 export function applyMappings(
   rows: ParsedRow[],
   maps: MappingTables,
@@ -34,16 +48,16 @@ export function applyMappings(
     const nextFindings = [...row.findings];
     const fields = { ...row.fields };
 
-    const nameFields: Array<{ field: string; tabNeed: boolean }> = [
-      { field: "byName", tabNeed: true },
-      { field: "technicianName", tabNeed: true },
-      { field: "personName", tabNeed: true },
-      { field: "requestedBy", tabNeed: true },
-      { field: "claimedBy", tabNeed: true },
-      { field: "originalAssignee", tabNeed: true },
-      { field: "resolvedBy", tabNeed: true },
-    ];
-    for (const { field } of nameFields) {
+    const nameFields = [
+      "byName",
+      "technicianName",
+      "personName",
+      "requestedBy",
+      "claimedBy",
+      "originalAssignee",
+      "resolvedBy",
+    ] as const;
+    for (const field of nameFields) {
       const raw = fields[field]?.trim() ?? "";
       if (!raw) continue;
       const id = maps.peopleByName[normName(raw)];
@@ -67,35 +81,79 @@ export function applyMappings(
       } else {
         fields.personId = id;
       }
-      const role = (fields.role ?? "").trim().toLowerCase();
-      if (role === "manager") fields.mappedRole = "admin";
-      else if (role === "admin" || role === "tech" || role === "trainee" || role === "visitor") fields.mappedRole = role;
-      else {
+      const mapped = mapLegacyRole(fields.role ?? "");
+      if ("unresolved" in mapped) {
         nextFindings.push(
-          finding(row.tab, row.legacyId, "unresolved", `Role "${fields.role}" is not mapped.`),
+          finding(row.tab, row.legacyId, "unresolved", `Role "${mapped.unresolved}" is not mapped.`),
         );
+      } else {
+        fields.mappedRole = mapped.role;
       }
     }
 
-    if (fields.locationId?.trim()) {
-      const legacy = fields.locationId.trim();
-      const id = maps.sitesByLegacyId[legacy];
-      if (!id) {
-        nextFindings.push(
-          finding(row.tab, row.legacyId, "unmapped_site", `locationId "${legacy}" has no site mapping.`),
-        );
-      } else fields.siteId = id;
+    const hasLocationIdField = Object.prototype.hasOwnProperty.call(fields, "locationId");
+    if (hasLocationIdField) {
+      const legacy = fields.locationId?.trim() ?? "";
+      if (!legacy) {
+        // Present column but blank — source gap, not a missing target map.
+        if (row.tab === "Transactions" || row.tab === "KioskFlags" || row.tab === "LocationSKUs") {
+          nextFindings.push(
+            finding(
+              row.tab,
+              row.legacyId,
+              "missing_source_ref",
+              "locationId is blank in the source export. Not invented.",
+            ),
+          );
+        }
+      } else {
+        const id = maps.sitesByLegacyId[legacy];
+        if (!id) {
+          nextFindings.push(
+            finding(row.tab, row.legacyId, "unmapped_site", `locationId "${legacy}" has no site mapping.`),
+          );
+        } else fields.siteId = id;
+      }
     }
-    if (fields.kioskId?.trim() && !fields.siteId) {
+
+    if (fields.kioskId?.trim()) {
       const legacy = fields.kioskId.trim();
-      const id = maps.sitesByLegacyId[legacy] ?? maps.sitesByName[normName(legacy)];
-      if (!id) {
+      const byCode = maps.sitesByLegacyId[legacy];
+      const locationName = fields.locationName?.trim() ?? "";
+      const byName = locationName ? maps.sitesByName[normName(locationName)] : undefined;
+      if (byName && byCode && byName !== byCode) {
+        nextFindings.push(
+          finding(
+            row.tab,
+            row.legacyId,
+            "ambiguous_match",
+            `kioskId "${legacy}" maps to ${byCode} but locationName "${locationName}" maps to ${byName}. Left unresolved.`,
+          ),
+        );
+      } else if (byName) {
+        fields.siteId = byName;
+      } else if (byCode) {
+        fields.siteId = byCode;
+        if (locationName && !maps.sitesByName[normName(locationName)]) {
+          nextFindings.push(
+            finding(
+              row.tab,
+              row.legacyId,
+              "ambiguous_match",
+              `Used evidenced kioskId "${legacy}" → ${byCode}, but locationName "${locationName}" is not an exact Locations.name.`,
+            ),
+          );
+        }
+      } else if (locationName) {
+        nextFindings.push(
+          finding(row.tab, row.legacyId, "unmapped_site", `locationName "${locationName}" has no site mapping.`),
+        );
+      } else {
         nextFindings.push(
           finding(row.tab, row.legacyId, "unmapped_site", `kioskId "${legacy}" has no site mapping.`),
         );
-      } else fields.siteId = id;
-    }
-    if (fields.locationName?.trim() && !fields.siteId) {
+      }
+    } else if (fields.locationName?.trim() && !fields.siteId) {
       const name = fields.locationName.trim();
       const id = maps.sitesByName[normName(name)];
       if (!id) {
@@ -120,30 +178,46 @@ export function applyMappings(
         const parsed = JSON.parse(fields.completionsJson) as unknown;
         const items = Array.isArray(parsed) ? parsed : [];
         const unmapped: string[] = [];
-        const mapped: Array<Record<string, unknown>> = [];
+        const mappedItems: Array<Record<string, unknown>> = [];
         for (const item of items) {
           if (!item || typeof item !== "object") continue;
-          const key = String((item as { key?: string }).key ?? (item as { itemKey?: string }).itemKey ?? "");
-          if (!key) continue;
+          const key = completionLegacyKey(item);
+          if (!key) {
+            nextFindings.push(
+              finding(
+                row.tab,
+                row.legacyId,
+                "unresolved",
+                "Completion item has no key/itemKey/itemId. Kept unresolved.",
+              ),
+            );
+            mappedItems.push({ ...(item as object), mapped: false });
+            continue;
+          }
           const target = maps.itemKeys[key];
           if (!target) {
             unmapped.push(key);
-            mapped.push({ ...(item as object), legacy_item_key: key, mapped: false });
+            mappedItems.push({ ...(item as object), legacy_item_key: key, mapped: false });
           } else {
-            mapped.push({ ...(item as object), legacy_item_key: key, item_id: target, mapped: true });
+            mappedItems.push({
+              ...(item as object),
+              legacy_item_key: key,
+              item_id: target,
+              mapped: true,
+            });
           }
         }
-        fields.completionsMappedJson = JSON.stringify(mapped);
+        fields.completionsMappedJson = JSON.stringify(mappedItems);
         if (unmapped.length) {
           fields.legacyCompletionsJson = JSON.stringify(
-            mapped.filter((entry) => entry.mapped === false),
+            mappedItems.filter((entry) => entry.mapped === false),
           );
           nextFindings.push(
             finding(
               row.tab,
               row.legacyId,
               "unmapped_item_key",
-              `Unmapped completion keys kept in legacy_completions: ${unmapped.join(", ")}`,
+              `Unmapped completion keys kept in legacy_completions: ${[...new Set(unmapped)].join(", ")}`,
             ),
           );
         }

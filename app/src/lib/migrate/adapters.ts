@@ -63,12 +63,28 @@ function stableIdFor(tab: LegacyTab, fields: Record<string, string>): string {
   return fields.id?.trim() ?? "";
 }
 
+/** People exports may omit pin (never fetched). Accept name,role,active with or without pin. */
+function resolveHeader(tab: LegacyTab, header: string[]): { columns: string[]; pinOmitted: boolean } | null {
+  const want = [...LEGACY_HEADERS[tab]];
+  if (header.length === want.length && header.every((cell, index) => cell === want[index])) {
+    return { columns: want, pinOmitted: false };
+  }
+  if (tab === "People") {
+    const pinless = ["name", "role", "active"];
+    if (header.length === pinless.length && header.every((cell, index) => cell === pinless[index])) {
+      return { columns: pinless, pinOmitted: true };
+    }
+  }
+  return null;
+}
+
 function parseTabCsv(tab: LegacyTab, csv: string): TabParseResult {
   const want = LEGACY_HEADERS[tab];
   const table = parseCsv(csv.trim());
   const header = table[0] ?? [];
   const findings: Finding[] = [];
-  if (header.length !== want.length || header.some((cell, index) => cell !== want[index])) {
+  const resolved = resolveHeader(tab, header);
+  if (!resolved) {
     return {
       tab,
       rows: [],
@@ -77,30 +93,33 @@ function parseTabCsv(tab: LegacyTab, csv: string): TabParseResult {
           tab,
           "",
           "header_mismatch",
-          `Expected ${want.join(",")}. Got ${header.join(",") || "(empty)"}. Nothing was read.`,
+          `Expected ${want.join(",")}${tab === "People" ? " (or name,role,active without pin)" : ""}. Got ${header.join(",") || "(empty)"}. Nothing was read.`,
         ),
       ],
       accepted: 0,
       held: 1,
     };
   }
+  const columns = resolved.columns;
 
   const rows: ParsedRow[] = [];
   let accepted = 0;
   let held = 0;
   table.slice(1).forEach((cells) => {
     const fields: Record<string, string> = {};
-    want.forEach((name, col) => {
+    for (const name of LEGACY_HEADERS[tab]) fields[name] = "";
+    columns.forEach((name, col) => {
       fields[name] = cells[col] ?? "";
     });
+    if (tab === "People" && resolved.pinOmitted) fields.pin = "";
     const rowFindings: Finding[] = [];
-    if (cells.length !== want.length) {
+    if (cells.length !== columns.length) {
       rowFindings.push(
         finding(
           tab,
           cells[0]?.trim() ?? "",
           "ambiguous_columns",
-          `Row has ${cells.length} fields; header has ${want.length}. Held unresolved.`,
+          `Row has ${cells.length} fields; header has ${columns.length}. Held unresolved.`,
         ),
       );
     }
