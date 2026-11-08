@@ -9,7 +9,7 @@ KioskOps (the new app) is in `/app`. The files at the repo root (`index.html`, `
 | Phone app | `app/` (Vite, React 18, TypeScript, Tailwind) | Netlify, base directory `app` |
 | Database | `supabase/migrations/` | Applied by a person, not by this repo |
 | PIN sign-in and admin actions | `supabase/functions/` | Service role stays on the server |
-| Checklist wording | `checklists/*.yaml` | `npm run gen:seed` rewrites the seed SQL |
+| Checklist wording | `checklists/*.yaml` | Canonical source. Readable pages under `docs/servicing/`. `npm run gen:seed` rewrites greenfield seed SQL only; live template updates use additive migrations such as `0015` |
 
 The hosted database is project `kioskops`, ref `ucvacwbmhutedwfffcoj`, region ca-central-1. Nothing in this repo connects to it. The old US project ref is deleted and is not used.
 
