@@ -8,7 +8,7 @@ Migrations:
 4. `supabase/migrations/0004_sandbox.sql` — practice sites and `reset_sandbox()`
 5. `supabase/migrations/0005_harden_definer_functions.sql` — move policy helpers out of the public API, keep admin checks inside admin functions, lock search_path
 6. `supabase/migrations/0006_fresh_practice.sql` — practice-only fresh visit; voids the caller's own open practice attempt and keeps its rows
-7. `supabase/migrations/0007_milk_lock_not_needed.sql` — while the milk timer is running, Done is rejected on locked steps; Not needed stays allowed on Wipe the Cameo
+7. `supabase/migrations/0007_milk_lock_not_needed.sql` — while the milk timer is running, Done is rejected on locked steps; Not needed stays allowed on Wipe the Cameo (later reversed for **new** visits by `0015`, without rewriting old snapshots)
 
 The hosted project does not expose tables until a grant exists. `anon` has no table grants. `auth_pins` and `login_attempts` have no grants for `anon` or `authenticated`. Edge functions use the service role.
 
@@ -48,6 +48,11 @@ The hosted project does not expose tables until a grant exists. `anon` has no ta
 
 Practice copies are named `PRACTICE – Sinai (3.5)`, `PRACTICE – UofT (2.2)`, and `PRACTICE – RBC (S5)`. No people and no PINs are seeded.
 
-## Arm sensor
+## Arm calibration vs arm sensor
 
-Items with key `arm_sensor` are `pending_validation`. The details text is only: "Pass/fail criteria are being confirmed with KioCafe (Albert Kim). For now, note what you see."
+- `arm_calibration` (Sinai and RBC): approved seven-step Auto Calibrate **weight** procedure in `checklists/*.yaml` and `0015`. It is not the cup presence sensor.
+- `arm_sensor` stays `pending_validation`. Details text is only: "Pass/fail criteria are being confirmed with KioCafe (Albert Kim). For now, note what you see." Do not treat an unconfirmed reply as procedure.
+
+## Servicing feedback (`0015`)
+
+`0015_servicing_feedback.sql` updates published checklist item titles/details to match YAML, stamps `not_needed_allowed` on **new** visit snapshots, and rejects Not needed only when that flag is false. Existing and offline snapshots without the flag stay finishable. Pinned `0011`–`0014` are unchanged. Do not rewrite applied `0003` history to carry these edits.

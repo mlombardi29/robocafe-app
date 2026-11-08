@@ -10,7 +10,7 @@ import { offerFreshStart } from "../lib/freshPractice";
 import { milkCleanRunning, milkStepLocks } from "../lib/milkLock";
 import { TIMER_DONE_LABEL } from "../lib/buttonStyles";
 import { checklistCardsClass, checklistStackClass } from "../lib/checklistLayout";
-import { completionsNotQueued, unsyncedCompletions, type CompletionWrite } from "../lib/queue";
+import { completionsNotQueued, keptVisitTimes, unsyncedCompletions, type CompletionWrite } from "../lib/queue";
 import { CLOCK_OUT_SAVED, COMPLETE_QUEUED, SUCCESS_TOAST_MS, completeFollowUp, successToast, unfinishedRequired, visibleEndNotice, type EndNotice } from "../lib/serviceFlow";
 import { enqueue, enqueueAndFlush, flushQueue, forgetVisit, readQueue, rememberVisit, stableKey, startFreshPractice } from "../lib/sync";
 import { supabase } from "../lib/supabase";
@@ -58,8 +58,11 @@ export function ServicePage() {
   const [leaveReason, setLeaveReason] = useState("");
   const [leaveError, setLeaveError] = useState("");
   const [closedNote, setClosedNote] = useState("");
+  const [closedSections, setClosedSections] = useState<Record<string, boolean>>({});
+  const [pausedAt, setPausedAt] = useState<string | null>(null);
   const freshNewId = useRef<string | null>(null);
   const dialogOpen = useRef(false);
+  const clockRef = useRef({ startedAt: null as string | null, doneAt: null as string | null, pausedAt: null as string | null });
   dialogOpen.current = leaveAsk || estimate || freshAsk;
 
   useEffect(() => {
@@ -78,9 +81,19 @@ export function ServicePage() {
     const map: Record<string, CompletionWrite> = {};
     for (const row of query.data.completions) map[row.itemId] = row;
     setRows(map);
-    setSessionId(query.data.session?.id ?? null);
-    setMilkStart(query.data.milkStartedAt);
-    setMilkDone(query.data.milkDoneAt);
+    setSessionId(query.data.localSessionId);
+    const nextClock = keptVisitTimes(
+      { startedAt: query.data.milkStartedAt, doneAt: query.data.milkDoneAt, pausedAt: query.data.pausedAt },
+      {
+        ...(clockRef.current.startedAt && !query.data.milkStartedAt ? { startedAt: clockRef.current.startedAt } : {}),
+        ...(clockRef.current.doneAt && !query.data.milkDoneAt ? { doneAt: clockRef.current.doneAt } : {}),
+        ...(clockRef.current.pausedAt && !query.data.pausedAt ? { pausedAt: clockRef.current.pausedAt } : {}),
+      },
+    );
+    clockRef.current = nextClock;
+    setMilkStart(nextClock.startedAt);
+    setMilkDone(nextClock.doneAt);
+    setPausedAt(nextClock.pausedAt);
   }, [query.data]);
 
   const pendingKey = (query.data?.pendingWrites ?? []).map((row) => `${row.sessionId}:${row.itemId}:${row.clientRev}`).join("|");
@@ -165,16 +178,20 @@ export function ServicePage() {
   );
 
   async function persist(next: Record<string, CompletionWrite>, visit: Partial<LocalVisit>) {
+    const times = keptVisitTimes(clockRef.current, {
+      startedAt: visit.milkStartedAt,
+      doneAt: visit.milkDoneAt,
+      pausedAt: visit.pausedAt,
+    });
+    clockRef.current = times;
     const sid = visit.sessionId !== undefined ? visit.sessionId : sessionId;
     const completions = sid ? Object.values(next).filter((row) => row.sessionId === sid) : [];
-    const rest: Partial<LocalVisit> = { ...visit };
-    delete rest.completions;
     await rememberVisit(siteId, {
-      milkStartedAt: milkStart,
-      milkDoneAt: milkDone,
-      ...rest,
       sessionId: sid,
       completions,
+      milkStartedAt: times.startedAt,
+      milkDoneAt: times.doneAt,
+      pausedAt: times.pausedAt,
     });
   }
 
@@ -187,8 +204,12 @@ export function ServicePage() {
   }
 
   async function ensureSession(estimated = false, at?: string): Promise<string> {
-    if (sessionId && query.data?.session) return sessionId;
-    const id = sessionId ?? crypto.randomUUID();
+    const existing = sessionId ?? query.data?.localSessionId ?? query.data?.session?.id ?? null;
+    if (existing) {
+      if (!sessionId) setSessionId(existing);
+      return existing;
+    }
+    const id = crypto.randomUUID();
     const start = at ?? new Date().toISOString();
     const kept = rowsForSession(id);
     setRows(kept);
@@ -196,7 +217,7 @@ export function ServicePage() {
     setMilkStart(null);
     setMilkDone(null);
     await enqueue({ kind: "start", id, siteId, start, estimated, photoAudit: true });
-    await persist(kept, { sessionId: id, milkStartedAt: null, milkDoneAt: null });
+    await persist(kept, { sessionId: id, milkStartedAt: null, milkDoneAt: null, pausedAt: null });
     await flushQueue();
     return id;
   }
@@ -258,7 +279,10 @@ export function ServicePage() {
     setBusy("end");
     setError("");
     const end = new Date().toISOString();
+    clockRef.current = { ...clockRef.current, pausedAt: end };
+    setPausedAt(end);
     try {
+      await persist(rowsForSession(id), { sessionId: id, pausedAt: end });
       const result = await enqueueAndFlush({ kind: "end", id, end });
       if (result.ok) {
         if (!dialogOpen.current) setEndNotice({ kind: "saved", iso: end });
@@ -324,11 +348,12 @@ export function ServicePage() {
         setError(result.error ?? "Could not start milk cleaning.");
         return;
       }
+      if (!result.ok) setError(result.error ?? "Saved on this phone. It will sync when you are online.");
       const started = new Date().toISOString();
+      clockRef.current = { ...clockRef.current, startedAt: started };
       setMilkStart(started);
       await persist(rowsForSession(id), { sessionId: id, milkStartedAt: started });
       await mark(item, "done", id);
-      if (!result.ok) setError("Saved on this phone. It will sync when you are online.");
       await queryClient.invalidateQueries({ queryKey: ["service", siteId] });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start milk cleaning.");
@@ -478,7 +503,7 @@ export function ServicePage() {
     );
   }
 
-  const started = Boolean(query.data.session?.start_at || sessionId);
+  const started = Boolean(query.data?.session?.start_at || sessionId);
   const submitted = Boolean(query.data.session?.submitted_at);
   const toast = visibleEndNotice(endNotice, leaveAsk || estimate || freshAsk);
   const recommendedFirst = groups
@@ -556,15 +581,27 @@ export function ServicePage() {
         photoAuditRequired={photoAuditRequiredBySnapshot(snapshot)}
       />
       <div className={checklistStackClass}>
-        {groups.map((section) => (
-          <section key={section.id}>
-            <h2 className="mb-1.5 text-sm font-bold uppercase tracking-wide text-stone-500">{section.title}</h2>
-            <div className={checklistCardsClass}>
+        {groups.map((section, index) => {
+          const open = !closedSections[section.id];
+          const current = section.items.some((entry) => entry.item.id === missingSteps[0]?.id);
+          return (
+          <section key={section.id} className={current ? "rounded-3xl bg-green-50 p-2" : ""}>
+            <button
+              type="button"
+              className="mb-1.5 flex min-h-12 w-full items-center justify-between gap-3 text-left"
+              aria-expanded={open}
+              onClick={() => setClosedSections((currentClosed) => ({ ...currentClosed, [section.id]: open }))}
+            >
+              <h2 className="text-sm font-bold uppercase tracking-wide text-stone-700">{index + 1}. {section.title}</h2>
+              <span className="text-sm font-semibold text-stone-500">{open ? "Hide" : "Show"}</span>
+            </button>
+            {open ? <div className={checklistCardsClass}>
               {section.items.map(({ item, due }) => {
                 const locks = milkStepLocks(
                   { key: item.key, lockedDuringClean: item.locked_during_clean },
                   milkRunning,
                 );
+                const allowSkip = item.not_needed_allowed !== false;
                 return item.key === "start_milk_clean" ? (
                   <MilkStepCard
                     key={item.id}
@@ -578,6 +615,7 @@ export function ServicePage() {
                     notNeeded={rows[item.id]?.state === "not_needed"}
                     startDisabled={Boolean(milkStart) || submitted || busy === "milk"}
                     skipDisabled={submitted || busy === item.id}
+                    allowSkip={allowSkip}
                     guidance={recommendedFirst.length > 0 ? `Recommended first, not required: ${recommendedFirst.join(", ")}.` : null}
                     onStart={() => void startMilk(item)}
                     onSkip={() => void mark(item, "not_needed")}
@@ -596,6 +634,7 @@ export function ServicePage() {
                       doneLocked={locks.doneLocked}
                       skipLocked={locks.notNeededLocked}
                       lockMessage={locks.message}
+                      allowSkip={allowSkip}
                       state={rows[item.id]?.state}
                       note={rows[item.id]?.note}
                       disabled={!started || submitted || busy === item.id}
@@ -614,9 +653,10 @@ export function ServicePage() {
                   </div>
                 );
               })}
-            </div>
+            </div> : null}
           </section>
-        ))}
+          );
+        })}
       </div>
 
       {submitted ? (
@@ -700,19 +740,19 @@ export function ServicePage() {
           </p>
         ) : null}
         {!started ? (
-          <Button className="w-full shadow-lg" disabled={busy === "start" || submitted} onClick={() => void startNow()}>
+          <Button tone="start" className="w-full shadow-lg" disabled={busy === "start" || submitted} onClick={() => void startNow()}>
             Start now
           </Button>
         ) : !submitted ? (
           <div className="grid gap-2">
-            <Button className="w-full shadow-lg" disabled={busy === "complete"} onClick={() => void complete(false)}>
+            <Button tone="complete" className="w-full shadow-lg" disabled={busy === "complete"} onClick={() => void complete(false)}>
               Complete servicing
             </Button>
             <div className="grid grid-cols-2 gap-2">
-              <Button tone="quiet" className="shadow-lg" disabled={busy === "end"} onClick={() => void endNow()}>
+              <Button tone={pausedAt ? "neutralOn" : "neutral"} className="shadow-lg" disabled={busy === "end"} aria-pressed={Boolean(pausedAt)} onClick={() => void endNow()}>
                 Pause servicing
               </Button>
-              <Button tone="quiet" className="shadow-lg" disabled={busy === "abandon"} onClick={() => { setLeaveError(""); setEndNotice((current) => (successToast(current) ? null : current)); setLeaveAsk(true); }}>
+              <Button tone={leaveAsk ? "neutralOn" : "neutral"} className="shadow-lg" disabled={busy === "abandon"} aria-pressed={leaveAsk} onClick={() => { setLeaveError(""); setEndNotice((current) => (successToast(current) ? null : current)); setLeaveAsk(true); }}>
                 Incomplete today
               </Button>
             </div>
