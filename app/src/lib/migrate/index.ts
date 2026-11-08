@@ -1,6 +1,12 @@
 export { adapterCoverage, parseWorkbook, proposedUnitConversion, type WorkbookCsv } from "./adapters";
 export { buildEvidenceMaps, type EvidenceBuild } from "./evidence";
 export {
+  interpretLegacyStep,
+  listClearEquivalences,
+  listHistoryOnlyCatalog,
+  type StepInterpretation,
+} from "./stepEquivalence";
+export {
   syntheticMappings,
   syntheticWorkbook,
   preexistingRecords,

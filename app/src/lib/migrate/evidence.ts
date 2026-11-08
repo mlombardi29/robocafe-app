@@ -2,6 +2,7 @@ import type { TabParseResult } from "./types";
 import type { Finding, MappingTables } from "./types";
 import type { LegacyTab } from "./tabs";
 import { emptyMappings } from "./mappings";
+import { interpretLegacyStep, listClearEquivalences } from "./stepEquivalence";
 
 function normName(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
@@ -143,7 +144,21 @@ export function buildEvidenceMaps(
     });
   }
 
-  // Exact checklist key overlap only — never synonym invention.
+  // Clear 1:1 equivalences only (exact id or evidence table). Never invent from similar names.
+  for (const eq of listClearEquivalences()) {
+    if (!eq.currentKey) continue;
+    if (known.size > 0 && !known.has(eq.currentKey)) {
+      // Target key not in provided current checklist set for this run — skip.
+      continue;
+    }
+    maps.itemKeys[eq.legacyItemId] = eq.currentKey;
+    provenance.itemKeys.push({
+      legacyKey: eq.legacyItemId,
+      targetKey: eq.currentKey,
+      evidence: eq.evidence,
+    });
+  }
+  // Also allow exact id overlap when present in sessions and known checklist keys.
   const seenItemIds = new Set<string>();
   for (const row of tabs.ServiceSessions.rows) {
     const raw = row.fields.completionsJson?.trim() ?? "";
@@ -157,12 +172,14 @@ export function buildEvidenceMaps(
         const legacyKey = String(rec.key ?? rec.itemKey ?? rec.itemId ?? "").trim();
         if (!legacyKey || seenItemIds.has(legacyKey)) continue;
         seenItemIds.add(legacyKey);
-        if (known.has(legacyKey)) {
+        const reading = interpretLegacyStep(legacyKey);
+        if (reading.kind === "history_only") continue;
+        if (known.has(legacyKey) && !maps.itemKeys[legacyKey]) {
           maps.itemKeys[legacyKey] = legacyKey;
           provenance.itemKeys.push({
             legacyKey,
             targetKey: legacyKey,
-            evidence: "Exact match between legacy completion itemId/key and current checklist key",
+            evidence: "Exact id match to current checklist key",
           });
         }
       }

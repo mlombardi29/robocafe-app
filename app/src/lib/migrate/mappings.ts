@@ -1,5 +1,6 @@
 import type { Finding, MappingTables, ParsedRow } from "./types";
 import type { LegacyTab } from "./tabs";
+import { interpretLegacyStep } from "./stepEquivalence";
 
 function finding(
   tab: LegacyTab,
@@ -177,7 +178,8 @@ export function applyMappings(
       try {
         const parsed = JSON.parse(fields.completionsJson) as unknown;
         const items = Array.isArray(parsed) ? parsed : [];
-        const unmapped: string[] = [];
+        const historyOnlyKeys: string[] = [];
+        const equivalentKeys: string[] = [];
         const mappedItems: Array<Record<string, unknown>> = [];
         for (const item of items) {
           if (!item || typeof item !== "object") continue;
@@ -191,35 +193,61 @@ export function applyMappings(
                 "Completion item has no key/itemKey/itemId. Kept unresolved.",
               ),
             );
-            mappedItems.push({ ...(item as object), mapped: false });
-            continue;
-          }
-          const target = maps.itemKeys[key];
-          if (!target) {
-            unmapped.push(key);
-            mappedItems.push({ ...(item as object), legacy_item_key: key, mapped: false });
-          } else {
             mappedItems.push({
               ...(item as object),
-              legacy_item_key: key,
-              item_id: target,
-              mapped: true,
+              interpretation: "history_only",
+              current_key: null,
+              transfer_ready: false,
+              explanation: "Missing legacy step id.",
+              mapped: false,
             });
+            continue;
           }
+          const reading = interpretLegacyStep(key);
+          // Explicit map may narrow equivalents further; never invent beyond evidence table.
+          const mappedCurrent =
+            reading.kind === "equivalent"
+              ? maps.itemKeys[key] ?? reading.currentKey
+              : maps.itemKeys[key] ?? null;
+          const isEquivalent = reading.kind === "equivalent" && mappedCurrent === reading.currentKey;
+          if (isEquivalent) equivalentKeys.push(key);
+          else historyOnlyKeys.push(key);
+          mappedItems.push({
+            ...(item as object),
+            legacy_item_key: key,
+            interpretation: isEquivalent ? "equivalent" : "history_only",
+            current_key: isEquivalent ? mappedCurrent : null,
+            transfer_ready: false,
+            explanation: isEquivalent
+              ? reading.explanation
+              : reading.kind === "equivalent" && mappedCurrent == null
+                ? `${reading.explanation} (current key not in active evidence map for this run.)`
+                : reading.explanation,
+            evidence: reading.evidence,
+            // Preserve original completed/flagged/label/notes/timestamps on the spread object.
+            mapped: isEquivalent,
+          });
         }
         fields.completionsMappedJson = JSON.stringify(mappedItems);
-        if (unmapped.length) {
-          fields.legacyCompletionsJson = JSON.stringify(
-            mappedItems.filter((entry) => entry.mapped === false),
-          );
+        fields.legacyCompletionsJson = JSON.stringify(
+          mappedItems.filter((entry) => entry.interpretation === "history_only"),
+        );
+        fields.equivalentCompletionsJson = JSON.stringify(
+          mappedItems.filter((entry) => entry.interpretation === "equivalent"),
+        );
+        if (historyOnlyKeys.length) {
           nextFindings.push(
             finding(
               row.tab,
               row.legacyId,
               "unmapped_item_key",
-              `Unmapped completion keys kept in legacy_completions: ${[...new Set(unmapped)].join(", ")}`,
+              `History-only legacy steps (not transfer-ready): ${[...new Set(historyOnlyKeys)].join(", ")}`,
             ),
           );
+        }
+        if (equivalentKeys.length) {
+          // Informational — still not transfer-ready without hosted comparison.
+          fields.equivalentStepCount = String(new Set(equivalentKeys).size);
         }
       } catch {
         nextFindings.push(

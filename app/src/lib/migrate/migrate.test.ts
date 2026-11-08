@@ -9,9 +9,10 @@ import {
   syntheticMappings,
   syntheticWorkbook,
 } from "./fixtures";
-import { mapLegacyRole } from "./mappings";
+import { applyMappings, mapLegacyRole } from "./mappings";
 import { reconcileWorkbook } from "./reconcile";
 import { NOT_A_LIVE_MIGRATION, rehearseImport, resolveMode, rollbackLastApply } from "./rehearse";
+import { interpretLegacyStep, listClearEquivalences } from "./stepEquivalence";
 import { MigrateStore } from "./store";
 import { LEGACY_HEADERS, LEGACY_TABS } from "./tabs";
 
@@ -170,6 +171,35 @@ describe("eleven-tab migration rehearsal kit", () => {
     );
     const visit = result.findings.find((f) => f.tab === "ServiceSessions" && f.legacyId === "visit-legacy-1");
     expect(visit).toBeTruthy();
+  });
+
+  it("maps only clear step equivalents and preserves original completion payloads", () => {
+    expect(interpretLegacyStep("bb_hands").currentKey).toBe("gloves");
+    expect(interpretLegacyStep("milk_clean").kind).toBe("history_only");
+    expect(interpretLegacyStep("syrup_clean").kind).toBe("history_only");
+    expect(interpretLegacyStep("cups_fill").kind).toBe("history_only");
+    expect(interpretLegacyStep("arm_setup").kind).toBe("history_only");
+    expect(listClearEquivalences().every((row) => row.kind === "equivalent" && row.currentKey)).toBe(true);
+
+    const parsed = parseWorkbook(syntheticWorkbook());
+    const evidence = buildEvidenceMaps(parsed.tabs, SYNTHETIC_CHECKLIST_KEYS);
+    const mapped = applyMappings(parsed.tabs.ServiceSessions.rows, evidence.maps);
+    const visit = mapped.rows.find((row) => row.legacyId === "visit-legacy-1");
+    expect(visit).toBeTruthy();
+    const items = JSON.parse(visit!.fields.completionsMappedJson || "[]") as Array<Record<string, unknown>>;
+    const powder = items.find((item) => item.legacy_item_key === "powder_clean" || item.itemId === "powder_clean");
+    expect(powder?.interpretation).toBe("equivalent");
+    expect(powder?.current_key).toBe("powder_clean");
+    expect(powder?.transfer_ready).toBe(false);
+    expect(powder?.label).toBe("Clean powder");
+    expect(powder?.completed).toBe(true);
+    const legacyOnly = items.find((item) => item.legacy_item_key === "legacy_only_step");
+    expect(legacyOnly?.interpretation).toBe("history_only");
+    expect(legacyOnly?.current_key).toBeNull();
+    expect(legacyOnly?.transfer_ready).toBe(false);
+
+    const again = applyMappings(parsed.tabs.ServiceSessions.rows, evidence.maps);
+    expect(again.rows[0]?.fields.completionsMappedJson).toBe(mapped.rows[0]?.fields.completionsMappedJson);
   });
 
   it("builds evidence maps only from clear workbook provenance", () => {

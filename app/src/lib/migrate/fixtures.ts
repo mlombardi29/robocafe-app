@@ -155,7 +155,23 @@ export function pinlessPeopleCsv(): string {
 }
 
 /** Checklist keys the evidence builder may exact-match (synthetic + current overlap). */
-export const SYNTHETIC_CHECKLIST_KEYS = ["gloves", "powder_clean", "powder_fill", "syrup"];
+export const SYNTHETIC_CHECKLIST_KEYS = [
+  "gloves",
+  "powder_clean",
+  "powder_fill",
+  "syrup",
+  "test_drink",
+  "kc_consumables",
+  "claw",
+  "wipe_cameo",
+  "fill_beans",
+  "empty_pucks",
+  "milk_bag",
+  "grey_water",
+  "scale_check",
+  "cups_lids",
+  "start_milk_clean",
+];
 
 /** Preexisting KioskOps visit + payment that must not be overwritten. */
 export function preexistingRecords(): ExistingRecord[] {
