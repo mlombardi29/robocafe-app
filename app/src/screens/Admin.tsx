@@ -61,6 +61,10 @@ const sections: { title: string; links: [string, string][] }[] = [
     title: "Locations",
     links: [["/admin/access", "Site access"]],
   },
+  {
+    title: "Settings",
+    links: [["/admin/settings", "Hours & config"]],
+  },
 ];
 
 export function AdminHome() {

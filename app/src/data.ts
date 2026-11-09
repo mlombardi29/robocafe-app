@@ -17,13 +17,30 @@ export type LocalVisit = {
   pausedAt?: string | null;
 };
 
+const SITE_SELECT_BASE =
+  "id, name, short_name, model_id, serial, cadence, opening_time, active, is_sandbox, models(code, name, milk_clean_minutes)";
+const SITE_SELECT_FULL =
+  "id, name, short_name, model_id, serial, cadence, opening_time, closing_time, soft_prefer_before, soft_prefer_after, active, is_sandbox, models(code, name, milk_clean_minutes)";
+
+function missingSiteHoursColumn(error: { message?: string; code?: string } | null): boolean {
+  const message = error?.message ?? "";
+  return /closing_time|soft_prefer_before|soft_prefer_after|schema cache|does not exist/i.test(message);
+}
+
+function asSiteRows(rows: unknown[]): SiteRow[] {
+  return rows.map((row) => {
+    const typed = row as SiteRow & { models: SiteRow["models"] | SiteRow["models"][] };
+    return { ...typed, models: one(typed.models) };
+  });
+}
+
 export async function loadSites(): Promise<SiteRow[]> {
-  const { data, error } = await supabase
-    .from("sites")
-    .select("id, name, short_name, model_id, serial, cadence, opening_time, active, is_sandbox, models(code, name, milk_clean_minutes)")
-    .order("name");
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((row) => ({ ...row, models: one(row.models) })) as SiteRow[];
+  const full = await supabase.from("sites").select(SITE_SELECT_FULL).order("name");
+  if (!full.error) return asSiteRows(full.data ?? []);
+  if (!missingSiteHoursColumn(full.error)) throw new Error(full.error.message);
+  const base = await supabase.from("sites").select(SITE_SELECT_BASE).order("name");
+  if (base.error) throw new Error(base.error.message);
+  return asSiteRows(base.data ?? []);
 }
 
 export async function loadShowDays(from: string) {
@@ -79,11 +96,11 @@ async function publishedSnapshot(modelId: string): Promise<Snapshot | null> {
 }
 
 export async function loadService(siteId: string, personId: string) {
-  const { data: site, error } = await supabase
-    .from("sites")
-    .select("id, name, short_name, model_id, serial, cadence, opening_time, active, is_sandbox, models(code, name, milk_clean_minutes)")
-    .eq("id", siteId)
-    .maybeSingle();
+  let siteQuery = await supabase.from("sites").select(SITE_SELECT_FULL).eq("id", siteId).maybeSingle();
+  if (siteQuery.error && missingSiteHoursColumn(siteQuery.error)) {
+    siteQuery = await supabase.from("sites").select(SITE_SELECT_BASE).eq("id", siteId).maybeSingle();
+  }
+  const { data: site, error } = siteQuery;
   if (error || !site) throw new Error(error?.message ?? "That site is not available.");
   const normalized = { ...site, models: one(site.models) } as SiteRow;
 

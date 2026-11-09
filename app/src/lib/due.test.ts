@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { formatTorontoTime } from "./dates";
-import { addDays, evaluateDue, previousMwf, thresholdDetail, visitStatus, type DueItem } from "./due";
+import {
+  addDays,
+  evaluateDue,
+  formatClockLabel,
+  previousMwf,
+  softServiceHint,
+  thresholdDetail,
+  visitStatus,
+  type DueItem,
+} from "./due";
 
 const today = "2026-11-09";
 
@@ -127,12 +136,27 @@ describe("visitStatus", () => {
     expect(status.label).toBe("Due today");
   });
 
-  it("raises the Monday flag only after a known opening time", () => {
+  it("keeps the Monday red flag off when opening time is known but before-opening is not enabled", () => {
+    const late = visitStatus({
+      ...base,
+      cadence: "mwf",
+      weekday: 1,
+      openingTime: "10:00",
+      nowMinutes: 12 * 60,
+      previousServiceDate: "2026-11-06",
+      completedDates: ["2026-11-06"],
+    });
+    expect(late.beforeOpening).toBe(false);
+    expect(late.label).toBe("Due today");
+  });
+
+  it("raises the Monday flag only when before-opening is explicitly enabled", () => {
     const late = visitStatus({
       ...base,
       cadence: "mwf",
       weekday: 1,
       openingTime: "08:00",
+      beforeOpeningEnabled: true,
       nowMinutes: 9 * 60,
       previousServiceDate: "2026-11-06",
       completedDates: ["2026-11-06"],
@@ -143,6 +167,7 @@ describe("visitStatus", () => {
       cadence: "mwf",
       weekday: 1,
       openingTime: "08:00",
+      beforeOpeningEnabled: true,
       nowMinutes: 7 * 60,
       previousServiceDate: "2026-11-06",
       completedDates: ["2026-11-06"],
@@ -153,12 +178,31 @@ describe("visitStatus", () => {
       cadence: "mwf",
       weekday: 1,
       openingTime: "08:00",
+      beforeOpeningEnabled: true,
       nowMinutes: 9 * 60,
       previousServiceDate: "2026-11-06",
       completedDates: ["2026-11-06"],
       startedToday: true,
     });
     expect(started.beforeOpening).toBe(false);
+  });
+
+  it("shows a soft lunch-window hint without blocking the visit", () => {
+    const midday = visitStatus({
+      ...base,
+      cadence: "mwf",
+      weekday: 1,
+      openingTime: "10:00",
+      softPreferBefore: "11:00",
+      softPreferAfter: "15:00",
+      nowMinutes: 12 * 60,
+      previousServiceDate: "2026-11-06",
+      completedDates: ["2026-11-06"],
+    });
+    expect(midday.due).toBe(true);
+    expect(midday.beforeOpening).toBe(false);
+    expect(midday.softHintActive).toBe(true);
+    expect(midday.softHint).toBe("Best before 11am or after 3pm");
   });
 
   it("limits UofT to Monday, Wednesday, and Friday", () => {
@@ -205,6 +249,19 @@ describe("visitStatus", () => {
     expect(visitStatus({ ...base, cadence: "daily", pausedTime: "6:23 PM" }).label).toContain("Paused · clocked out 6:23 PM");
     expect(visitStatus({ ...base, cadence: "daily", visitInProgress: true }).label).toBe("Resume this visit.");
     expect(visitStatus({ ...base, cadence: "daily", incompleteToday: true }).label).toBe("Incomplete today");
+  });
+});
+
+describe("softServiceHint", () => {
+  it("formats clock labels and activates only inside the avoid band", () => {
+    expect(formatClockLabel("11:00:00")).toBe("11am");
+    expect(formatClockLabel("15:30")).toBe("3:30pm");
+    expect(softServiceHint(10 * 60, "11:00", "15:00")).toEqual({
+      text: "Best before 11am or after 3pm",
+      active: false,
+    });
+    expect(softServiceHint(12 * 60, "11:00", "15:00").active).toBe(true);
+    expect(softServiceHint(12 * 60, null, "15:00").text).toBeNull();
   });
 });
 

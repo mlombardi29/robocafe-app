@@ -59,6 +59,11 @@ export type SiteRow = {
   serial: string | null;
   cadence: "daily" | "mwf" | "show_days";
   opening_time: string | null;
+  closing_time?: string | null;
+  /** Soft preferred service ends here (e.g. 11:00). Null = no soft window. */
+  soft_prefer_before?: string | null;
+  /** Soft preferred service resumes here (e.g. 15:00). */
+  soft_prefer_after?: string | null;
   active: boolean;
   is_sandbox: boolean;
   models: { code: string; name: string; milk_clean_minutes: number } | null;

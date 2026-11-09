@@ -5,7 +5,7 @@ import { useAuth } from "../auth";
 import { loadService, type LocalVisit } from "../data";
 import { inPractice } from "../lib/access";
 import { formatTorontoTime, formatWhen, instantOnTorontoDay, torontoNow } from "../lib/dates";
-import { evaluateDue } from "../lib/due";
+import { evaluateDue, softServiceHint } from "../lib/due";
 import { offerFreshStart } from "../lib/freshPractice";
 import { milkCleanRunning, milkStepLocks } from "../lib/milkLock";
 import { TIMER_DONE_LABEL } from "../lib/buttonStyles";
@@ -38,6 +38,7 @@ export function ServicePage() {
   const query = useQuery({
     queryKey: ["service", siteId, profile?.id],
     enabled: Boolean(profile && siteId),
+    staleTime: 0,
     queryFn: () => loadService(siteId, profile!.id),
   });
   const [rows, setRows] = useState<Record<string, CompletionWrite>>({});
@@ -520,6 +521,20 @@ export function ServicePage() {
       <Link to="/" className="text-sm font-semibold text-[var(--accent)]">Home</Link>
       <h1 className="mt-2 text-3xl font-semibold">{query.data.site.short_name}</h1>
       <p className="text-stone-600">{query.data.site.name}</p>
+      {(() => {
+        const soft = softServiceHint(
+          torontoNow().nowMinutes,
+          query.data.site.soft_prefer_before,
+          query.data.site.soft_prefer_after,
+        );
+        if (!soft.text) return null;
+        return (
+          <p className={`mt-2 text-sm ${soft.active ? "rounded-2xl bg-amber-50 px-3 py-2 font-medium text-amber-900" : "text-stone-500"}`}>
+            {soft.text}
+            {soft.active ? " · lunch is busy; you can still complete this visit" : ""}
+          </p>
+        );
+      })()}
       {query.data.session?.start_at ? (
         <p className="mt-2 text-sm text-stone-600">
           Started {formatWhen(query.data.session.start_at)}

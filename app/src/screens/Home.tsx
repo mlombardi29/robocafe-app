@@ -149,6 +149,8 @@ export function HomePage() {
           const status = visitStatus({
             cadence: site.cadence,
             openingTime: site.opening_time,
+            softPreferBefore: site.soft_prefer_before,
+            softPreferAfter: site.soft_prefer_after,
             active: site.active,
             weekday: clock.weekday,
             nowMinutes: clock.nowMinutes,
@@ -168,6 +170,12 @@ export function HomePage() {
               <div className={`mt-2 text-base font-semibold ${status.beforeOpening || status.lateForShow ? "text-red-700" : "text-stone-800"}`}>
                 {status.label}
               </div>
+              {status.softHint ? (
+                <p className={`mt-1 text-sm ${status.softHintActive ? "font-medium text-amber-800" : "text-stone-500"}`}>
+                  {status.softHint}
+                  {status.softHintActive ? " · lunch is busy" : ""}
+                </p>
+              ) : null}
             </Link>
           );
         })}

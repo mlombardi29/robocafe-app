@@ -357,3 +357,27 @@ on conflict (key) do update set value = excluded.value;
 insert into public.config (key, value)
 values ('reimbursement_approval_limit', '')
 on conflict (key) do update set value = excluded.value;
+
+-- ---------------------------------------------------------------------------
+-- Site hours + soft preferred service window (Michael Nov 9).
+-- UofT open 10:00–17:30. Servicing during open hours is allowed.
+-- Soft, non-blocking hint: best before 11:00 or after 15:00 (avoid lunch).
+-- Legacy Monday "before opening" red flag stays off (uoft_before_opening=off).
+-- ---------------------------------------------------------------------------
+
+alter table public.sites
+  add column if not exists closing_time time,
+  add column if not exists soft_prefer_before time,
+  add column if not exists soft_prefer_after time;
+
+update public.sites
+set
+  opening_time = time '10:00',
+  closing_time = time '17:30',
+  soft_prefer_before = time '11:00',
+  soft_prefer_after = time '15:00'
+where short_name = 'UofT';
+
+insert into public.config (key, value)
+values ('uoft_before_opening', 'off')
+on conflict (key) do update set value = excluded.value;

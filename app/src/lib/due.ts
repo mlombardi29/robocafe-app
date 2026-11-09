@@ -123,6 +123,15 @@ export type VisitInput = {
   cadence: "daily" | "mwf" | "show_days";
   /** "HH:MM" or null. Null keeps the Monday red flag off. */
   openingTime: string | null;
+  /**
+   * Legacy Monday "due before opening" red flag. Off by default — open-hours
+   * servicing is allowed; use softPrefer* for the non-blocking lunch hint.
+   */
+  beforeOpeningEnabled?: boolean;
+  /** Preferred service ends at this clock (e.g. 11:00). With softPreferAfter, forms the soft window. */
+  softPreferBefore?: string | null;
+  /** Preferred service resumes at this clock (e.g. 15:00). */
+  softPreferAfter?: string | null;
   active: boolean;
   weekday: number;
   nowMinutes: number;
@@ -147,9 +156,13 @@ export type VisitStatus = {
   beforeOpening: boolean;
   lateForShow: boolean;
   label: string;
+  /** Non-blocking preferred-window copy. Never blocks start/complete. */
+  softHint: string | null;
+  /** True when now sits inside the soft avoid band (busy lunch). */
+  softHintActive: boolean;
 };
 
-export function parseClock(value: string | null): number | null {
+export function parseClock(value: string | null | undefined): number | null {
   if (!value) return null;
   const match = /^(\d{1,2}):(\d{2})/.exec(value);
   if (!match) return null;
@@ -159,7 +172,41 @@ export function parseClock(value: string | null): number | null {
   return hours * 60 + minutes;
 }
 
+/** "11:00" / "11:00:00" → "11am"; "15:30" → "3:30pm". */
+export function formatClockLabel(value: string | null | undefined): string | null {
+  const minutes = parseClock(value);
+  if (minutes == null) return null;
+  const hours24 = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  const suffix = hours24 >= 12 ? "pm" : "am";
+  const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
+  return mins === 0 ? `${hours12}${suffix}` : `${hours12}:${String(mins).padStart(2, "0")}${suffix}`;
+}
+
+/**
+ * Soft preferred service window. When both bounds are set and now is inside
+ * [before, after), return a non-blocking hint. Never affects due/missed.
+ */
+export function softServiceHint(
+  nowMinutes: number,
+  preferBefore: string | null | undefined,
+  preferAfter: string | null | undefined,
+): { text: string | null; active: boolean } {
+  const before = parseClock(preferBefore);
+  const after = parseClock(preferAfter);
+  const beforeLabel = formatClockLabel(preferBefore);
+  const afterLabel = formatClockLabel(preferAfter);
+  if (before == null || after == null || !beforeLabel || !afterLabel || before >= after) {
+    return { text: null, active: false };
+  }
+  const text = `Best before ${beforeLabel} or after ${afterLabel}`;
+  const active = nowMinutes >= before && nowMinutes < after;
+  return { text, active };
+}
+
 export function visitStatus(input: VisitInput): VisitStatus {
+  const soft = softServiceHint(input.nowMinutes, input.softPreferBefore, input.softPreferAfter);
+
   if (!input.active) {
     return {
       due: false,
@@ -167,6 +214,8 @@ export function visitStatus(input: VisitInput): VisitStatus {
       beforeOpening: false,
       lateForShow: false,
       label: "Offline for the season",
+      softHint: null,
+      softHintActive: false,
     };
   }
 
@@ -177,6 +226,8 @@ export function visitStatus(input: VisitInput): VisitStatus {
       beforeOpening: false,
       lateForShow: false,
       label: `Paused · clocked out ${input.pausedTime}. Resume this visit.`,
+      softHint: soft.text,
+      softHintActive: soft.active,
     };
   }
   if (input.visitInProgress) {
@@ -186,6 +237,8 @@ export function visitStatus(input: VisitInput): VisitStatus {
       beforeOpening: false,
       lateForShow: false,
       label: "Resume this visit.",
+      softHint: soft.text,
+      softHintActive: soft.active,
     };
   }
   if (input.incompleteToday) {
@@ -195,6 +248,8 @@ export function visitStatus(input: VisitInput): VisitStatus {
       beforeOpening: false,
       lateForShow: false,
       label: "Incomplete today",
+      softHint: soft.text,
+      softHintActive: soft.active,
     };
   }
 
@@ -205,6 +260,8 @@ export function visitStatus(input: VisitInput): VisitStatus {
       beforeOpening: false,
       lateForShow: false,
       label: `Completed today ${input.completedTodayTime}`,
+      softHint: null,
+      softHintActive: false,
     };
   }
 
@@ -215,7 +272,15 @@ export function visitStatus(input: VisitInput): VisitStatus {
     const on =
       input.showStatus === "scheduled" && input.showStartMinutes != null;
     if (!on) {
-      return { due: false, missed: false, beforeOpening: false, lateForShow: false, label: "No show today" };
+      return {
+        due: false,
+        missed: false,
+        beforeOpening: false,
+        lateForShow: false,
+        label: "No show today",
+        softHint: soft.text,
+        softHintActive: soft.active,
+      };
     }
     const late = !input.startedToday && input.nowMinutes > (input.showStartMinutes as number);
     return {
@@ -224,6 +289,8 @@ export function visitStatus(input: VisitInput): VisitStatus {
       beforeOpening: false,
       lateForShow: late,
       label: late ? "Late. The show has started" : "Show day. Service before the show",
+      softHint: soft.text,
+      softHintActive: soft.active,
     };
   }
 
@@ -238,11 +305,14 @@ export function visitStatus(input: VisitInput): VisitStatus {
       beforeOpening: false,
       lateForShow: false,
       label: missed ? "Missed the last visit" : "Not a service day",
+      softHint: soft.text,
+      softHintActive: soft.active,
     };
   }
 
   const opening = parseClock(input.openingTime);
   const beforeOpening =
+    Boolean(input.beforeOpeningEnabled) &&
     input.cadence === "mwf" &&
     input.weekday === 1 &&
     opening != null &&
@@ -253,9 +323,16 @@ export function visitStatus(input: VisitInput): VisitStatus {
   if (beforeOpening) label = "Due before opening";
   else if (missed) label = "Due today. Last visit was missed";
 
-  return { due: true, missed, beforeOpening, lateForShow: false, label };
+  return {
+    due: true,
+    missed,
+    beforeOpening,
+    lateForShow: false,
+    label,
+    softHint: soft.text,
+    softHintActive: soft.active,
+  };
 }
-
 /** Previous Mon/Wed/Fri strictly before `today` (YYYY-MM-DD). */
 export function previousMwf(today: string): string {
   const cursor = new Date(`${today}T00:00:00Z`);

@@ -30,7 +30,10 @@ const sites: SiteRow[] = [
     model_id: "s22",
     serial: null,
     cadence: "mwf",
-    opening_time: null,
+    opening_time: "10:00",
+    closing_time: "17:30",
+    soft_prefer_before: "11:00",
+    soft_prefer_after: "15:00",
     active: true,
     is_sandbox: false,
     models: null,
@@ -270,7 +273,7 @@ function ChecklistPreview({ showOpen }: { showOpen: boolean }) {
         </div>
       </div>
       <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-black/5 bg-[var(--bg)] pb-[env(safe-area-inset-bottom)]">
-        <p className="mx-auto max-w-[480px] px-3 pt-1 text-center text-[11px] leading-tight text-stone-500">Build ui-2026-11-09-history</p>
+        <p className="mx-auto max-w-[480px] px-3 pt-1 text-center text-[11px] leading-tight text-stone-500">Build ui-2026-11-09-hours</p>
         <div className="mx-auto grid min-h-16 max-w-[480px] grid-cols-3 text-center text-sm font-semibold">
           <span className="flex min-h-16 items-center justify-center">Home</span>
           <span className="flex min-h-16 items-center justify-center">Training</span>
