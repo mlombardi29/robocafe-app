@@ -1,6 +1,9 @@
 -- E18 coverage request/claim/cancel + E19 charge helpers.
 -- Additive. Does not rewrite 0015/0016. Does not send email or call Google.
 -- Hosted apply requires separate approval. Fail-closed: no notification_outbox writes.
+-- Coverage pay (Michael Nov 8): covered shifts credit time to the person who works
+-- the visit and pay that person's normal hourly rate (worker_own_hourly_rate).
+-- Reimbursement approval limits stay unset — no limit logic in this file.
 
 alter table public.charges
   add column if not exists note text;
@@ -345,4 +348,12 @@ grant execute on function public.set_charge_paid(uuid, boolean, uuid) to authent
 
 insert into public.config (key, value)
 values ('coverage_charges_migration', '0017')
+on conflict (key) do update set value = excluded.value;
+
+insert into public.config (key, value)
+values ('coverage_pay_rule', 'worker_own_hourly_rate')
+on conflict (key) do update set value = excluded.value;
+
+insert into public.config (key, value)
+values ('reimbursement_approval_limit', '')
 on conflict (key) do update set value = excluded.value;

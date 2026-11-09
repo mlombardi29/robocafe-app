@@ -107,9 +107,12 @@ export function CoveragePage() {
       <Link to={admin ? "/admin" : "/"} className="text-sm font-semibold text-[var(--accent)]">{admin ? "Admin" : "Home"}</Link>
       <Title sub="Ask for help on a visit day, claim an open ask, or cancel yours. No email is sent from here.">Coverage</Title>
       {missing ? <p className="mb-3 text-sm font-medium text-amber-800">{NOT_TURNED_ON}</p> : null}
+      <p className="mb-3 text-sm text-stone-600">
+        Pay for a covered visit goes to the tech who actually works it, at that tech's normal hourly rate.
+      </p>
       <Card>
         <h2 className="font-semibold">Request coverage</h2>
-        <p className="mt-1 text-sm text-stone-600">Original assignee stays blank until schedules assign people. No pay rule is applied here.</p>
+        <p className="mt-1 text-sm text-stone-600">Original assignee stays blank until schedules assign people.</p>
         <Field label="Site">
           <select className={inputClass} value={siteId} onChange={(event) => setSiteId(event.target.value)}>
             <option value="">Choose</option>

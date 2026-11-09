@@ -5,7 +5,7 @@ import { useAuth } from "../auth";
 import { inPractice } from "../lib/access";
 import { formatClockRange, formatVisitDay } from "../lib/correctionGlance";
 import { torontoNow } from "../lib/dates";
-import { lineAmount, money, rateForDay, type PayRate } from "../lib/pay";
+import { isCoveredShift, lineAmount, money, rateForDay, ratesForShiftPay, type PayRate } from "../lib/pay";
 import { payPdf } from "../lib/payPdf";
 import { NOT_TURNED_ON, turnedOff } from "../lib/rpcError";
 import { supabase } from "../lib/supabase";
@@ -16,12 +16,14 @@ type Person = { id: string; goes_by: string; role: string };
 type Shift = {
   id: string;
   person_id: string;
+  site_id: string;
   service_date: string;
   start_at: string | null;
   end_at: string | null;
   is_sandbox: boolean;
   sites: { short_name: string } | { short_name: string }[] | null;
 };
+type CoverageClaim = { site_id: string; service_date: string; claimed_by: string | null; is_sandbox: boolean };
 type RateRow = { person_id: string; hourly_rate: number; effective_on: string; is_sandbox: boolean };
 type PayRow = {
   id: string;
@@ -64,12 +66,26 @@ export function PayrollPage() {
     queryFn: async () => {
       const { data, error: queryError } = await supabase
         .from("service_sessions")
-        .select("id, person_id, service_date, start_at, end_at, is_sandbox, sites(short_name)")
+        .select("id, person_id, site_id, service_date, start_at, end_at, is_sandbox, sites(short_name)")
         .eq("status", "completed")
         .gte("service_date", week.from)
         .lte("service_date", week.to);
       if (queryError) throw new Error(queryError.message);
       return (data ?? []) as Shift[];
+    },
+  });
+  const claims = useQuery({
+    queryKey: ["pay-coverage", week.from, week.to, practice],
+    queryFn: async () => {
+      const { data, error: queryError } = await supabase
+        .from("schedule_overrides")
+        .select("site_id, service_date, claimed_by, is_sandbox")
+        .eq("is_sandbox", practice)
+        .gte("service_date", week.from)
+        .lte("service_date", week.to)
+        .not("claimed_by", "is", null);
+      if (queryError) throw new Error(queryError.message);
+      return (data ?? []) as CoverageClaim[];
     },
   });
   const rates = useQuery({
@@ -146,11 +162,14 @@ export function PayrollPage() {
   return (
     <Screen>
       <Link to="/admin" className="text-sm font-semibold text-[var(--accent)]">Admin</Link>
-      <Title sub={`${week.from} to ${week.to}. Times already include approved corrections.`}>
+      <Title sub={`${week.from} to ${week.to}. Times already include approved corrections. Covered shifts pay the tech who worked them at that tech's own hourly rate.`}>
         {practice ? "Practice pay" : "Last week's pay"}
       </Title>
       <Link to="/admin/payroll/rates" className="mb-4 inline-block font-semibold text-[var(--accent)]">Pay rates</Link>
       {notReady ? <p className="mb-3 text-sm font-medium text-amber-800">{NOT_TURNED_ON}</p> : null}
+      {turnedOff(claims.error as { message?: string } | null, "schedule_overrides") ? (
+        <p className="mb-3 text-sm text-stone-600">Coverage labels need migration 0017. Pay still uses each worker's own rate.</p>
+      ) : null}
       <Field label="Date paid">
         <input className={inputClass} type="date" value={paidOn} onChange={(event) => setPaidOn(event.target.value)} />
       </Field>
@@ -164,10 +183,11 @@ export function PayrollPage() {
               <p className="text-lg font-semibold">{person?.goes_by ?? "Person"}</p>
               {personShifts.map((shift) => {
                 const minutes = durationMinutes(shift.start_at, shift.end_at);
-                const rate = rateForDay(ratesFor(personId), shift.service_date);
+                const rate = rateForDay(ratesForShiftPay(ratesFor(personId)), shift.service_date);
                 const amount = minutes != null && rate != null ? lineAmount(minutes, rate) : null;
                 if (included(shift) && amount != null) total += amount;
                 const site = one(shift.sites);
+                const covered = isCoveredShift(claims.data ?? [], shift.site_id, shift.service_date, shift.person_id);
                 return (
                   <label key={shift.id} className="mt-3 flex items-start gap-3">
                     <input
@@ -181,6 +201,7 @@ export function PayrollPage() {
                       <span className="block text-sm text-stone-600">
                         {formatClockRange(shift.start_at, shift.end_at)} · {minutes ?? "?"} min
                         {amount == null ? " · No rate for this day" : ` · ${money(amount)}`}
+                        {covered ? " · Covered shift · worker's rate" : ""}
                       </span>
                     </span>
                   </label>
