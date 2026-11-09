@@ -7,6 +7,7 @@ import { useAuth } from "../auth";
 import { loadSites } from "../data";
 import { NOT_TURNED_ON, turnedOff } from "../lib/rpcError";
 import { driveFileIdOk, sha256Hex } from "../../../supabase/functions/_shared/driveRelay";
+import { dupontOnHandFor, suggestedPickupQty } from "../lib/opsDashboard";
 import { dupontGuidance, kcInstruction, kcLines, shotsForLabels } from "../lib/opsRules";
 import { compressPhoto } from "../lib/photoFile";
 import { supabase } from "../lib/supabase";
@@ -401,6 +402,8 @@ export function FlagsPage() {
 }
 
 export function PickupPage() {
+  const { profile } = useAuth();
+  const practice = profile ? profile.mode === "practice" || profile.role === "trainee" : false;
   const { siteId = "" } = useParams();
   const queryClient = useQueryClient();
   const [error, setError] = useState("");
@@ -412,17 +415,64 @@ export function PickupPage() {
   const skus = useQuery({
     queryKey: ["sku-sources"],
     queryFn: async () => {
-      const { data, error: queryError } = await supabase.from("skus").select("id, name, base_unit, source, is_sandbox").eq("active", true);
+      const { data, error: queryError } = await supabase
+        .from("skus")
+        .select("id, name, base_unit, category, subcategory, source, is_sandbox")
+        .eq("active", true);
       if (queryError) throw new Error(queryError.message);
       return (data ?? []) as SkuRow[];
     },
   });
-  const dupont = (skus.data ?? []).filter((sku) => sku.source === "dupont");
-  const listed = new Set((flags.data ?? []).map((row) => row.sku_id).filter((id): id is string => Boolean(id) && dupont.some((sku) => sku.id === id)));
+  const levels = useQuery({
+    queryKey: ["pickup-levels", siteId],
+    enabled: Boolean(siteId),
+    queryFn: async () => {
+      const { data, error: queryError } = await supabase
+        .from("site_skus")
+        .select("sku_id, target_level")
+        .eq("site_id", siteId);
+      if (queryError) throw new Error(queryError.message);
+      return (data ?? []) as { sku_id: string; target_level: number | null }[];
+    },
+  });
+  const txs = useQuery({
+    queryKey: ["pickup-stock"],
+    queryFn: async () => {
+      const { data, error: queryError } = await supabase
+        .from("inventory_tx")
+        .select("sku_id, site_id, location, delta_base, is_sandbox");
+      if (queryError) throw new Error(queryError.message);
+      return (data ?? []) as Tx[];
+    },
+  });
+  const dupont = (skus.data ?? []).filter((sku) => sku.source === "dupont" && sku.is_sandbox === practice);
+  const listed = new Set(
+    (flags.data ?? [])
+      .map((row) => row.sku_id)
+      .filter((id): id is string => Boolean(id) && dupont.some((sku) => sku.id === id)),
+  );
   if (extra) listed.add(extra);
 
+  function siteOnHand(skuId: string): number {
+    return (txs.data ?? [])
+      .filter((row) => row.is_sandbox === practice && row.sku_id === skuId && row.site_id === siteId)
+      .reduce((sum, row) => sum + Number(row.delta_base), 0);
+  }
+
+  function defaultQty(skuId: string): string {
+    if (qty[skuId] != null && qty[skuId] !== "") return qty[skuId]!;
+    const target = levels.data?.find((row) => row.sku_id === skuId)?.target_level ?? null;
+    const suggested = suggestedPickupQty({
+      siteOnHand: siteOnHand(skuId),
+      target,
+      dupontOnHand: dupontOnHandFor(txs.data ?? [], skuId, practice),
+    });
+    if (suggested == null) return "";
+    return String(suggested);
+  }
+
   async function take(skuId: string) {
-    const amount = Number(qty[skuId] || "1");
+    const amount = Number(defaultQty(skuId) || "1");
     if (!Number.isFinite(amount) || amount <= 0) {
       setError("Enter how many you are taking.");
       return;
@@ -441,28 +491,54 @@ export function PickupPage() {
     if (rpcError) setError(turnedOff(rpcError, "record_dupont_pickup") ? NOT_TURNED_ON : rpcError.message);
     else {
       delete keys.current[skuId];
+      setQty((current) => ({ ...current, [skuId]: "" }));
       await queryClient.invalidateQueries({ queryKey: ["stock"] });
+      await queryClient.invalidateQueries({ queryKey: ["pickup-stock"] });
+      await queryClient.invalidateQueries({ queryKey: ["flags", siteId] });
     }
   }
 
   return (
     <Screen>
       <Link to="/" className="text-sm font-semibold text-[var(--accent)]">Home</Link>
-      <Title sub="Ticks reduce the Dupont count once. Taking the same save again does not take it twice.">Dupont pickup</Title>
+      <Title sub="Ticks reduce the Dupont count once. Taking the same save again does not take it twice. Suggested qty uses a saved target when one exists.">
+        Dupont pickup
+      </Title>
       {missingTable(flags.error) ? <p className="text-sm text-stone-600">{NOT_TURNED_ON}</p> : null}
       <div className="grid gap-3">
-        {[...listed].map((skuId) => (
-          <Card key={skuId}>
-            <p className="font-semibold">{dupont.find((sku) => sku.id === skuId)?.name ?? "Item"}</p>
-            <input className={`${inputClass} mt-2`} inputMode="decimal" placeholder="1" value={qty[skuId] ?? ""} onChange={(event) => setQty((current) => ({ ...current, [skuId]: event.target.value }))} />
-            <Button className="mt-2" disabled={busy === skuId} onClick={() => void take(skuId)}>Take from Dupont</Button>
-          </Card>
-        ))}
+        {[...listed].map((skuId) => {
+          const sku = dupont.find((row) => row.id === skuId);
+          const warehouse = dupontOnHandFor(txs.data ?? [], skuId, practice);
+          const target = levels.data?.find((row) => row.sku_id === skuId)?.target_level ?? null;
+          return (
+            <Card key={skuId}>
+              <p className="font-semibold">{sku?.name ?? "Item"}</p>
+              <p className="mt-1 text-sm text-stone-600">
+                Dupont on hand: {warehouse}
+                {sku?.base_unit ? ` ${sku.base_unit}` : ""}
+                {target != null ? ` · Site target ${target} · On site ${siteOnHand(skuId)}` : ""}
+              </p>
+              <input
+                className={`${inputClass} mt-2`}
+                inputMode="decimal"
+                placeholder={target != null ? String(suggestedPickupQty({ siteOnHand: siteOnHand(skuId), target, dupontOnHand: warehouse }) ?? "1") : "1"}
+                value={defaultQty(skuId)}
+                onChange={(event) => setQty((current) => ({ ...current, [skuId]: event.target.value }))}
+              />
+              <Button className="mt-2" disabled={busy === skuId} onClick={() => void take(skuId)}>
+                Take from Dupont
+              </Button>
+            </Card>
+          );
+        })}
+        {listed.size === 0 ? <p className="text-sm text-stone-600">No Dupont-flagged items for this kiosk.</p> : null}
       </div>
       <Field label="Also take another Dupont item">
         <select className={inputClass} value={extra} onChange={(event) => setExtra(event.target.value)}>
           <option value="">Choose</option>
-          {dupont.map((sku) => <option key={sku.id} value={sku.id}>{sku.name}</option>)}
+          {dupont.map((sku) => (
+            <option key={sku.id} value={sku.id}>{sku.name}</option>
+          ))}
         </select>
       </Field>
       <ErrorText>{error}</ErrorText>

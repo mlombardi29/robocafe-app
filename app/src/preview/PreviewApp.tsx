@@ -270,7 +270,7 @@ function ChecklistPreview({ showOpen }: { showOpen: boolean }) {
         </div>
       </div>
       <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-black/5 bg-[var(--bg)] pb-[env(safe-area-inset-bottom)]">
-        <p className="mx-auto max-w-[480px] px-3 pt-1 text-center text-[11px] leading-tight text-stone-500">Build ui-2026-11-09-pickers</p>
+        <p className="mx-auto max-w-[480px] px-3 pt-1 text-center text-[11px] leading-tight text-stone-500">Build ui-2026-11-09-board</p>
         <div className="mx-auto grid min-h-16 max-w-[480px] grid-cols-3 text-center text-sm font-semibold">
           <span className="flex min-h-16 items-center justify-center">Home</span>
           <span className="flex min-h-16 items-center justify-center">Training</span>

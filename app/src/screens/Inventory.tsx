@@ -28,7 +28,13 @@ export function InventoryPage() {
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("");
   const [skuId, setSkuId] = useState("");
-  const [place, setPlace] = useState("");
+  const [place, setPlace] = useState(() => {
+    try {
+      return localStorage.getItem("kioskops.lastStockPlace") ?? "";
+    } catch {
+      return "";
+    }
+  });
   const [action, setAction] = useState("add");
   const [entryKind, setEntryKind] = useState<"base" | "pack">("base");
   const [packId, setPackId] = useState("");
@@ -218,6 +224,11 @@ export function InventoryPage() {
       });
       if (rpcError) setError(turnedOff(rpcError, "record_stock") ? NOT_TURNED_ON : rpcError.message);
       else {
+        try {
+          localStorage.setItem("kioskops.lastStockPlace", place);
+        } catch {
+          /* ignore */
+        }
         setQty("");
         setNote("");
         await queryClient.invalidateQueries({ queryKey: ["stock"] });
@@ -289,6 +300,9 @@ export function InventoryPage() {
       {missing ? <p className="mb-3 text-sm font-medium text-amber-800">{NOT_TURNED_ON}</p> : null}
       <Card>
         <h2 className="font-semibold">Add, take, or recount one item</h2>
+        <p className="mt-1 text-sm text-stone-600">
+          {place ? "Place remembered — pick an item, enter quantity, save." : "Pick an item and a place, then enter quantity and save."}
+        </p>
         <SkuPickList
           label="Item"
           skus={pickerSkus}
