@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { durationLabel, durationMinutes, inRange, rangeBounds } from "./timeRange";
+import { durationLabel, durationMinutes, inRange, rangeBounds, spansOverSixHours } from "./timeRange";
 
 describe("My Time ranges", () => {
   it("uses Monday as the start of the week containing Nov 5 2026", () => {
@@ -19,5 +19,11 @@ describe("My Time ranges", () => {
     expect(durationMinutes("2026-11-05T23:00:00Z", "2026-11-05T23:22:00Z")).toBe(22);
     expect(durationLabel(22)).toBe("22 min");
     expect(inRange("2026-11-05", "2026-11-02", "2026-11-08")).toBe(true);
+  });
+
+  it("flags spans over six hours for AM/PM slip warnings", () => {
+    expect(spansOverSixHours("2026-11-05T12:00:00Z", "2026-11-05T15:00:00Z")).toBe(false);
+    expect(spansOverSixHours("2026-11-05T12:00:00Z", "2026-11-05T19:00:00Z")).toBe(true);
+    expect(spansOverSixHours(null, "2026-11-05T19:00:00Z")).toBe(false);
   });
 });

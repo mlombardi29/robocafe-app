@@ -65,6 +65,12 @@ export function durationMinutes(start: string | null, end: string | null): numbe
   return mins;
 }
 
+/** E16: warn when a proposed/recorded span is over 6 hours (likely AM/PM slip). Threshold fixed at 6h per signed plan. */
+export function spansOverSixHours(start: string | null, end: string | null): boolean {
+  const mins = durationMinutes(start, end);
+  return mins != null && mins > 6 * 60;
+}
+
 export function durationLabel(minutes: number | null): string {
   if (minutes == null) return "No duration";
   if (minutes < 60) return `${minutes} min`;

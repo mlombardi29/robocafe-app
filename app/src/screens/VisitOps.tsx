@@ -11,9 +11,10 @@ import { dupontGuidance, kcInstruction, kcLines, shotsForLabels } from "../lib/o
 import { compressPhoto } from "../lib/photoFile";
 import { supabase } from "../lib/supabase";
 import { Button, Card, ErrorText, Field, Screen, Title, inputClass } from "../ui";
+import { SkuPickList } from "./SkuPickList";
 
 type FlagRow = { id: string; site_id: string; sku_id: string | null; status: "low" | "out"; resolved_at: string | null };
-type SkuRow = { id: string; name: string; base_unit: string | null; source: string | null; is_sandbox: boolean };
+type SkuRow = { id: string; name: string; base_unit: string | null; category: string | null; subcategory: string | null; source: string | null; is_sandbox: boolean };
 type SiteSku = { site_id: string; sku_id: string; target_level: number | null; kc_max: number | null; kc_warn: number | null };
 type ShotRow = {
   id: string;
@@ -349,13 +350,22 @@ export function FlagsPage() {
   const skus = useQuery({
     queryKey: ["sku-sources"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("skus").select("id, name, base_unit, source, is_sandbox").eq("active", true);
+      const { data, error } = await supabase.from("skus").select("id, name, base_unit, category, subcategory, source, is_sandbox").eq("active", true);
       if (error) throw new Error(error.message);
       return (data ?? []) as SkuRow[];
     },
   });
   const [siteId, setSiteId] = useState("");
   const [skuId, setSkuId] = useState("");
+  const [favouriteIds, setFavouriteIds] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem("kioskops.skuFavourites");
+      const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+      return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+    } catch {
+      return [];
+    }
+  });
   const flags = useOpenFlags(siteId);
   const practice = profile?.mode === "practice" || profile?.role === "trainee";
   const visibleSites = (sites.data ?? []).filter((site) => site.is_sandbox === practice);
@@ -371,12 +381,15 @@ export function FlagsPage() {
           {visibleSites.map((site) => <option key={site.id} value={site.id}>{site.short_name}</option>)}
         </select>
       </Field>
-      <Field label="Item">
-        <select className={inputClass} value={skuId} onChange={(event) => setSkuId(event.target.value)}>
-          <option value="">Choose</option>
-          {visibleSkus.map((sku) => <option key={sku.id} value={sku.id}>{sku.name}</option>)}
-        </select>
-      </Field>
+      <SkuPickList
+        label="Item"
+        skus={visibleSkus}
+        value={skuId}
+        recentIds={[]}
+        favouriteIds={favouriteIds}
+        onFavouriteChange={setFavouriteIds}
+        onChange={setSkuId}
+      />
       {siteId && skuId ? <FlagButtons siteId={siteId} skuId={skuId} /> : null}
       {siteId && (flags.data ?? []).length > 0 ? (
         <ul className="mt-4 grid gap-2 text-sm">

@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth";
 import { formatTorontoTime, instantOnTorontoDay, torontoNow } from "../lib/dates";
 import { correctionGlance } from "../lib/correctionGlance";
-import { durationLabel, durationMinutes, inRange, rangeBounds, type RangeKey } from "../lib/timeRange";
+import { createPendingGate, runPending } from "../lib/pendingAction";
+import { durationLabel, durationMinutes, inRange, rangeBounds, spansOverSixHours, type RangeKey } from "../lib/timeRange";
 import { supabase } from "../lib/supabase";
 import { CorrectionGlanceView } from "./CorrectionGlance";
 import { Button, Card, ErrorText, Field, Screen, Title, inputClass } from "../ui";
@@ -38,7 +39,8 @@ export function TimePage() {
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState("");
+  const pendingGate = useRef(createPendingGate()).current;
   const [range, setRange] = useState<RangeKey>("this-month");
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [customFrom, setCustomFrom] = useState(today);
@@ -103,29 +105,35 @@ export function TimePage() {
   }, [visible]);
 
   async function send() {
-    if (!openId || reason.trim().length < 3) {
-      setError("Say what should change.");
-      return;
-    }
-    setBusy(true);
-    setError("");
-    const { error: insertError } = await supabase.from("time_corrections").insert({
-      session_id: openId,
-      requested_by: profile!.id,
-      reason: reason.trim(),
-      requested_start: date && start ? instantOnTorontoDay(date, start) : null,
-      requested_end: date && end ? instantOnTorontoDay(date, end) : null,
-      idempotency_key: crypto.randomUUID(),
+    await runPending(pendingGate, setBusy, "send", async () => {
+      if (!openId || reason.trim().length < 3) {
+        setError("Say what should change.");
+        return;
+      }
+      const requestedStart = date && start ? instantOnTorontoDay(date, start) : null;
+      const requestedEnd = date && end ? instantOnTorontoDay(date, end) : null;
+      if (spansOverSixHours(requestedStart, requestedEnd)) {
+        const ok = window.confirm("That corrected time is over 6 hours. Check AM/PM before sending.");
+        if (!ok) return;
+      }
+      setError("");
+      const { error: insertError } = await supabase.from("time_corrections").insert({
+        session_id: openId,
+        requested_by: profile!.id,
+        reason: reason.trim(),
+        requested_start: requestedStart,
+        requested_end: requestedEnd,
+        idempotency_key: crypto.randomUUID(),
+      });
+      if (insertError) {
+        setError(insertError.message);
+        return;
+      }
+      setOpenId(null);
+      setReason("");
+      await queryClient.invalidateQueries({ queryKey: ["my-time"] });
+      await queryClient.invalidateQueries({ queryKey: ["my-corrections"] });
     });
-    setBusy(false);
-    if (insertError) {
-      setError(insertError.message);
-      return;
-    }
-    setOpenId(null);
-    setReason("");
-    await queryClient.invalidateQueries({ queryKey: ["my-time"] });
-    await queryClient.invalidateQueries({ queryKey: ["my-corrections"] });
   }
 
   return (
@@ -244,7 +252,7 @@ export function TimePage() {
                           <Field label="Requested end">
                             <input className={inputClass} type="time" value={end} onChange={(event) => setEnd(event.target.value)} />
                           </Field>
-                          <Button disabled={busy} onClick={() => void send()}>{busy ? "Sending" : "Send request"}</Button>
+                          <Button disabled={Boolean(busy)} onClick={() => void send()}>{busy === "send" ? "Sending" : "Send request"}</Button>
                         </div>
                       ) : null}
                     </Card>

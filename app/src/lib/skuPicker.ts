@@ -1,4 +1,4 @@
-/** Stock item picker helpers: search, recent, favourites. No invented catalogue. */
+/** Stock item picker helpers: search, recent, favourites, category browse. No invented catalogue. */
 
 export type PickerSku = {
   id: string;
@@ -58,14 +58,29 @@ export function matchesSearch(sku: PickerSku, query: string): boolean {
   return hay.includes(q);
 }
 
+/** Distinct categories already on SKU rows. Blank/missing excluded — not invented. */
+export function listCategories(skus: PickerSku[]): string[] {
+  const set = new Set<string>();
+  for (const sku of skus) {
+    const cat = sku.category?.trim();
+    if (cat) set.add(cat);
+  }
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+export function matchesCategory(sku: PickerSku, category: string): boolean {
+  if (!category) return true;
+  return (sku.category?.trim() ?? "") === category;
+}
+
 export type PickerSection = { key: "favourites" | "recent" | "all"; title: string; items: PickerSku[] };
 
-/** Favourites → recent → remaining, each filtered by search. Duplicates appear only in the first matching section. */
+/** Favourites → recent → remaining, each filtered by search and optional category. */
 export function groupPickerSkus(
   skus: PickerSku[],
-  opts: { query: string; favouriteIds: string[]; recentIds: string[] },
+  opts: { query: string; favouriteIds: string[]; recentIds: string[]; category?: string },
 ): PickerSection[] {
-  const visible = skus.filter((sku) => matchesSearch(sku, opts.query));
+  const visible = skus.filter((sku) => matchesSearch(sku, opts.query) && matchesCategory(sku, opts.category ?? ""));
   const byId = new Map(visible.map((sku) => [sku.id, sku]));
   const used = new Set<string>();
 
@@ -85,6 +100,6 @@ export function groupPickerSkus(
   const sections: PickerSection[] = [];
   if (favourites.length) sections.push({ key: "favourites", title: "Favourites", items: favourites });
   if (recent.length) sections.push({ key: "recent", title: "Recent", items: recent });
-  if (all.length) sections.push({ key: "all", title: opts.query.trim() ? "Matches" : "All items", items: all });
+  if (all.length) sections.push({ key: "all", title: opts.query.trim() || opts.category ? "Matches" : "All items", items: all });
   return sections;
 }
