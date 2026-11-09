@@ -297,6 +297,9 @@ export function InventoryPage() {
     <Screen>
       <Link to={admin ? "/admin" : "/"} className="text-sm font-semibold text-[var(--accent)]">{admin ? "Admin" : "Home"}</Link>
       <Title sub={practice ? "Practice stock. Live counts stay untouched." : "Live stock. Dupont is the warehouse. A site is what is there."}>Stock</Title>
+      <Link to={admin ? "/admin/stock-history" : "/stock-history"} className="mb-3 inline-block text-sm font-semibold text-[var(--accent)]">
+        Stock history
+      </Link>
       {missing ? <p className="mb-3 text-sm font-medium text-amber-800">{NOT_TURNED_ON}</p> : null}
       <Card>
         <h2 className="font-semibold">Add, take, or recount one item</h2>

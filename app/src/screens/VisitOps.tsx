@@ -8,6 +8,7 @@ import { loadSites } from "../data";
 import { NOT_TURNED_ON, turnedOff } from "../lib/rpcError";
 import { driveFileIdOk, sha256Hex } from "../../../supabase/functions/_shared/driveRelay";
 import { dupontOnHandFor, suggestedPickupQty } from "../lib/opsDashboard";
+import { createPendingGate, runPending } from "../lib/pendingAction";
 import { dupontGuidance, kcInstruction, kcLines, shotsForLabels } from "../lib/opsRules";
 import { compressPhoto } from "../lib/photoFile";
 import { supabase } from "../lib/supabase";
@@ -54,23 +55,27 @@ export function useOpenFlags(siteId: string) {
 export function FlagButtons({ siteId, skuId }: { siteId: string; skuId: string }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState("");
+  const pendingGate = useRef(createPendingGate()).current;
   async function flag(status: "low" | "out" | "clear") {
-    setError("");
-    const { error: rpcError } = await supabase.rpc("set_stock_flag", {
-      p_site: siteId,
-      p_sku: skuId,
-      p_status: status,
-      p_key: crypto.randomUUID(),
+    await runPending(pendingGate, setBusy, status, async () => {
+      setError("");
+      const { error: rpcError } = await supabase.rpc("set_stock_flag", {
+        p_site: siteId,
+        p_sku: skuId,
+        p_status: status,
+        p_key: crypto.randomUUID(),
+      });
+      if (rpcError) setError(turnedOff(rpcError, "set_stock_flag") ? NOT_TURNED_ON : rpcError.message);
+      else await queryClient.invalidateQueries({ queryKey: ["flags", siteId] });
     });
-    if (rpcError) setError(turnedOff(rpcError, "set_stock_flag") ? NOT_TURNED_ON : rpcError.message);
-    else await queryClient.invalidateQueries({ queryKey: ["flags", siteId] });
   }
   return (
     <div className="mt-2">
       <div className="grid grid-cols-3 gap-2">
-        <Button tone="quiet" onClick={() => void flag("low")}>Low</Button>
-        <Button tone="quiet" onClick={() => void flag("out")}>Out</Button>
-        <Button tone="quiet" onClick={() => void flag("clear")}>Restocked</Button>
+        <Button tone="quiet" disabled={Boolean(busy)} onClick={() => void flag("low")}>{busy === "low" ? "…" : "Low"}</Button>
+        <Button tone="quiet" disabled={Boolean(busy)} onClick={() => void flag("out")}>{busy === "out" ? "…" : "Out"}</Button>
+        <Button tone="quiet" disabled={Boolean(busy)} onClick={() => void flag("clear")}>{busy === "clear" ? "…" : "Restocked"}</Button>
       </div>
       <ErrorText>{error}</ErrorText>
     </div>

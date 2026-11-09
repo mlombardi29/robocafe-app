@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useAuth } from "../auth";
 import { loadSites } from "../data";
 import { inPractice } from "../lib/access";
@@ -10,6 +10,7 @@ import { torontoNow } from "../lib/dates";
 import { thresholdDetail } from "../lib/due";
 import { offboardingTitles } from "../lib/offboarding";
 import { opsBoardCounts, sumOnHand } from "../lib/opsDashboard";
+import { createPendingGate, runPending } from "../lib/pendingAction";
 import { turnedOff } from "../lib/rpcError";
 import { supabase } from "../lib/supabase";
 import type { Role, SiteRow } from "../lib/types";
@@ -36,6 +37,7 @@ const sections: { title: string; links: [string, string][] }[] = [
       ["/admin/shows", "RBC show days"],
       ["/admin/coverage", "Coverage requests"],
       ["/admin/corrections", "Time corrections"],
+      ["/admin/duplicates", "Duplicate visits"],
     ],
   },
   {
@@ -50,6 +52,7 @@ const sections: { title: string; links: [string, string][] }[] = [
     links: [
       ["/admin/checklist", "Order thresholds"],
       ["/inventory", "Stock"],
+      ["/admin/stock-history", "Stock history"],
       ["/admin/photos", "Photo audit"],
       ["/admin/import", "Catalogue preview"],
     ],
@@ -362,6 +365,8 @@ export function CorrectionsPage() {
   const queryClient = useQueryClient();
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState("");
+  const pendingGate = useRef(createPendingGate()).current;
   const rows = useQuery({
     queryKey: ["corrections"],
     queryFn: async () => {
@@ -386,18 +391,20 @@ export function CorrectionsPage() {
   });
 
   async function decide(id: string, approve: boolean, wasPaid: boolean) {
-    setError("");
-    const { error: updateError } = await supabase.from("time_corrections").update({ was_paid: wasPaid }).eq("id", id);
-    if (updateError) {
-      setError(updateError.message);
-      return;
-    }
-    const { error: rpcError } = await supabase.rpc("decide_correction", { p_id: id, p_approve: approve, p_note: note });
-    if (rpcError) setError(rpcError.message);
-    else {
-      await queryClient.invalidateQueries({ queryKey: ["corrections"] });
-      await queryClient.invalidateQueries({ queryKey: ["corrections-count"] });
-    }
+    await runPending(pendingGate, setBusy, id, async () => {
+      setError("");
+      const { error: updateError } = await supabase.from("time_corrections").update({ was_paid: wasPaid }).eq("id", id);
+      if (updateError) {
+        setError(updateError.message);
+        return;
+      }
+      const { error: rpcError } = await supabase.rpc("decide_correction", { p_id: id, p_approve: approve, p_note: note });
+      if (rpcError) setError(rpcError.message);
+      else {
+        await queryClient.invalidateQueries({ queryKey: ["corrections"] });
+        await queryClient.invalidateQueries({ queryKey: ["corrections-count"] });
+      }
+    });
   }
 
   return (
@@ -410,7 +417,7 @@ export function CorrectionsPage() {
       <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-stone-500">Waiting</h2>
       <div className="grid gap-3">
         {(rows.data?.pending ?? []).map((row) => (
-          <CorrectionCard key={row.id} row={row} onDecide={decide} />
+          <CorrectionCard key={row.id} row={row} busy={busy === row.id} disabled={Boolean(busy)} onDecide={decide} />
         ))}
         {(rows.data?.pending ?? []).length === 0 ? <p className="text-stone-600">Nothing waiting.</p> : null}
       </div>
@@ -429,9 +436,13 @@ export function CorrectionsPage() {
 function CorrectionCard({
   row,
   onDecide,
+  busy,
+  disabled,
 }: {
   row: CorrectionRow;
   onDecide?: (id: string, approve: boolean, wasPaid: boolean) => Promise<void>;
+  busy?: boolean;
+  disabled?: boolean;
 }) {
   const [paid, setPaid] = useState(row.was_paid);
   const session = oneOf(row.service_sessions);
@@ -460,12 +471,12 @@ function CorrectionCard({
       {onDecide ? (
         <>
           <label className="mt-3 flex min-h-12 items-center gap-2 text-sm">
-            <input type="checkbox" checked={paid} onChange={(event) => setPaid(event.target.checked)} />
+            <input type="checkbox" checked={paid} onChange={(event) => setPaid(event.target.checked)} disabled={disabled} />
             This time was already paid
           </label>
           <div className="mt-2 grid grid-cols-2 gap-2">
-            <Button onClick={() => void onDecide(row.id, true, paid)}>Approve</Button>
-            <Button tone="quiet" onClick={() => void onDecide(row.id, false, paid)}>Reject</Button>
+            <Button disabled={disabled} onClick={() => void onDecide(row.id, true, paid)}>{busy ? "Saving…" : "Approve"}</Button>
+            <Button tone="quiet" disabled={disabled} onClick={() => void onDecide(row.id, false, paid)}>Reject</Button>
           </div>
         </>
       ) : null}

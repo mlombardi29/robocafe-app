@@ -20,6 +20,8 @@ import {
 import { HistoryPage, HistoryVisitPage } from "./screens/History";
 import { InventoryPage } from "./screens/Inventory";
 import { ImportPreviewPage } from "./screens/ImportPreview";
+import { DuplicateSessionsPage } from "./screens/DuplicateSessions";
+import { StockHistoryPage } from "./screens/StockHistory";
 import { FlagsPage, PhotoReviewPage, PickupPage } from "./screens/VisitOps";
 import { ChargesPage } from "./screens/Charges";
 import { CoveragePage } from "./screens/Coverage";
@@ -60,6 +62,7 @@ export function App() {
                 <Route path="/charges" element={<ChargesPage />} />
                 <Route path="/coverage" element={<CoveragePage />} />
                 <Route path="/inventory" element={<InventoryPage />} />
+                <Route path="/stock-history" element={<StockHistoryPage />} />
                 <Route path="/flags" element={<FlagsPage />} />
                 <Route path="/pickup/:siteId" element={<PickupPage />} />
                 <Route path="/training" element={<TrainingHome />} />
@@ -81,6 +84,8 @@ export function App() {
                 <Route path="/admin/access" element={<AdminOnly><AccessPage /></AdminOnly>} />
                 <Route path="/admin/photos" element={<AdminOnly><PhotoReviewPage /></AdminOnly>} />
                 <Route path="/admin/import" element={<AdminOnly><ImportPreviewPage /></AdminOnly>} />
+                <Route path="/admin/duplicates" element={<AdminOnly><DuplicateSessionsPage /></AdminOnly>} />
+                <Route path="/admin/stock-history" element={<AdminOnly><StockHistoryPage /></AdminOnly>} />
               </Route>
             </Route>
           </Routes>
