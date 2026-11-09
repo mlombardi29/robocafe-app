@@ -51,6 +51,8 @@ export function HomePage() {
       <div className="mb-4 flex flex-wrap gap-4">
         <Link to="/history" className="text-base font-semibold text-[var(--accent)]">Past visits</Link>
         {profile && profile.role !== "visitor" ? <Link to="/pay" className="text-base font-semibold text-[var(--accent)]">Your pay</Link> : null}
+        {profile && profile.role !== "visitor" ? <Link to="/charges" className="text-base font-semibold text-[var(--accent)]">Reimbursements</Link> : null}
+        {profile && profile.role !== "visitor" ? <Link to="/coverage" className="text-base font-semibold text-[var(--accent)]">Coverage</Link> : null}
         {profile && profile.role !== "visitor" ? <Link to="/inventory" className="text-base font-semibold text-[var(--accent)]">Stock</Link> : null}
         {profile && profile.role !== "visitor" ? <Link to="/flags" className="text-base font-semibold text-[var(--accent)]">Flag stock</Link> : null}
       </div>

@@ -29,12 +29,16 @@ const sections: { title: string; links: [string, string][] }[] = [
     title: "Scheduling",
     links: [
       ["/admin/shows", "RBC show days"],
+      ["/admin/coverage", "Coverage requests"],
       ["/admin/corrections", "Time corrections"],
     ],
   },
   {
     title: "Payroll",
-    links: [["/admin/payroll", "Last week's pay"]],
+    links: [
+      ["/admin/payroll", "Last week's pay"],
+      ["/admin/charges", "Labour & reimbursements"],
+    ],
   },
   {
     title: "Inventory",

@@ -21,6 +21,8 @@ import { HistoryPage, HistoryVisitPage } from "./screens/History";
 import { InventoryPage } from "./screens/Inventory";
 import { ImportPreviewPage } from "./screens/ImportPreview";
 import { FlagsPage, PhotoReviewPage, PickupPage } from "./screens/VisitOps";
+import { ChargesPage } from "./screens/Charges";
+import { CoveragePage } from "./screens/Coverage";
 import { PayRatesPage, PayrollPage, TechPayPage } from "./screens/Payroll";
 import { HomePage } from "./screens/Home";
 import { ServicePage } from "./screens/Service";
@@ -55,6 +57,8 @@ export function App() {
                 <Route path="/history/:sessionId" element={<HistoryVisitPage />} />
                 <Route path="/time" element={<TimePage />} />
                 <Route path="/pay" element={<TechPayPage />} />
+                <Route path="/charges" element={<ChargesPage />} />
+                <Route path="/coverage" element={<CoveragePage />} />
                 <Route path="/inventory" element={<InventoryPage />} />
                 <Route path="/flags" element={<FlagsPage />} />
                 <Route path="/pickup/:siteId" element={<PickupPage />} />
@@ -67,6 +71,8 @@ export function App() {
                 <Route path="/admin/corrections" element={<AdminOnly><CorrectionsPage /></AdminOnly>} />
                 <Route path="/admin/trainees" element={<AdminOnly><TraineesPage /></AdminOnly>} />
                 <Route path="/admin/shows" element={<AdminOnly><ShowsPage /></AdminOnly>} />
+                <Route path="/admin/coverage" element={<AdminOnly><CoveragePage /></AdminOnly>} />
+                <Route path="/admin/charges" element={<AdminOnly><ChargesPage /></AdminOnly>} />
                 <Route path="/admin/checklist" element={<AdminOnly><ChecklistPage /></AdminOnly>} />
                 <Route path="/admin/payroll" element={<AdminOnly><PayrollPage /></AdminOnly>} />
                 <Route path="/admin/payroll/rates" element={<AdminOnly><PayRatesPage /></AdminOnly>} />
