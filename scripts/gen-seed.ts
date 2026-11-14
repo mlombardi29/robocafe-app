@@ -17,8 +17,11 @@ const { parse } = require("yaml") as { parse: (src: string) => unknown };
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const EN = "\u2013";
 
-const ARM_SENSOR_DETAILS =
-  "Pass/fail criteria are being confirmed with KioCafe (Albert Kim). For now, note what you see.";
+const ARM_SENSOR_SINAI =
+  "1. In the Robot API, move the arm to single hot cup. Look at the arm sensor light.\n2. Move the arm to single cold cup. Look at the light again.\n3. Both times it should be solid green. If it is, you are done.\n4. If not, very gently wipe the shiny reflective surface only, then check again.\n\nAdditional info\nMount Sinai only. Even a tiny bump can knock the sensor out of line. Wipe softly. Note it if cleaning was needed. This is not the robot arm weight / Auto Calibrate check.";
+
+const ARM_SENSOR_RBC =
+  "This arm sensor solid-green check is for Mount Sinai only. At RBC, mark Not needed.\n\nAdditional info\nDo not invent Sinai sensor criteria at RBC. Robot arm weight / Auto Calibrate remains the weekly weight check on this model.";
 
 type Item = {
   key: string;
@@ -109,14 +112,15 @@ const s35 = models.find((m) => m.code === "s35")!;
 const s22 = models.find((m) => m.code === "s22")!;
 const s5 = models.find((m) => m.code === "s5")!;
 const sensor = (m: ModelFile) => m.sections.flatMap((s) => s.items).find((i) => i.key === "arm_sensor");
-if (sensor(s35)?.details !== ARM_SENSOR_DETAILS || sensor(s35)?.status !== "pending_validation") {
-  throw new Error("Sinai arm sensor placeholder changed");
+if (sensor(s35)?.details !== ARM_SENSOR_SINAI || sensor(s35)?.status) {
+  throw new Error("Sinai arm sensor must use approved solid-green criteria without pending_validation");
 }
-if (sensor(s5)?.details !== ARM_SENSOR_DETAILS || sensor(s5)?.status !== "pending_validation") {
-  throw new Error("RBC arm sensor placeholder changed");
+if (sensor(s5)?.details !== ARM_SENSOR_RBC || sensor(s5)?.status) {
+  throw new Error("RBC arm sensor must stay Sinai-only / Not needed guidance without pending_validation");
 }
 if (sensor(s22)) throw new Error("UofT must not have an arm sensor step");
 const keysOf = (m: ModelFile) => new Set(m.sections.flatMap((s) => s.items.map((i) => i.key)));
+if (!keysOf(s22).has("scale_check")) throw new Error("UofT must keep scale_check");
 for (const banned of ["grey_water", "claw", "door_check", "cleaning_balls", "empty_pucks"]) {
   if (keysOf(s22).has(banned)) throw new Error(`UofT must not include ${banned}`);
 }
@@ -307,7 +311,7 @@ insert into public.config (key, value) values
   ('quiz_pass_percent', '80'),
   ('quiz_draft', 'true'),
   ('uoft_before_opening', 'off'),
-  ('arm_sensor_criteria', 'pending_albert_kim');
+  ('arm_sensor_criteria', 'sinai_solid_green_approved_2026-11-08');
 `;
 
 const practiceInserts = practiceSites

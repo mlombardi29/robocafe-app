@@ -8,7 +8,7 @@ Migrations:
 4. `supabase/migrations/0004_sandbox.sql` — practice sites and `reset_sandbox()`
 5. `supabase/migrations/0005_harden_definer_functions.sql` — move policy helpers out of the public API, keep admin checks inside admin functions, lock search_path
 6. `supabase/migrations/0006_fresh_practice.sql` — practice-only fresh visit; voids the caller's own open practice attempt and keeps its rows
-7. `supabase/migrations/0007_milk_lock_not_needed.sql` — while the milk timer is running, Done is rejected on locked steps; Not needed stays allowed on Wipe the Cameo
+7. `supabase/migrations/0007_milk_lock_not_needed.sql` — while the milk timer is running, Done is rejected on locked steps; Not needed stays allowed on Wipe the Cameo (later reversed for **new** visits by `0015`, without rewriting old snapshots)
 
 The hosted project does not expose tables until a grant exists. `anon` has no table grants. `auth_pins` and `login_attempts` have no grants for `anon` or `authenticated`. Edge functions use the service role.
 
@@ -32,7 +32,7 @@ The hosted project does not expose tables until a grant exists. `anon` has no ta
 
 ## Phase 2 tables
 
-`skus`, `sku_packs`, `site_skus`, `inventory_tx`, `stock_flags`, `payments`, `charges`. `0009` adds pay rates, payment lines, and held reorder notices. `0011` adds photo-audit metadata, KC confirmations, an optional checklist-to-SKU link, and the kiosk a Dupont pickup was for. `0013` adds `notification_outbox` for disabled pickup and reorder previews, and an empty `private.drive_file_acks` row that only the upload function can write after Drive returns a file. `0014` adds the photo version on that acknowledgement and an optional photo flag on `start_session`. It does not update existing visit rows. Reorder addresses live in empty `private.notification_recipients` slots named `michael` and `kajsa`. Screens exist for stock, flags, pickup, pay, photo review, and catalogue preview. Packs, coverage, reimbursements, and Drive backup do not. Admins can write stock and pay through the functions. Techs can read rows for their own sites or their own pay, and only in the mode they are in. Photo and KC rows are not writable from the client except through those functions. Photo rows do not contain image bytes. Reorder notices cannot be marked sent.
+`skus`, `sku_packs`, `site_skus`, `inventory_tx`, `stock_flags`, `payments`, `charges`. `0009` adds pay rates, payment lines, and held reorder notices. `0011` adds photo-audit metadata, KC confirmations, an optional checklist-to-SKU link, and the kiosk a Dupont pickup was for. `0013` adds `notification_outbox` for disabled pickup and reorder previews, and an empty `private.drive_file_acks` row that only the upload function can write after Drive returns a file. `0014` adds the photo version on that acknowledgement and an optional photo flag on `start_session`. It does not update existing visit rows. Reorder addresses live in empty `private.notification_recipients` slots named `michael` and `kajsa`. Screens exist for stock, flags, pickup, pay, coverage, reimbursements/charges, photo review, and catalogue preview. Stock add/take/recount can enter a pack size or base units and shows the conversion before saving; pack rows stay optional and empty until an admin adds them. `0017` adds `schedule_overrides` plus charge note/RPCs; coverage and charge screens never send email. Drive backup does not. Admins can write stock and pay through the functions. Techs can read rows for their own sites or their own pay, and only in the mode they are in. Photo and KC rows are not writable from the client except through those functions. Photo rows do not contain image bytes. Reorder notices cannot be marked sent.
 
 ## Helpers
 
@@ -48,6 +48,11 @@ The hosted project does not expose tables until a grant exists. `anon` has no ta
 
 Practice copies are named `PRACTICE – Sinai (3.5)`, `PRACTICE – UofT (2.2)`, and `PRACTICE – RBC (S5)`. No people and no PINs are seeded.
 
-## Arm sensor
+## Arm calibration vs arm sensor
 
-Items with key `arm_sensor` are `pending_validation`. The details text is only: "Pass/fail criteria are being confirmed with KioCafe (Albert Kim). For now, note what you see."
+- `arm_calibration` (Sinai and RBC): approved seven-step Auto Calibrate **weight** procedure in `checklists/*.yaml` and `0015`. It is not the cup presence sensor.
+- `arm_sensor` stays `pending_validation`. Details text is only: "Pass/fail criteria are being confirmed with KioCafe (Albert Kim). For now, note what you see." Do not treat an unconfirmed reply as procedure.
+
+## Servicing feedback (`0015`)
+
+`0015_servicing_feedback.sql` updates published checklist item titles/details to match YAML, stamps `not_needed_allowed` on **new** visit snapshots, and rejects Not needed only when that flag is false. Existing and offline snapshots without the flag stay finishable. Pinned `0011`–`0014` are unchanged. Do not rewrite applied `0003` history to carry these edits.

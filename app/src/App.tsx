@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { BrowserRouter, Link, Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth";
 import { UI_BUILD } from "./lib/appUpdate";
+import { READ_GC_MS, READ_STALE_MS } from "./lib/queryDefaults";
 import { supabase } from "./lib/supabase";
 import { inPractice } from "./lib/access";
 import {
@@ -20,7 +21,12 @@ import {
 import { HistoryPage, HistoryVisitPage } from "./screens/History";
 import { InventoryPage } from "./screens/Inventory";
 import { ImportPreviewPage } from "./screens/ImportPreview";
+import { DuplicateSessionsPage } from "./screens/DuplicateSessions";
+import { SettingsPage } from "./screens/Settings";
+import { StockHistoryPage } from "./screens/StockHistory";
 import { FlagsPage, PhotoReviewPage, PickupPage } from "./screens/VisitOps";
+import { ChargesPage } from "./screens/Charges";
+import { CoveragePage } from "./screens/Coverage";
 import { PayRatesPage, PayrollPage, TechPayPage } from "./screens/Payroll";
 import { HomePage } from "./screens/Home";
 import { ServicePage } from "./screens/Service";
@@ -32,7 +38,14 @@ import { PracticeBanner } from "./ui";
 import { UpdatePrompt } from "./updatePrompt";
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: 1,
+      staleTime: READ_STALE_MS,
+      gcTime: READ_GC_MS,
+    },
+  },
 });
 
 const PreviewApp = import.meta.env.DEV ? lazy(() => import("./preview/PreviewApp")) : null;
@@ -55,7 +68,10 @@ export function App() {
                 <Route path="/history/:sessionId" element={<HistoryVisitPage />} />
                 <Route path="/time" element={<TimePage />} />
                 <Route path="/pay" element={<TechPayPage />} />
+                <Route path="/charges" element={<ChargesPage />} />
+                <Route path="/coverage" element={<CoveragePage />} />
                 <Route path="/inventory" element={<InventoryPage />} />
+                <Route path="/stock-history" element={<StockHistoryPage />} />
                 <Route path="/flags" element={<FlagsPage />} />
                 <Route path="/pickup/:siteId" element={<PickupPage />} />
                 <Route path="/training" element={<TrainingHome />} />
@@ -67,6 +83,8 @@ export function App() {
                 <Route path="/admin/corrections" element={<AdminOnly><CorrectionsPage /></AdminOnly>} />
                 <Route path="/admin/trainees" element={<AdminOnly><TraineesPage /></AdminOnly>} />
                 <Route path="/admin/shows" element={<AdminOnly><ShowsPage /></AdminOnly>} />
+                <Route path="/admin/coverage" element={<AdminOnly><CoveragePage /></AdminOnly>} />
+                <Route path="/admin/charges" element={<AdminOnly><ChargesPage /></AdminOnly>} />
                 <Route path="/admin/checklist" element={<AdminOnly><ChecklistPage /></AdminOnly>} />
                 <Route path="/admin/payroll" element={<AdminOnly><PayrollPage /></AdminOnly>} />
                 <Route path="/admin/payroll/rates" element={<AdminOnly><PayRatesPage /></AdminOnly>} />
@@ -75,6 +93,9 @@ export function App() {
                 <Route path="/admin/access" element={<AdminOnly><AccessPage /></AdminOnly>} />
                 <Route path="/admin/photos" element={<AdminOnly><PhotoReviewPage /></AdminOnly>} />
                 <Route path="/admin/import" element={<AdminOnly><ImportPreviewPage /></AdminOnly>} />
+                <Route path="/admin/duplicates" element={<AdminOnly><DuplicateSessionsPage /></AdminOnly>} />
+                <Route path="/admin/stock-history" element={<AdminOnly><StockHistoryPage /></AdminOnly>} />
+                <Route path="/admin/settings" element={<AdminOnly><SettingsPage /></AdminOnly>} />
               </Route>
             </Route>
           </Routes>

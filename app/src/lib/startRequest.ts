@@ -23,6 +23,21 @@ export function startRequest(job: StartJob) {
   return args;
 }
 
+/** True only when this server does not have the photo-audit argument on start_session. */
+export function photoAuditArgMissing(error: { code?: string | null; message?: string | null } | null): boolean {
+  if (!error) return false;
+  const message = error.message ?? "";
+  if (!/start_session/i.test(message) || !/p_photo_audit/i.test(message)) return false;
+  if (error.code === "PGRST202") return true;
+  return /could not find the function|schema cache|does not exist/i.test(message);
+}
+
+export function withoutPhotoArg<T extends { p_photo_audit?: true }>(args: T): Omit<T, "p_photo_audit"> {
+  const next = { ...args };
+  delete next.p_photo_audit;
+  return next;
+}
+
 export function acceptStartResult(
   askedForPhotoAudit: boolean,
   row: { checklist_snapshot?: { photo_audit?: { required?: boolean } } | null } | null,

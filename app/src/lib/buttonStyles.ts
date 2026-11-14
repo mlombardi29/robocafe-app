@@ -1,9 +1,13 @@
-export type ButtonTone = "primary" | "quiet" | "danger";
+export type ButtonTone = "primary" | "quiet" | "danger" | "start" | "complete" | "neutral" | "neutralOn";
 
 const toneClass: Record<ButtonTone, string> = {
   primary: "bg-[var(--accent)] text-white",
   quiet: "bg-white text-stone-800 ring-1 ring-stone-200",
   danger: "bg-red-700 text-white",
+  start: "bg-green-700 text-white",
+  complete: "bg-green-50 text-green-900 ring-2 ring-green-700",
+  neutral: "bg-stone-200 text-stone-900",
+  neutralOn: "bg-stone-300 text-stone-950 ring-2 ring-stone-700",
 };
 
 export function composeButtonClass(tone: ButtonTone, extra = ""): string {

@@ -1,6 +1,6 @@
 import { supabase } from "./lib/supabase";
 import type { CompletionWrite } from "./lib/queue";
-import { completionsForOpenVisit, mergeCompletions, mergedMilkTimes, unsyncedCompletions } from "./lib/queue";
+import { completionsForOpenVisit, keptVisitTimes, mergeCompletions, mergedMilkTimes, unsyncedCompletions } from "./lib/queue";
 import { recallVisit } from "./lib/sync";
 import type { SessionRow, SiteRow, Snapshot, SnapItem, SnapSection } from "./lib/types";
 
@@ -14,15 +14,33 @@ export type LocalVisit = {
   completions: CompletionWrite[];
   milkStartedAt: string | null;
   milkDoneAt: string | null;
+  pausedAt?: string | null;
 };
 
+const SITE_SELECT_BASE =
+  "id, name, short_name, model_id, serial, cadence, opening_time, active, is_sandbox, models(code, name, milk_clean_minutes)";
+const SITE_SELECT_FULL =
+  "id, name, short_name, model_id, serial, cadence, opening_time, closing_time, soft_prefer_before, soft_prefer_after, active, is_sandbox, models(code, name, milk_clean_minutes)";
+
+function missingSiteHoursColumn(error: { message?: string; code?: string } | null): boolean {
+  const message = error?.message ?? "";
+  return /closing_time|soft_prefer_before|soft_prefer_after|schema cache|does not exist/i.test(message);
+}
+
+function asSiteRows(rows: unknown[]): SiteRow[] {
+  return rows.map((row) => {
+    const typed = row as SiteRow & { models: SiteRow["models"] | SiteRow["models"][] };
+    return { ...typed, models: one(typed.models) };
+  });
+}
+
 export async function loadSites(): Promise<SiteRow[]> {
-  const { data, error } = await supabase
-    .from("sites")
-    .select("id, name, short_name, model_id, serial, cadence, opening_time, active, is_sandbox, models(code, name, milk_clean_minutes)")
-    .order("name");
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((row) => ({ ...row, models: one(row.models) })) as SiteRow[];
+  const full = await supabase.from("sites").select(SITE_SELECT_FULL).order("name");
+  if (!full.error) return asSiteRows(full.data ?? []);
+  if (!missingSiteHoursColumn(full.error)) throw new Error(full.error.message);
+  const base = await supabase.from("sites").select(SITE_SELECT_BASE).order("name");
+  if (base.error) throw new Error(base.error.message);
+  return asSiteRows(base.data ?? []);
 }
 
 export async function loadShowDays(from: string) {
@@ -78,11 +96,11 @@ async function publishedSnapshot(modelId: string): Promise<Snapshot | null> {
 }
 
 export async function loadService(siteId: string, personId: string) {
-  const { data: site, error } = await supabase
-    .from("sites")
-    .select("id, name, short_name, model_id, serial, cadence, opening_time, active, is_sandbox, models(code, name, milk_clean_minutes)")
-    .eq("id", siteId)
-    .maybeSingle();
+  let siteQuery = await supabase.from("sites").select(SITE_SELECT_FULL).eq("id", siteId).maybeSingle();
+  if (siteQuery.error && missingSiteHoursColumn(siteQuery.error)) {
+    siteQuery = await supabase.from("sites").select(SITE_SELECT_BASE).eq("id", siteId).maybeSingle();
+  }
+  const { data: site, error } = siteQuery;
   if (error || !site) throw new Error(error?.message ?? "That site is not available.");
   const normalized = { ...site, models: one(site.models) } as SiteRow;
 
@@ -123,10 +141,11 @@ export async function loadService(siteId: string, personId: string) {
     }));
   }
   const local = await recallVisit<LocalVisit>(siteId);
-  const localWrites = completionsForOpenVisit(local, session?.id ?? null);
+  const serverSessionId = session?.id ?? null;
+  const localWrites = completionsForOpenVisit(local, serverSessionId);
   const milk = mergedMilkTimes(
     {
-      sessionId: session?.id ?? null,
+      sessionId: serverSessionId,
       startedAt: session?.milk_clean_started_at ?? null,
       doneAt: session?.milk_clean_done_at ?? null,
     },
@@ -134,16 +153,24 @@ export async function loadService(siteId: string, personId: string) {
       ? { sessionId: local.sessionId, startedAt: local.milkStartedAt, doneAt: local.milkDoneAt }
       : null,
   );
+  const sameVisit = Boolean(local?.sessionId && serverSessionId && local.sessionId === serverSessionId);
+  const localDraft = sameVisit || !serverSessionId ? local : null;
+  const times = keptVisitTimes(
+    { startedAt: milk.startedAt, doneAt: milk.doneAt, pausedAt: null },
+    { pausedAt: session?.end_at ?? localDraft?.pausedAt ?? null },
+  );
   return {
     site: normalized,
     session,
+    localSessionId: session?.id ?? localDraft?.sessionId ?? null,
     snapshot,
     settings: settings ?? [],
     state: state ?? [],
     completions: mergeCompletions(serverWrites, localWrites),
     serverCompletions: serverWrites,
     pendingWrites: unsyncedCompletions(serverWrites, localWrites),
-    milkStartedAt: milk.startedAt,
-    milkDoneAt: milk.doneAt,
+    milkStartedAt: times.startedAt,
+    milkDoneAt: times.doneAt,
+    pausedAt: times.pausedAt,
   };
 }

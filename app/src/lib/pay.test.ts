@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { lineAmount, money, rateForDay } from "./pay";
+import {
+  COVERAGE_PAY_RULE,
+  isCoveredShift,
+  lineAmount,
+  money,
+  payPersonForShift,
+  rateForDay,
+  ratesForShiftPay,
+} from "./pay";
 import { payPdf } from "./payPdf";
 
 describe("pay", () => {
@@ -13,6 +21,29 @@ describe("pay", () => {
     expect(rateForDay(rates, "2026-11-01")).toBe(22);
     expect(rateForDay(rates, "2026-12-01")).toBe(22);
     expect(rateForDay([], "2026-11-01")).toBeNull();
+  });
+
+  it("pays covered shifts to the worker at the worker's own rate", () => {
+    expect(COVERAGE_PAY_RULE).toBe("worker_own_hourly_rate");
+    expect(payPersonForShift("coverer")).toBe("coverer");
+    expect(ratesForShiftPay(rates)).toEqual(rates);
+    expect(rateForDay(ratesForShiftPay(rates), "2026-11-01")).toBe(22);
+    expect(
+      isCoveredShift(
+        [{ site_id: "s1", service_date: "2026-11-08", claimed_by: "coverer" }],
+        "s1",
+        "2026-11-08",
+        "coverer",
+      ),
+    ).toBe(true);
+    expect(
+      isCoveredShift(
+        [{ site_id: "s1", service_date: "2026-11-08", claimed_by: "coverer" }],
+        "s1",
+        "2026-11-08",
+        "original",
+      ),
+    ).toBe(false);
   });
 
   it("rounds a shift to the cent", () => {

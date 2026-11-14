@@ -57,6 +57,8 @@ async function main() {
     "0012_photo_audit_grandfather.sql",
     "0013_preview_relay_guards.sql",
     "0014_atomic_photo_relay.sql",
+    "0015_servicing_feedback.sql",
+    "0016_servicing_ops_facts.sql",
   ]) {
     const sql = readFileSync(resolve(root, "supabase/migrations", file), "utf8");
     await db.exec(sql);
@@ -193,6 +195,11 @@ async function main() {
     where sess.id = '66666666-6666-4666-8666-666666666666'
       and coalesce((item->>'required')::boolean, true)
   `);
+  await db.exec(`
+    update public.service_sessions
+    set checklist_snapshot = regexp_replace(checklist_snapshot::text, ',\\s*"not_needed_allowed"\\s*:\\s*(true|false)', '', 'g')::jsonb
+    where id = '66666666-6666-4666-8666-666666666666'
+  `);
   await db.transaction(async (tx) => {
     await tx.exec(`select set_config('request.jwt.claim.sub', '${TECH}', true)`);
     let n = 0;
@@ -224,14 +231,25 @@ async function main() {
   }
   assert(locked, "tech changed a submitted time");
 
-  const sensor = await db.query<{ details: string; status: string }>(
-    "select details, status from public.checklist_items where key = 'arm_sensor' limit 1",
-  );
-  assert(sensor.rows[0].status === "pending_validation", "arm sensor is not pending");
-  assert(
-    sensor.rows[0].details.includes("Albert Kim"),
-    "arm sensor placeholder missing",
-  );
+  const sensorSinai = await db.query<{ details: string; status: string }>(`
+    select i.details, i.status
+    from public.checklist_items i
+    join public.checklist_sections s on s.id = i.section_id
+    join public.checklist_templates t on t.id = s.template_id
+    join public.models m on m.id = t.model_id
+    where i.key = 'arm_sensor' and m.code = 's35' limit 1
+  `);
+  assert(sensorSinai.rows[0].status === "active", "Sinai arm sensor should be active");
+  assert(sensorSinai.rows[0].details.includes("solid green"), "Sinai arm sensor criteria missing");
+  const sensorRbc = await db.query<{ details: string }>(`
+    select i.details
+    from public.checklist_items i
+    join public.checklist_sections s on s.id = i.section_id
+    join public.checklist_templates t on t.id = s.template_id
+    join public.models m on m.id = t.model_id
+    where i.key = 'arm_sensor' and m.code = 's5' limit 1
+  `);
+  assert(sensorRbc.rows[0].details.includes("Mount Sinai only"), "RBC arm sensor must stay Sinai-only");
   const opening = await db.query<{ opening_time: string | null }>(
     "select opening_time from public.sites where short_name = 'UofT' and is_sandbox = false",
   );
@@ -511,7 +529,11 @@ async function main() {
     await tx.exec(`select set_config('request.jwt.claim.sub', '${TECH}', true)`);
     await tx.query(`select public.start_session($1::uuid, $2::uuid, '2026-11-14T15:00:00Z')`, [lockVisit, sinai]);
   });
-  await db.exec(`update public.service_sessions set milk_clean_started_at = now() where id = '${lockVisit}'`);
+  await db.exec(`
+    update public.service_sessions set milk_clean_started_at = now(),
+      checklist_snapshot = regexp_replace(checklist_snapshot::text, ',\\s*"not_needed_allowed"\\s*:\\s*(true|false)', '', 'g')::jsonb
+    where id = '${lockVisit}'
+  `);
 
   async function saveStep(itemId: string, state: string, rev: number, key: string) {
     return asUser(
@@ -697,6 +719,11 @@ async function main() {
     where sess.id = '${replacement}'
       and coalesce((item->>'required')::boolean, true)
   `);
+  await db.exec(`
+    update public.service_sessions
+    set checklist_snapshot = regexp_replace(checklist_snapshot::text, ',\\s*"not_needed_allowed"\\s*:\\s*(true|false)', '', 'g')::jsonb
+    where id = '${replacement}'
+  `);
   await db.transaction(async (tx) => {
     await tx.exec(`select set_config('request.jwt.claim.sub', '${TECH}', true)`);
     let n = 0;
@@ -751,6 +778,11 @@ async function main() {
       jsonb_array_elements(sec->'items') item
     where sess.id = '${photoVisit}'
       and coalesce((item->>'required')::boolean, true)
+  `);
+  await db.exec(`
+    update public.service_sessions
+    set checklist_snapshot = regexp_replace(checklist_snapshot::text, ',\\s*"not_needed_allowed"\\s*:\\s*(true|false)', '', 'g')::jsonb
+    where id = '${photoVisit}'
   `);
   await db.transaction(async (tx) => {
     await tx.exec(`select set_config('request.jwt.claim.sub', '${ADMIN}', true)`);
@@ -1090,6 +1122,46 @@ async function main() {
   );
   assert(practiceRow.rows[0].required === "true" && practiceRow.rows[0].sandbox === true, "a practice visit used the live photo history");
   await db.exec(`update public.people set mode = 'live' where id = '${OTHER}'`);
+
+  await db.exec(`update public.service_sessions set status = 'voided' where person_id = '${TECH}' and status = 'open'`);
+  const policyVisit = crypto.randomUUID();
+  await db.transaction(async (tx) => {
+    await tx.exec(`select set_config('request.jwt.claim.sub', '${TECH}', true)`);
+    await tx.query(`select public.start_session($1::uuid, $2::uuid, '2026-11-30T15:00:00Z')`, [policyVisit, sinai]);
+  });
+  const pour = await db.query<{ title: string; allowed: string | null }>(`
+    select item->>'title' as title, item->>'not_needed_allowed' as allowed
+    from public.service_sessions sess,
+      jsonb_array_elements(sess.checklist_snapshot->'sections') sec,
+      jsonb_array_elements(sec->'items') item
+    where sess.id = '${policyVisit}' and item->>'key' = 'long_water'
+  `);
+  assert(pour.rows[0].title === "Long Water Pour" && pour.rows[0].allowed === "false", "a new visit did not lock Not needed on Long Water Pour");
+  const gloves = await db.query<{ id: string }>(`
+    select item->>'id' as id
+    from public.service_sessions sess,
+      jsonb_array_elements(sess.checklist_snapshot->'sections') sec,
+      jsonb_array_elements(sec->'items') item
+    where sess.id = '${policyVisit}' and item->>'key' = 'gloves'
+  `);
+  let everyService = false;
+  try {
+    await asUser(TECH, `select public.save_completion('${policyVisit}', '${gloves.rows[0].id}', 'not_needed', null, '', null, 1, '${crypto.randomUUID()}', 'gloves')`);
+  } catch (err) {
+    everyService = String(err).includes("every service");
+    if (!everyService) throw err;
+  }
+  assert(everyService, "Not needed was accepted on a new every-service step");
+  const beforeTitle = pour.rows[0].title;
+  await db.exec(`update public.checklist_items set title = title || ' changed' where key = 'long_water'`);
+  const afterTitle = await db.query<{ title: string }>(`
+    select item->>'title' as title
+    from public.service_sessions sess,
+      jsonb_array_elements(sess.checklist_snapshot->'sections') sec,
+      jsonb_array_elements(sec->'items') item
+    where sess.id = '${policyVisit}' and item->>'key' = 'long_water'
+  `);
+  assert(afterTitle.rows[0].title === beforeTitle, "a template edit changed an open visit snapshot");
 
   console.log("RLS checks passed");
   await db.close();
