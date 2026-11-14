@@ -7,15 +7,12 @@ export const COVERAGE_PAY_RULE = "worker_own_hourly_rate" as const;
  * Who is paid for a completed visit. Always the person who worked it (session person),
  * never the original assignee and never a special coverage rate.
  */
-export function payPersonForShift(workerPersonId: string, _originalAssigneeId?: string | null): string {
+export function payPersonForShift(workerPersonId: string): string {
   return workerPersonId;
 }
 
 /** Rates used for a covered (or any) shift: the worker's rates only. */
-export function ratesForShiftPay(
-  workerRates: PayRate[],
-  _originalAssigneeRates?: PayRate[],
-): PayRate[] {
+export function ratesForShiftPay(workerRates: PayRate[]): PayRate[] {
   return workerRates;
 }
 

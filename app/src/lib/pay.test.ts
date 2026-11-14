@@ -15,7 +15,6 @@ describe("pay", () => {
     { effectiveOn: "2026-01-01", hourlyRate: 20 },
     { effectiveOn: "2026-11-01", hourlyRate: 22 },
   ];
-  const other = [{ effectiveOn: "2026-01-01", hourlyRate: 40 }];
 
   it("uses the rate in force on the shift date", () => {
     expect(rateForDay(rates, "2026-10-31")).toBe(20);
@@ -26,9 +25,9 @@ describe("pay", () => {
 
   it("pays covered shifts to the worker at the worker's own rate", () => {
     expect(COVERAGE_PAY_RULE).toBe("worker_own_hourly_rate");
-    expect(payPersonForShift("coverer", "original")).toBe("coverer");
-    expect(ratesForShiftPay(rates, other)).toEqual(rates);
-    expect(rateForDay(ratesForShiftPay(rates, other), "2026-11-01")).toBe(22);
+    expect(payPersonForShift("coverer")).toBe("coverer");
+    expect(ratesForShiftPay(rates)).toEqual(rates);
+    expect(rateForDay(ratesForShiftPay(rates), "2026-11-01")).toBe(22);
     expect(
       isCoveredShift(
         [{ site_id: "s1", service_date: "2026-11-08", claimed_by: "coverer" }],
