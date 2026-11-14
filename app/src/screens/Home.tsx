@@ -9,6 +9,7 @@ import { inPractice } from "../lib/access";
 import { type CoverageRow } from "../lib/coverage";
 import { opsBoardCounts, sumOnHand } from "../lib/opsDashboard";
 import { turnedOff } from "../lib/rpcError";
+import { BUY_MILK_HINT, MILK_2PCT_LEGACY_ID, buyMilkOnTheWay } from "../lib/stockRules";
 import { supabase } from "../lib/supabase";
 import { Button, Card, ErrorText, Screen, Title } from "../ui";
 
@@ -32,22 +33,27 @@ export function HomePage() {
     queryKey: ["ops-board", practice, clock.today],
     enabled: Boolean(profile) && profile?.role !== "visitor",
     queryFn: async () => {
-      const [flags, levels, txs, coverage] = await Promise.all([
-        supabase.from("stock_flags").select("status, site_id, resolved_at, is_sandbox").eq("is_sandbox", practice).is("resolved_at", null),
+      const milkLegacy = practice ? `${MILK_2PCT_LEGACY_ID}:practice` : MILK_2PCT_LEGACY_ID;
+      const [flags, levels, txs, coverage, milkSku] = await Promise.all([
+        supabase.from("stock_flags").select("status, site_id, sku_id, resolved_at, is_sandbox").eq("is_sandbox", practice).is("resolved_at", null),
         supabase.from("site_skus").select("site_id, sku_id, low_threshold, is_sandbox").eq("is_sandbox", practice),
         supabase.from("inventory_tx").select("sku_id, site_id, location, delta_base, is_sandbox"),
         supabase
           .from("schedule_overrides")
           .select("id, site_id, service_date, coverage_requested, requested_by, claimed_by, note, is_sandbox")
           .eq("is_sandbox", practice),
+        supabase.from("skus").select("id, legacy_id").eq("legacy_id", milkLegacy).maybeSingle(),
       ]);
       return {
-        flags: flags.error ? null : ((flags.data ?? []) as { status: "low" | "out"; site_id: string; resolved_at: string | null }[]),
+        flags: flags.error
+          ? null
+          : ((flags.data ?? []) as { status: "low" | "out"; site_id: string; sku_id: string | null; resolved_at: string | null }[]),
         levels: levels.error ? null : ((levels.data ?? []) as { site_id: string; sku_id: string; low_threshold: number | null }[]),
         txs: txs.error ? null : ((txs.data ?? []) as { sku_id: string; site_id: string | null; location: string; delta_base: number; is_sandbox: boolean }[]),
         coverage: coverage.error
           ? null
           : ((coverage.data ?? []) as (CoverageRow & { is_sandbox: boolean })[]),
+        milkSkuId: milkSku.error || !milkSku.data ? null : (milkSku.data.id as string),
         coverageMissing: turnedOff(coverage.error as { message?: string } | null, "schedule_overrides"),
         flagsMissing: turnedOff(flags.error as { message?: string } | null, "stock_flags"),
       };
@@ -64,12 +70,13 @@ export function HomePage() {
 
   const visible = (sites.data ?? []).filter((site) => site.is_sandbox === practice);
   const siteIds = visible.map((site) => site.id);
+  const onHandRows = board.data?.txs ? sumOnHand(board.data.txs, practice) : [];
   const counts =
     board.data?.flags && board.data.levels && board.data.txs
       ? opsBoardCounts({
           flags: board.data.flags,
           levels: board.data.levels,
-          onHand: sumOnHand(board.data.txs, practice),
+          onHand: onHandRows,
           coverage: board.data.coverage ?? [],
           today: clock.today,
           siteIds,
@@ -164,6 +171,16 @@ export function HomePage() {
             visitInProgress: Boolean((openVisit && !openVisit.end_at) || (draftMatches && draft?.sessionId && !pausedSource)),
             incompleteToday,
           });
+          const milkSkuId = board.data?.milkSkuId ?? null;
+          const milkOnHand = milkSkuId
+            ? (onHandRows.find((row) => row.site_id === site.id && row.sku_id === milkSkuId)?.onHand ?? null)
+            : null;
+          const needMilk = buyMilkOnTheWay({
+            siteId: site.id,
+            milkSkuId,
+            openFlags: board.data?.flags ?? [],
+            siteOnHandLitres: milkOnHand,
+          });
           return (
             <Link key={site.id} to={`/service/${site.id}`} className="block rounded-3xl bg-white p-5 shadow-sm ring-1 ring-black/5">
               <div className="text-xl font-semibold">{site.short_name}</div>
@@ -176,6 +193,7 @@ export function HomePage() {
                   {status.softHintActive ? " · lunch is busy" : ""}
                 </p>
               ) : null}
+              {needMilk ? <p className="mt-1 text-sm font-medium text-amber-900">{BUY_MILK_HINT}</p> : null}
             </Link>
           );
         })}

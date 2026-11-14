@@ -381,3 +381,148 @@ where short_name = 'UofT';
 insert into public.config (key, value)
 values ('uoft_before_opening', 'off')
 on conflict (key) do update set value = excluded.value;
+
+-- ---------------------------------------------------------------------------
+-- Michael-approved warehouse / grocery stock rules (Nov 13).
+-- Base units only in the ledger. Packs are conversion helpers.
+-- Target = reorder threshold + one order. Matcha/pumpkin/fruit/disposable-cup
+-- units and per-site targets left untouched (not seeded here).
+-- ---------------------------------------------------------------------------
+
+alter table public.skus
+  add column if not exists target_level numeric,
+  add column if not exists phase_out boolean not null default false,
+  add column if not exists notes text;
+
+create unique index if not exists skus_legacy_id_uidx
+  on public.skus (legacy_id)
+  where legacy_id is not null;
+
+insert into public.config (key, value)
+values ('dupont_espresso_float_bags', '2')
+on conflict (key) do update set value = excluded.value;
+
+-- Stable catalogue rows (idempotent on legacy_id).
+insert into public.skus (
+  legacy_id, name, base_unit, category, subcategory, source,
+  reorder_threshold, target_level, phase_out, notes, active, is_sandbox
+) values
+  ('oat-milk', 'Oat milk', 'cartons', 'Milk', null, 'dupont', 12, 18, false, '1 carton = 946 mL. 1 box = 6 cartons.', true, false),
+  ('espresso-beans', 'Espresso beans', 'bags', 'Coffee', 'Dupont float', 'dupont', 1, 2, false, 'Dupont float — admin-editable; rises when a new espresso kiosk opens.', true, false),
+  ('cups-12oz-hot', '12 oz hot cups', 'cups', 'Cups', null, 'dupont', 1000, 2000, false, '1 sleeve = 50 cups. 1 box = 20 sleeves = 1,000 cups. Count in cups.', true, false),
+  ('cups-16oz-cold', '16 oz cold cups', 'cups', 'Cups', null, 'dupont', 1000, 2000, false, 'Same packing as 12 oz hot cups.', true, false),
+  ('lids', 'Lids', 'lids', 'Cups', null, 'dupont', 1000, 2000, false, '1 box = 1,000 lids. Every drink uses one lid.', true, false),
+  ('cups-12oz-cold', '12 oz cold cups', 'cups', 'Cups', 'phase-out', 'dupont', null, null, true, 'Phasing out — sell-through only. No reorder, no target.', true, false),
+  ('milk-bag-10l', 'Milk bags 10 L', 'bags', 'Milk', null, 'dupont', 20, 30, false, '1 pack = 10 bags.', true, false),
+  ('milk-bag-20l', 'Milk bags 20 L', 'bags', 'Milk', null, 'dupont', 20, 30, false, '1 pack = 10 bags.', true, false),
+  ('uoft-coffee-concentrate', 'UofT coffee concentrate', 'bottles', 'Coffee', null, 'dupont', 8, 12, false, '1 box = 4 bottles.', true, false),
+  ('milk-2pct', '2% milk', 'L', 'Milk', 'grocery', 'grocery', null, null, false, 'Grocery as-needed, not warehouse stock. Fridge flag below 8 L.', true, false)
+on conflict (legacy_id) where legacy_id is not null do update set
+  name = excluded.name,
+  base_unit = excluded.base_unit,
+  category = excluded.category,
+  subcategory = excluded.subcategory,
+  source = excluded.source,
+  reorder_threshold = excluded.reorder_threshold,
+  target_level = excluded.target_level,
+  phase_out = excluded.phase_out,
+  notes = excluded.notes,
+  active = excluded.active;
+
+-- Practice clones (sandbox catalogue).
+insert into public.skus (
+  legacy_id, name, base_unit, category, subcategory, source,
+  reorder_threshold, target_level, phase_out, notes, active, is_sandbox
+)
+select
+  legacy_id || ':practice',
+  name,
+  base_unit,
+  category,
+  subcategory,
+  source,
+  reorder_threshold,
+  target_level,
+  phase_out,
+  notes,
+  active,
+  true
+from public.skus
+where legacy_id in (
+  'oat-milk', 'espresso-beans', 'cups-12oz-hot', 'cups-16oz-cold', 'lids',
+  'cups-12oz-cold', 'milk-bag-10l', 'milk-bag-20l', 'uoft-coffee-concentrate', 'milk-2pct'
+)
+  and is_sandbox = false
+on conflict (legacy_id) where legacy_id is not null do update set
+  name = excluded.name,
+  base_unit = excluded.base_unit,
+  category = excluded.category,
+  subcategory = excluded.subcategory,
+  source = excluded.source,
+  reorder_threshold = excluded.reorder_threshold,
+  target_level = excluded.target_level,
+  phase_out = excluded.phase_out,
+  notes = excluded.notes,
+  active = excluded.active,
+  is_sandbox = true;
+
+-- Packs (delete-and-reinsert per seeded SKU to stay idempotent without pack legacy ids).
+delete from public.sku_packs
+where sku_id in (select id from public.skus where legacy_id like 'oat-milk%'
+  or legacy_id like 'espresso-beans%'
+  or legacy_id like 'cups-12oz-hot%'
+  or legacy_id like 'cups-16oz-cold%'
+  or legacy_id like 'lids%'
+  or legacy_id like 'cups-12oz-cold%'
+  or legacy_id like 'milk-bag-10l%'
+  or legacy_id like 'milk-bag-20l%'
+  or legacy_id like 'uoft-coffee-concentrate%'
+  or legacy_id like 'milk-2pct%');
+
+insert into public.sku_packs (sku_id, name, per_base, is_sandbox)
+select s.id, p.name, p.per_base, s.is_sandbox
+from public.skus s
+join (values
+  ('oat-milk', 'carton', 1::numeric),
+  ('oat-milk', 'box', 6),
+  ('espresso-beans', 'bag', 1),
+  ('cups-12oz-hot', 'sleeve', 50),
+  ('cups-12oz-hot', 'box', 1000),
+  ('cups-16oz-cold', 'sleeve', 50),
+  ('cups-16oz-cold', 'box', 1000),
+  ('lids', 'box', 1000),
+  ('cups-12oz-cold', 'sleeve', 50),
+  ('cups-12oz-cold', 'box', 1000),
+  ('milk-bag-10l', 'pack', 10),
+  ('milk-bag-20l', 'pack', 10),
+  ('uoft-coffee-concentrate', 'box', 4),
+  ('milk-2pct', '4 L pack', 4)
+) as p(legacy_id, name, per_base)
+  on s.legacy_id = p.legacy_id or s.legacy_id = p.legacy_id || ':practice';
+
+-- Sync espresso levels from Dupont float config (default 2 → reorder 1, target 2).
+update public.skus s
+set
+  reorder_threshold = greatest(0, (cfg.value::numeric) - 1),
+  target_level = greatest(1, cfg.value::numeric)
+from public.config cfg
+where cfg.key = 'dupont_espresso_float_bags'
+  and (s.legacy_id = 'espresso-beans' or s.legacy_id = 'espresso-beans:practice');
+
+-- 2% milk fridge threshold at every live + practice site (all current kiosks have a fridge).
+insert into public.site_skus (site_id, sku_id, low_threshold, target_level, is_sandbox)
+select
+  sites.id,
+  skus.id,
+  8,
+  null,
+  sites.is_sandbox
+from public.sites
+join public.skus
+  on skus.legacy_id = case when sites.is_sandbox then 'milk-2pct:practice' else 'milk-2pct' end
+on conflict (site_id, sku_id) do update set
+  low_threshold = excluded.low_threshold;
+
+insert into public.config (key, value)
+values ('stock_rules_migration', '0017-nov13')
+on conflict (key) do update set value = excluded.value;

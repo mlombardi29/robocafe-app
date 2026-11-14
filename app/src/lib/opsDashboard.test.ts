@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countBelowReorder, countOpenFlags, opsBoardCounts, suggestedPickupQty } from "./opsDashboard";
+import { countBelowReorder, countOpenFlags, countWarehouseReorder, opsBoardCounts, suggestedPickupQty } from "./opsDashboard";
 
 describe("ops dashboard", () => {
   it("counts out flags and open service flags", () => {
@@ -45,5 +45,21 @@ describe("ops dashboard", () => {
     expect(board).toEqual({ out: 1, toReorder: 1, serviceFlags: 1, coverageNeeded: 1 });
     expect(suggestedPickupQty({ siteOnHand: 2, target: 10, dupontOnHand: 5 })).toBe(5);
     expect(suggestedPickupQty({ siteOnHand: 2, target: null, dupontOnHand: 5 })).toBeNull();
+  });
+
+  it("counts Dupont warehouse SKUs below reorder and skips phase-out", () => {
+    expect(
+      countWarehouseReorder(
+        [
+          { id: "oat", reorder_threshold: 12 },
+          { id: "cold12", reorder_threshold: null, phase_out: true },
+          { id: "lids", reorder_threshold: 1000 },
+        ],
+        [
+          { sku_id: "oat", onHand: 10 },
+          { sku_id: "lids", onHand: 1000 },
+        ],
+      ),
+    ).toBe(1);
   });
 });

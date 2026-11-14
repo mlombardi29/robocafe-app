@@ -5,6 +5,7 @@ import { loadSites } from "../data";
 import { CONFIG_KEY_SPECS, isEditableConfigKey } from "../lib/configKeys";
 import { createPendingGate, runPending } from "../lib/pendingAction";
 import { turnedOff } from "../lib/rpcError";
+import { DUPONT_ESPRESSO_FLOAT_KEY, espressoFloatLevels } from "../lib/stockRules";
 import { supabase } from "../lib/supabase";
 import type { SiteRow } from "../lib/types";
 import { Button, Card, ErrorText, Field, Screen, Title, inputClass } from "../ui";
@@ -64,6 +65,31 @@ export function SettingsPage() {
     setError("");
     setMessage("");
     await runPending(pendingGate, setBusy, `cfg-${key}`, async () => {
+      if (key === DUPONT_ESPRESSO_FLOAT_KEY) {
+        const floatBags = Number(value);
+        if (!Number.isFinite(floatBags) || floatBags < 1) {
+          setError("Dupont espresso float must be at least 1 bag.");
+          return;
+        }
+        const levels = espressoFloatLevels(floatBags);
+        const { error: upsertError } = await supabase.from("config").upsert({ key, value: String(levels.target) });
+        if (upsertError) {
+          setError(upsertError.message);
+          return;
+        }
+        const { error: skuError } = await supabase
+          .from("skus")
+          .update({ reorder_threshold: levels.reorderBelow, target_level: levels.target })
+          .in("legacy_id", ["espresso-beans", "espresso-beans:practice"]);
+        if (skuError && !/target_level|schema cache|does not exist/i.test(skuError.message)) {
+          setError(skuError.message);
+          return;
+        }
+        setMessage(`Saved Dupont float ${levels.target} bags (reorder below ${levels.reorderBelow}).`);
+        await queryClient.invalidateQueries({ queryKey: ["admin-config"] });
+        await queryClient.invalidateQueries({ queryKey: ["skus"] });
+        return;
+      }
       const { error: upsertError } = await supabase.from("config").upsert({ key, value });
       if (upsertError) {
         setError(upsertError.message);

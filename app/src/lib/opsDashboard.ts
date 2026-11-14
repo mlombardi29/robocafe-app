@@ -40,6 +40,22 @@ export function countBelowReorder(levels: LevelRow[], onHand: OnHandKey[], siteI
   return n;
 }
 
+/** Count Dupont warehouse SKUs whose on-hand is strictly below reorder_threshold. */
+export function countWarehouseReorder(
+  skus: { id: string; reorder_threshold: number | null; phase_out?: boolean | null }[],
+  dupontOnHand: { sku_id: string; onHand: number }[],
+): number {
+  const stock = new Map(dupontOnHand.map((row) => [row.sku_id, row.onHand]));
+  let n = 0;
+  for (const sku of skus) {
+    if (sku.phase_out) continue;
+    if (sku.reorder_threshold == null || !Number.isFinite(Number(sku.reorder_threshold))) continue;
+    const hand = stock.get(sku.id) ?? 0;
+    if (hand < Number(sku.reorder_threshold)) n += 1;
+  }
+  return n;
+}
+
 export function opsBoardCounts(input: {
   flags: FlagCountRow[];
   levels: LevelRow[];
@@ -104,4 +120,17 @@ export function dupontOnHandFor(
   return txs
     .filter((row) => row.is_sandbox === practice && row.sku_id === skuId && (row.location === "dupont" || row.site_id == null))
     .reduce((sum, row) => sum + Number(row.delta_base), 0);
+}
+
+export function sumDupontOnHand(
+  txs: { sku_id: string; site_id: string | null; location: string; delta_base: number; is_sandbox: boolean }[],
+  practice: boolean,
+): { sku_id: string; onHand: number }[] {
+  const map = new Map<string, number>();
+  for (const row of txs) {
+    if (row.is_sandbox !== practice) continue;
+    if (row.location !== "dupont" && row.site_id != null) continue;
+    map.set(row.sku_id, (map.get(row.sku_id) ?? 0) + Number(row.delta_base));
+  }
+  return [...map.entries()].map(([sku_id, onHand]) => ({ sku_id, onHand }));
 }

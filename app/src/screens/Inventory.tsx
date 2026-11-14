@@ -8,11 +8,24 @@ import { conversionLabel, onHandLabel, positivePerBase, toBaseQty, type EntryMod
 import { createPendingGate, runPending } from "../lib/pendingAction";
 import { NOT_TURNED_ON, turnedOff } from "../lib/rpcError";
 import { recentSkuIds, type PickerSku } from "../lib/skuPicker";
+import { warehouseNeedsReorder, warehouseRuleLabel } from "../lib/stockRules";
 import { supabase } from "../lib/supabase";
 import { Button, Card, ErrorText, Field, Screen, Title, inputClass } from "../ui";
 import { SkuPickList } from "./SkuPickList";
 
-type Sku = { id: string; name: string; base_unit: string | null; category: string | null; subcategory: string | null; is_sandbox: boolean };
+type Sku = {
+  id: string;
+  name: string;
+  base_unit: string | null;
+  category: string | null;
+  subcategory: string | null;
+  source: string | null;
+  reorder_threshold: number | null;
+  target_level: number | null;
+  phase_out: boolean | null;
+  notes: string | null;
+  is_sandbox: boolean;
+};
 type Tx = { sku_id: string; site_id: string | null; location: string; delta_base: number; is_sandbox: boolean };
 type SiteSku = { site_id: string; sku_id: string; low_threshold: number | null };
 type PackRow = { id: string; sku_id: string; name: string; per_base: number; is_sandbox: boolean };
@@ -65,13 +78,22 @@ export function InventoryPage() {
   const skus = useQuery({
     queryKey: ["skus"],
     queryFn: async () => {
-      const { data, error: queryError } = await supabase
+      const full = await supabase
         .from("skus")
-        .select("id, name, base_unit, category, subcategory, is_sandbox")
+        .select("id, name, base_unit, category, subcategory, source, reorder_threshold, target_level, phase_out, notes, is_sandbox")
         .eq("active", true)
         .order("name");
-      if (queryError) throw new Error(queryError.message);
-      return (data ?? []) as Sku[];
+      if (!full.error) return (full.data ?? []) as Sku[];
+      if (!/target_level|phase_out|notes|schema cache|does not exist/i.test(full.error.message)) {
+        throw new Error(full.error.message);
+      }
+      const base = await supabase
+        .from("skus")
+        .select("id, name, base_unit, category, subcategory, source, reorder_threshold, is_sandbox")
+        .eq("active", true)
+        .order("name");
+      if (base.error) throw new Error(base.error.message);
+      return ((base.data ?? []) as Sku[]).map((row) => ({ ...row, target_level: null, phase_out: false, notes: null }));
     },
   });
   const packs = useQuery({
@@ -362,6 +384,25 @@ export function InventoryPage() {
         {skuId ? (
           <p className="mb-3 text-sm text-stone-600">
             On hand here: {onHandLabel(onHand(skuId, place), selectedSku?.base_unit, selectedPacks)}
+          </p>
+        ) : null}
+        {selectedSku ? (
+          <p className={`mb-3 text-sm ${selectedSku.phase_out ? "font-medium text-amber-900" : "text-stone-600"}`}>
+            {selectedSku.source === "grocery"
+              ? "Grocery · not warehouse stock."
+              : warehouseRuleLabel({
+                  reorderBelow: selectedSku.reorder_threshold == null ? null : Number(selectedSku.reorder_threshold),
+                  target: selectedSku.target_level == null ? null : Number(selectedSku.target_level),
+                  baseUnit: selectedSku.base_unit ?? "units",
+                  packs: selectedPacks.map((pack) => ({ name: pack.name, perBase: pack.perBase })),
+                  phaseOut: Boolean(selectedSku.phase_out),
+                })}
+            {place === "dupont" &&
+            selectedSku.source === "dupont" &&
+            warehouseNeedsReorder(onHand(skuId, "dupont"), selectedSku.reorder_threshold == null ? null : Number(selectedSku.reorder_threshold))
+              ? " · below reorder now"
+              : ""}
+            {selectedSku.notes ? ` · ${selectedSku.notes}` : ""}
           </p>
         ) : null}
         <Button disabled={Boolean(busy)} onClick={() => void changeStock()}>{busy === "stock" ? "Saving…" : "Save"}</Button>

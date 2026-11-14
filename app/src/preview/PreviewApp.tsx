@@ -72,6 +72,8 @@ export default function PreviewApp() {
 
   if (screen === "toast") return <ToastPreview />;
   if (screen === "correction") return <CorrectionPreview />;
+  if (screen === "stock") return <StockPreview />;
+  if (screen === "milk-flag") return <MilkFlagPreview />;
 
   if (screen === "checklist" || screen === "checklist-open") {
     return <ChecklistPreview showOpen={screen === "checklist-open"} />;
@@ -113,6 +115,54 @@ function CorrectionPreview() {
       <Card>
         <CorrectionGlanceView glance={glance} who="Kajsa · RBC" reason="Left at 7, the end time was the arrival." status="pending" />
       </Card>
+    </Screen>
+  );
+}
+
+function StockPreview() {
+  return (
+    <Screen>
+      <Title sub="Live stock. Dupont is the warehouse. A site is what is there.">Stock</Title>
+      <Card>
+        <h2 className="font-semibold">Add, take, or recount one item</h2>
+        <p className="mt-1 text-sm text-stone-600">Place remembered — pick an item, enter quantity, save.</p>
+        <p className="mt-3 text-base font-semibold">12 oz hot cups</p>
+        <p className="text-sm text-stone-600">Where: Dupont · Enter as: sleeve (50 cups)</p>
+        <p className="mt-2 text-sm font-medium text-stone-700">Saves as 1 sleeve of 50 = 50 cups</p>
+        <p className="mt-2 text-sm text-stone-600">On hand here: 1050 cups (1 box + 1 sleeve)</p>
+        <p className="mt-2 text-sm text-stone-600">
+          Reorder below 1 box (1000 cups) · target 2 boxes (2000 cups) · Count in cups.
+        </p>
+        <Button className="mt-3">Save</Button>
+      </Card>
+      <Card className="mt-3">
+        <p className="font-semibold">Oat milk</p>
+        <p className="text-sm text-amber-900">Reorder below 2 boxes (12 cartons) · target 3 boxes (18 cartons) · below reorder now</p>
+      </Card>
+      <Card className="mt-3">
+        <p className="font-semibold">12 oz cold cups</p>
+        <p className="text-sm font-medium text-amber-900">Phase-out · sell-through only (no reorder)</p>
+      </Card>
+    </Screen>
+  );
+}
+
+function MilkFlagPreview() {
+  return (
+    <Screen>
+      <Title sub="2026-11-13">Today</Title>
+      <div className="grid gap-3">
+        <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+          <div className="text-xl font-semibold">UofT</div>
+          <div className="mt-2 text-base font-semibold text-stone-800">Due today</div>
+          <p className="mt-1 text-sm text-stone-500">Best before 11am or after 3pm</p>
+          <p className="mt-1 text-sm font-medium text-amber-900">Buy milk on the way</p>
+        </div>
+        <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+          <div className="text-xl font-semibold">Sinai</div>
+          <div className="mt-2 text-base font-semibold text-stone-800">Due today</div>
+        </div>
+      </div>
     </Screen>
   );
 }
@@ -273,7 +323,7 @@ function ChecklistPreview({ showOpen }: { showOpen: boolean }) {
         </div>
       </div>
       <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-black/5 bg-[var(--bg)] pb-[env(safe-area-inset-bottom)]">
-        <p className="mx-auto max-w-[480px] px-3 pt-1 text-center text-[11px] leading-tight text-stone-500">Build ui-2026-11-09-hours</p>
+        <p className="mx-auto max-w-[480px] px-3 pt-1 text-center text-[11px] leading-tight text-stone-500">Build ui-2026-11-13-stock</p>
         <div className="mx-auto grid min-h-16 max-w-[480px] grid-cols-3 text-center text-sm font-semibold">
           <span className="flex min-h-16 items-center justify-center">Home</span>
           <span className="flex min-h-16 items-center justify-center">Training</span>

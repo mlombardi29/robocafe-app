@@ -9,6 +9,7 @@ describe("configKeys", () => {
 
   it("allows editing the soft-policy toggles but not migration stamps", () => {
     expect(isEditableConfigKey("uoft_before_opening")).toBe(true);
+    expect(isEditableConfigKey("dupont_espresso_float_bags")).toBe(true);
     expect(isEditableConfigKey("reimbursement_approval_limit")).toBe(true);
     expect(isEditableConfigKey("coverage_charges_migration")).toBe(false);
     expect(isEditableConfigKey("coverage_pay_rule")).toBe(false);

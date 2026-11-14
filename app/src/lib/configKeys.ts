@@ -16,6 +16,12 @@ export const CONFIG_KEY_SPECS: ConfigKeySpec[] = [
     editable: true,
   },
   {
+    key: "dupont_espresso_float_bags",
+    label: "Dupont espresso float (bags)",
+    help: "Warehouse target bags at Dupont. Reorder is float minus one bag. Raise this when a new espresso kiosk opens.",
+    editable: true,
+  },
+  {
     key: "quiz_pass_percent",
     label: "Quiz pass percent",
     help: "Score needed to pass a model quiz.",
