@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+!.env.production
+coverage/
+*.local
+.DS_Store
+supabase/.branches/
+supabase/.temp/
+supabase/.env
+.supabase/
+playwright-report/
+test-results/
+app/dev-dist/

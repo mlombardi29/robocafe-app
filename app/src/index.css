@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --bg: #f4f1ea;
+  --accent: #0f766e;
+  --nav-stack: calc(5.75rem + env(safe-area-inset-bottom));
+}
+
+html[data-mode="practice"] {
+  --bg: #fff4e8;
+  --accent: #c2410c;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: #1c1917;
+  font-family: Figtree, ui-sans-serif, system-ui, sans-serif;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+#root {
+  min-height: 100vh;
+}
