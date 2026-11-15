@@ -5,6 +5,15 @@ A plain-language history of changes to the Robo Café internal app
 
 ---
 
+## Fix a charge after it's logged
+**Asked for by Peter,** who logged a warehouse pickup with the wrong start and end time and had no way to correct it. Technicians could only add a charge. Managers could only mark one paid or remove it.
+
+- **My recent charges** (on Log a charge) has an **Edit** link on each of your own entries that is still unpaid and hasn't been removed. It reopens the same form — type, date, description, amount or start/end time, receipt link — and saves over that same charge. Other-time hours are recalculated the same way as a new charge, including a shift that runs past midnight.
+- **Managers** get **Edit** on every charge in Labour & reimbursements that hasn't been removed, including one already marked paid. Paid / unpaid and who the charge belongs to stay as they are.
+- A technician cannot change someone else's charge, or one that's already paid. The server checks the signed-in name.
+- The Charges tab picks up an `updatedAt` column the next time it is used. Existing columns stay where they are. No editor function to run.
+- Backend change: paste `Code.gs` and deploy a new version on the **existing** web app (same /exec URL). Do that before or together with the page going live. The previous page keeps working with the new script. **Edit** only saves once the new script is deployed.
+
 ## Receive stock: coffee concentrate is a box of 4, and boxes can be split into bottles
 **Coffee concentrate is bought in boxes of 4 bottles, not 6.** Receive stock,
 the order list, and the item editor were still treating it as a pack of 6.

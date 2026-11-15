@@ -323,7 +323,7 @@ var SWR_FNS={ getInventory:1,getDashboard:1,getOrderList:1,getServiceFlags:1,get
 var WRITE_FNS={ recordWithdrawal:1,recordReceipt:1,recordAdjustment:1,recordKioskFlags:1,resolveFlag:1,
   saveSku:1,setSkuActive:1,saveLocation:1,setLocationActive:1,savePerson:1,setPersonActive:1,
   setLowDaysThreshold:1,syncStandardItems:1,setLocationSkuInUse:1,saveServiceSession:1,
-  requestCoverage:1,claimCoverage:1,cancelCoverage:1,savePayment:1,voidPayment:1,addCharge:1,
+  requestCoverage:1,claimCoverage:1,cancelCoverage:1,savePayment:1,voidPayment:1,addCharge:1,updateCharge:1,
   setChargePaid:1,voidCharge:1,clearServiceFlag:1,backupNow:1,setAutoBackup:1,managerResetPin:1,
   updateServiceTimes:1 };
 var SWR_TTL=60*60000;   // memory older than an hour shows a spinner instead
@@ -1653,38 +1653,81 @@ function chargeRow(x, showPerson){
   if(x.receiptLink){ var lk=el('<a class="link" target="_blank" style="display:inline-block;margin-top:8px">View receipt ↗</a>'); lk.href=x.receiptLink; row.appendChild(lk); }
   return row;
 }
-function screenCharge(){
-  M.innerHTML=''; M.appendChild(backBtn('techHome'));
-  M.appendChild(el('<div><h2>Log a charge</h2><p class="sub">A reimbursement for something you bought, or non-servicing time (e.g. a pickup). Servicing time is logged in the checklist.</p></div>'));
+function chargeTimeVal(v){
+  var m=String(v||'').match(/^(\d{1,2}):(\d{2})/);
+  if(!m) return '';
+  return ('0'+parseInt(m[1],10)).slice(-2)+':'+m[2];
+}
+// edit + onDone: reopen this same form to correct an existing charge.
+// Technicians come from My recent charges (back returns to the list).
+// Managers come from Labour (onDone returns there). A plain open still logs a new charge.
+function screenCharge(edit, onDone){
+  var editing=!!(edit && edit.id);
+  window.scrollTo(0,0);
+  M.innerHTML='';
+  if(editing){
+    var hb=document.getElementById('backBtn');
+    if(hb){ hb.style.display=''; hb.onclick=function(){ if(onDone) onDone(); else screenCharge(); }; }
+  } else {
+    M.appendChild(backBtn('techHome'));
+  }
+  M.appendChild(el('<div><h2>'+(editing?'Edit charge':'Log a charge')+'</h2><p class="sub">'+
+    (editing
+      ? 'Correct this charge. Saving updates this same entry.'
+      : 'A reimbursement for something you bought, or non-servicing time (e.g. a pickup). Servicing time is logged in the checklist.')+
+    '</p></div>'));
   var c=el('<div class="card"></div>');
-  c.appendChild(el('<div class="hint" style="margin-top:0">Logged by <b>'+esc(APP.me.name)+'</b></div>'));
-  var type='reimbursement';
+  var who=editing ? (edit.personName||'') : APP.me.name;
+  c.appendChild(el('<div class="hint" style="margin-top:0">'+(editing?'Charge for':'Logged by')+' <b>'+esc(who)+'</b></div>'));
+  var type=(editing && edit.type==='misc_time') ? 'misc_time' : 'reimbursement';
   var seg=el('<div class="schfilt"></div>');
   [['reimbursement','🧾 Item reimbursement'],['misc_time','⏱️ Other time']].forEach(function(t){
-    var b=el('<button class="chip" data-k="'+t[0]+'">'+t[1]+'</button>'); b.onclick=function(){ type=t[0]; paint(); }; seg.appendChild(b);
+    var b=el('<button class="chip" data-k="'+t[0]+'">'+t[1]+'</button>');
+    b.onclick=function(){ if(type===t[0]) return; type=t[0]; paint(); };
+    seg.appendChild(b);
   });
   c.appendChild(seg);
   c.appendChild(el('<label>Date</label><input type="date" id="chgDate">'));
   var dyn=el('<div></div>'); c.appendChild(dyn);
   c.appendChild(el('<label>Description</label><input id="chgDesc" placeholder="What was it? (e.g. cleaning supplies, pickup run)">'));
-  var btn=el('<button class="btn">Submit charge</button>'); c.appendChild(btn);
+  var btn=el('<button class="btn">'+(editing?'Save changes':'Submit charge')+'</button>'); c.appendChild(btn);
   M.appendChild(c);
-  c.querySelector('#chgDate').value=isoDateLocal(new Date());
+  c.querySelector('#chgDate').value=editing ? (edit.date||'') : isoDateLocal(new Date());
+  if(editing) c.querySelector('#chgDesc').value=edit.description||'';
+  // Remember fields while switching type so a correction isn't wiped. Add mode
+  // still starts blank; this only keeps values the person has already entered.
+  var draft={
+    amount:(editing && edit.type!=='misc_time' && edit.amount) ? edit.amount : '',
+    receiptLink:(editing && edit.type!=='misc_time') ? (edit.receiptLink||'') : '',
+    startTime:(editing && edit.type==='misc_time') ? chargeTimeVal(edit.startTime) : '',
+    endTime:(editing && edit.type==='misc_time') ? chargeTimeVal(edit.endTime) : ''
+  };
   function paint(){
+    var amtEl=dyn.querySelector('#chgAmt'), rcEl=dyn.querySelector('#chgRcpt');
+    var stEl=dyn.querySelector('#chgStart'), etEl=dyn.querySelector('#chgEnd');
+    if(amtEl) draft.amount=amtEl.value;
+    if(rcEl) draft.receiptLink=rcEl.value;
+    if(stEl) draft.startTime=stEl.value;
+    if(etEl) draft.endTime=etEl.value;
     seg.querySelectorAll('.chip').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-k')===type); });
     dyn.innerHTML='';
     if(type==='reimbursement'){
       dyn.appendChild(el('<label>Amount ($)</label><input type="number" inputmode="decimal" step="0.01" min="0" id="chgAmt" placeholder="0.00">'));
       dyn.appendChild(el('<label>Receipt link <span style="color:var(--muted);font-weight:400">(optional)</span></label><input id="chgRcpt" placeholder="Paste a photo or Drive link">'));
+      if(draft.amount) dyn.querySelector('#chgAmt').value=draft.amount;
+      if(draft.receiptLink) dyn.querySelector('#chgRcpt').value=draft.receiptLink;
     } else {
       dyn.appendChild(el('<div class="row"><div><label>Start time</label><input type="time" id="chgStart"></div><div><label>End time</label><input type="time" id="chgEnd"></div></div>'));
+      if(draft.startTime) dyn.querySelector('#chgStart').value=draft.startTime;
+      if(draft.endTime) dyn.querySelector('#chgEnd').value=draft.endTime;
     }
   }
   paint();
   btn.onclick=function(){
     var date=val('chgDate'), desc=val('chgDesc');
     if(!desc) return toast('Add a short description',true);
-    var payload={ personName:APP.me.name, type:type, date:date, description:desc };
+    var payload={ type:type, date:date, description:desc };
+    if(editing) payload.id=edit.id; else payload.personName=APP.me.name;
     if(type==='reimbursement'){
       var amt=parseFloat(val('chgAmt')); if(!(amt>0)) return toast('Enter an amount',true);
       payload.amount=amt; payload.receiptLink=val('chgRcpt');
@@ -1693,8 +1736,12 @@ function screenCharge(){
       payload.startTime=st; payload.endTime=et;
     }
     loading('Saving…');
-    call('addCharge',payload).then(function(){ toast('Charge logged ✓'); go('charge'); }).catch(function(e){ toast(e.message||e,true); screenCharge(); });
+    call(editing?'updateCharge':'addCharge',payload).then(function(){
+      toast(editing?'Charge updated ✓':'Charge logged ✓');
+      if(editing && onDone) onDone(); else go('charge');
+    }).catch(function(e){ toast(e.message||e,true); if(editing) screenCharge(edit, onDone); else screenCharge(); });
   };
+  if(editing) return;
   var recent=el('<div></div>'); M.appendChild(recent);
   recent.innerHTML='<div class="center"><div class="spin"></div></div>';
   call('getCharges').then(function(list){
@@ -1702,7 +1749,19 @@ function screenCharge(){
     var mine=(list||[]).filter(function(x){ return x.personName===APP.me.name; }).slice(0,12);
     if(!mine.length) return;
     var rc=el('<div class="card"><label style="margin-top:0">My recent charges</label><div class="feed"></div></div>');
-    var feed=rc.querySelector('.feed'); mine.forEach(function(x){ feed.appendChild(chargeRow(x,false)); });
+    var feed=rc.querySelector('.feed');
+    mine.forEach(function(x){
+      var row=chargeRow(x,false);
+      var removed=x.voided===true||x.voided==='TRUE';
+      if(!x.paid && !removed){
+        var act=el('<div class="chgactions"></div>');
+        var ed=el('<button class="link">Edit</button>');
+        ed.onclick=function(){ screenCharge(x); };
+        act.appendChild(ed);
+        row.appendChild(act);
+      }
+      feed.appendChild(row);
+    });
     recent.appendChild(rc);
   }).catch(function(){ recent.innerHTML=''; });
 }
@@ -1867,6 +1926,11 @@ function mgrLabour(body){
       cf.forEach(function(x){
         var row=chargeRow(x,true);
         var act=el('<div class="chgactions"></div>');
+        if(!(x.voided===true||x.voided==='TRUE')){
+          var ed=el('<button class="btn ghost">Edit</button>');
+          ed.onclick=function(){ screenCharge(x, function(){ mgrOpen('labour'); }); };
+          act.appendChild(ed);
+        }
         if(x.paid){
           var u=el('<button class="btn ghost">Mark unpaid</button>');
           u.onclick=function(){ call('setChargePaid',x.id,false,'','').then(function(){toast('Updated ✓');mgrOpen('labour');}).catch(function(e){toast(e.message||e,true);}); };
