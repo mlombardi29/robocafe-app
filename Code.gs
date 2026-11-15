@@ -54,7 +54,7 @@ var HEADERS = {
   ServiceSessions: ['id','kioskId','locationName','model','checklistVersion','technicianName','startedAt','completedAt','status','percentComplete','requiredIncomplete','incompleteReason','overallNotes','completionsJson','serviceDate','startTime','endTime','milkBagChanged','voided','voidNote','submittedAt','editLog'],
   ScheduleOverrides: ['date','kioskId','coverageRequested','requestedBy','claimedBy','originalAssignee','note','updatedAt'],
   Payments: ['id','personName','periodStart','periodEnd','paidDate','notes','voided','createdAt'],
-  Charges: ['id','personName','type','date','description','amount','startTime','endTime','hours','receiptLink','paid','paidDate','paidNote','voided','createdAt']
+  Charges: ['id','personName','type','date','description','amount','startTime','endTime','hours','receiptLink','paid','paidDate','paidNote','voided','createdAt','updatedAt']
 };
 
 // ---- Web app entry points -----------------------------------------------
@@ -1546,27 +1546,70 @@ function getCharges(){
       paidDate:dStr_(r.paidDate), paidNote:r.paidNote||'', createdAt:isoS_(r.createdAt) };
     }).sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); });
 }
+// Same checks for a new charge and an edit, so a corrected time can't skip the rules
+// a brand-new charge has to pass. Hours wrap past midnight the same way (+24h).
+function chargeInput_(p){
+  var type = (p.type==='misc_time') ? 'misc_time' : 'reimbursement';
+  var hours='';
+  if(type==='misc_time'){
+    if(!p.startTime || !p.endTime) throw new Error('Enter a start and end time.');
+    var a=String(p.startTime).split(':'), b=String(p.endTime).split(':');
+    var m=(parseInt(b[0],10)*60+parseInt(b[1],10))-(parseInt(a[0],10)*60+parseInt(a[1],10)); if(m<0) m+=1440;
+    hours=Math.round(m/60*100)/100;
+  } else {
+    if(!(num_(p.amount)>0)) throw new Error('Enter an amount greater than 0.');
+  }
+  if(!String(p.description||'').trim()) throw new Error('Add a short description.');
+  return {
+    type:type, date:String(p.date||''), description:String(p.description||'').trim(),
+    amount:type==='reimbursement'?num_(p.amount):'',
+    startTime:type==='misc_time'?String(p.startTime||''):'',
+    endTime:type==='misc_time'?String(p.endTime||''):'',
+    hours:hours, receiptLink:p.receiptLink||''
+  };
+}
 function addCharge(p){
   var lock=LockService.getScriptLock(); lock.waitLock(20000);
   try{
-    var type = (p.type==='misc_time') ? 'misc_time' : 'reimbursement';
-    var hours='';
-    if(type==='misc_time'){
-      if(!p.startTime || !p.endTime) throw new Error('Enter a start and end time.');
-      var a=String(p.startTime).split(':'), b=String(p.endTime).split(':');
-      var m=(parseInt(b[0],10)*60+parseInt(b[1],10))-(parseInt(a[0],10)*60+parseInt(a[1],10)); if(m<0) m+=1440;
-      hours=Math.round(m/60*100)/100;
-    } else {
-      if(!(num_(p.amount)>0)) throw new Error('Enter an amount greater than 0.');
-    }
-    if(!String(p.description||'').trim()) throw new Error('Add a short description.');
-    var rec={ id:newId_('CHG'), personName:p.personName||'', type:type, date:String(p.date||''),
-      description:String(p.description||'').trim(),
-      amount:type==='reimbursement'?num_(p.amount):'', startTime:type==='misc_time'?String(p.startTime||''):'',
-      endTime:type==='misc_time'?String(p.endTime||''):'', hours:hours, receiptLink:p.receiptLink||'',
+    var f=chargeInput_(p);
+    var rec={ id:newId_('CHG'), personName:p.personName||'', type:f.type, date:f.date,
+      description:f.description, amount:f.amount, startTime:f.startTime, endTime:f.endTime,
+      hours:f.hours, receiptLink:f.receiptLink,
       paid:false, paidDate:'', paidNote:'', voided:false, createdAt:new Date().toISOString() };
     appendObject_(SHEETS.CHG, rec);
     return { ok:true, id:rec.id };
+  } finally { lock.releaseLock(); }
+}
+/** Correct a charge in place (same row / id). Technicians: only their own unpaid
+ *  charge. Managers: any charge that has not been removed, paid or not.
+ *  Who it belongs to, and whether it is paid or removed, stay as they are. */
+function updateCharge(p){
+  var lock=LockService.getScriptLock(); lock.waitLock(20000);
+  try{
+    p=p||{};
+    var rows=readObjects_(SHEETS.CHG), row=null;
+    for(var i=0;i<rows.length;i++) if(rows[i].id===p.id){ row=rows[i]; break; }
+    if(!row) throw new Error('That charge could not be found.');
+    if(row.voided===true||row.voided==='TRUE') throw new Error('This charge was removed and can no longer be edited.');
+    var me=currentUser_();
+    var isManager=me.role==='manager';
+    if(!isManager){
+      if(String(row.personName||'')!==String(me.name||''))
+        throw new Error('You can only edit your own charges.');
+      if(row.paid===true||row.paid==='TRUE')
+        throw new Error('This charge is already paid. Ask a manager to change it.');
+    }
+    var f=chargeInput_(p);
+    updateCell_(SHEETS.CHG, row._row, 'type', f.type);
+    updateCell_(SHEETS.CHG, row._row, 'date', f.date);
+    updateCell_(SHEETS.CHG, row._row, 'description', f.description);
+    updateCell_(SHEETS.CHG, row._row, 'amount', f.amount);
+    updateCell_(SHEETS.CHG, row._row, 'startTime', f.startTime);
+    updateCell_(SHEETS.CHG, row._row, 'endTime', f.endTime);
+    updateCell_(SHEETS.CHG, row._row, 'hours', f.hours);
+    updateCell_(SHEETS.CHG, row._row, 'receiptLink', f.receiptLink);
+    updateCell_(SHEETS.CHG, row._row, 'updatedAt', new Date().toISOString());
+    return { ok:true, id:row.id };
   } finally { lock.releaseLock(); }
 }
 function setChargePaid(id, paid, paidDate, paidNote){
@@ -1866,6 +1909,7 @@ function apiRegistry_(){
       claimCoverage: claimCoverage,
       cancelCoverage: cancelCoverage,
       addCharge: addCharge,
+      updateCharge: updateCharge,
       getCharges: getCharges,
       updateServiceTimes: updateServiceTimes,
       changePin: changePin
