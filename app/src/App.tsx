@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { lazy, Suspense, useEffect, type ReactNode } from "react";
-import { BrowserRouter, Link, Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, NavLink, Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth";
 import { UI_BUILD } from "./lib/appUpdate";
 import { READ_GC_MS, READ_STALE_MS } from "./lib/queryDefaults";
@@ -145,7 +145,7 @@ function Shell() {
       <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-black/5 bg-[var(--bg)] pb-[env(safe-area-inset-bottom)]">
         <p className="mx-auto max-w-[480px] px-3 pt-1 text-center text-[11px] leading-tight text-stone-500">Build {UI_BUILD}</p>
         <div className={`mx-auto grid max-w-[480px] ${admin ? "grid-cols-4" : "grid-cols-3"} text-center text-base font-semibold`}>
-          <Tab to="/">Home</Tab>
+          <Tab to="/" end>Home</Tab>
           <Tab to="/training">Training</Tab>
           <Tab to="/time">My time</Tab>
           {admin ? <Tab to="/admin" badge={pending.data ?? 0}>Admin</Tab> : null}
@@ -155,14 +155,20 @@ function Shell() {
   );
 }
 
-function Tab({ to, children, badge = 0 }: { to: string; children: string; badge?: number }) {
+function Tab({ to, children, badge = 0, end = false }: { to: string; children: string; badge?: number; end?: boolean }) {
   return (
-    <Link to={to} className="relative flex min-h-16 items-center justify-center">
+    <NavLink
+      to={to}
+      end={end}
+      className={({ isActive }) =>
+        `relative flex min-h-16 items-center justify-center ${isActive ? "text-[var(--accent)] shadow-[inset_0_-3px_0_0_var(--accent)]" : "text-stone-600"}`
+      }
+    >
       {children}
       {badge > 0 ? (
         <span className="absolute right-1 top-1 min-w-6 rounded-full bg-red-700 px-1 text-xs font-bold text-white">{badge}</span>
       ) : null}
-    </Link>
+    </NavLink>
   );
 }
 
