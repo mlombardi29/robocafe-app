@@ -114,37 +114,26 @@ export function AdminHome() {
   return (
     <Screen>
       <Title sub={pending.data ? `${pending.data} waiting` : "Nothing waiting"}>Admin</Title>
-      <div className="mb-5 grid grid-cols-2 gap-2">
-        <Link to="/flags" className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-black/5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Out</p>
-          <p className="text-2xl font-semibold">{board.data?.flagsMissing ? "—" : (board.data?.counts.out ?? "…")}</p>
-        </Link>
-        <Link to="/inventory" className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-black/5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">To reorder</p>
-          <p className="text-2xl font-semibold">{board.data?.counts.toReorder ?? "…"}</p>
-        </Link>
-        <Link to="/flags" className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-black/5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Service flags</p>
-          <p className="text-2xl font-semibold">{board.data?.flagsMissing ? "—" : (board.data?.counts.serviceFlags ?? "…")}</p>
-        </Link>
-        <Link to="/admin/coverage" className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-black/5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Coverage needed</p>
-          <p className="text-2xl font-semibold">{board.data?.coverageMissing ? "—" : (board.data?.counts.coverageNeeded ?? "…")}</p>
-        </Link>
-      </div>
       <div className="grid gap-5">
         {sections.map((section) => (
           <section key={section.title}>
             <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-stone-500">{section.title}</h2>
             <div className="grid gap-3">
-              {section.links.map(([to, label]) => (
+              {section.links.map(([to, label]) => {
+                const stockFlags = to === "/inventory" && board.data && !board.data.flagsMissing ? board.data.counts.serviceFlags : 0;
+                const coverage = to === "/admin/coverage" && board.data && !board.data.coverageMissing ? board.data.counts.coverageNeeded : 0;
+                const count = stockFlags || coverage;
+                return (
                 <Link key={to} to={to} className="flex min-h-12 items-center justify-between rounded-3xl bg-white px-4 text-lg font-semibold shadow-sm ring-1 ring-black/5">
                   <span>{label}</span>
                   {to === "/admin/corrections" && (pending.data ?? 0) > 0 ? (
                     <span className="rounded-full bg-red-700 px-2 text-sm text-white">{pending.data}</span>
+                  ) : count > 0 ? (
+                    <span className="rounded-full bg-amber-100 px-2 text-sm text-amber-950">{count}</span>
                   ) : null}
                 </Link>
-              ))}
+                );
+              })}
             </div>
           </section>
         ))}
@@ -236,7 +225,7 @@ export function AddPersonPage({ preview = false, previewSites = [] as SiteRow[] 
         ))}
       </div>
       {role === "trainee" ? (
-        <p className="mb-4 text-sm text-stone-600">Trainees only see the practice sites, even if you also pick live ones for later.</p>
+        <p className="mb-4 text-sm text-stone-600">Trainees only see the practice sites.</p>
       ) : null}
       <Field label="Temporary PIN (4 to 6 digits)">
         <input className={inputClass} inputMode="numeric" value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 6))} />
@@ -596,7 +585,7 @@ export function ShowsPage() {
   return (
     <Screen>
       <Link to="/admin" className="text-sm font-semibold text-[var(--accent)]">Admin</Link>
-      <Title sub="The real 2027 list is not in yet. Practice show days reset with practice data.">RBC show days</Title>
+      <Title sub="Practice show days reset with practice data.">RBC show days</Title>
       <p className="mb-3 text-sm text-stone-600">One per line, like 2027-05-20 18:00. Saving {rbc?.name ?? "…"}.</p>
       <textarea className={`${inputClass} min-h-40 py-3`} value={text} onChange={(event) => setText(event.target.value)} placeholder="YYYY-MM-DD HH:MM" />
       <Button className="mt-3" onClick={() => void save()}>Save show days</Button>
@@ -782,7 +771,7 @@ export function PracticeResetPage() {
     setBusy(false);
     if (rpcError) {
       const missing = rpcError.code === "PGRST202" || /reset_person_sandbox/i.test(rpcError.message);
-      setError(missing ? "Per-person practice reset is not turned on yet. Nothing was deleted." : rpcError.message);
+      setError(missing ? "Could not reset practice. Nothing was deleted." : rpcError.message);
       return;
     }
     setMessage(`Deleted only ${person.goes_by}'s practice visits and answers. Live visits, other people, and shared practice fill dates were not changed.`);
@@ -885,7 +874,7 @@ export function AccessPage() {
     });
     if (insertError) {
       const missing = insertError.code === "PGRST205" || /person_access_items/i.test(insertError.message);
-      setError(missing ? "Held keys are not turned on until the database update is applied." : insertError.message);
+      setError(missing ? "Could not save that key." : insertError.message);
       return;
     }
     setNote("");
@@ -898,7 +887,7 @@ export function AccessPage() {
       <Link to="/admin" className="text-sm font-semibold text-[var(--accent)]">Admin</Link>
       <Title sub="Codes are stored here for signed-in staff at that site. They are not part of the app install.">Site access</Title>
       <p className="mb-4 text-sm text-stone-600">
-        Printable UofT parking passes are not an upload yet. Record that someone holds a paper pass, and print the pass outside the app.
+        Record that someone holds a paper pass, and print the pass outside the app.
       </p>
       <Card className="mb-4">
         <h2 className="font-semibold">Shared site code</h2>

@@ -5,4 +5,4 @@ export function turnedOff(error: { code?: string; message?: string } | null, nam
   return error.code === "PGRST202" || message.includes(name) || /does not exist|schema cache|could not find the function/i.test(message);
 }
 
-export const NOT_TURNED_ON = "This is not turned on yet. Nothing was saved.";
+export const NOT_TURNED_ON = "Could not do that.";

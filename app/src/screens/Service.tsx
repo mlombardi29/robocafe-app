@@ -315,7 +315,7 @@ export function ServicePage() {
     const { error: rpcError } = await supabase.rpc("abandon_visit", { p_id: id, p_reason: leaveReason.trim() });
     if (rpcError) {
       const missing = rpcError.code === "PGRST202" || /abandon_visit/i.test(rpcError.message);
-      setLeaveError(missing ? "Closing a visit this way is not turned on yet. Nothing was closed." : rpcError.message);
+      setLeaveError(missing ? "Could not close this visit. Nothing was closed." : rpcError.message);
       setBusy("");
       return;
     }
@@ -713,7 +713,7 @@ export function ServicePage() {
           <div className="mx-auto w-full max-w-[480px] rounded-3xl bg-white p-4">
             <h2 id="leave-title" className="text-xl font-semibold">Incomplete today?</h2>
             <p className="mt-2 text-sm leading-relaxed text-stone-600">
-              Are you sure? This does not finish the checklist. It closes the visit for today so a new one can start here. Payroll can see it later as incomplete.
+              Are you sure? This does not finish the checklist. It closes the visit for today so a new one can start here. Payroll can see it as incomplete.
             </p>
             {leaveError ? <p className="mt-3 text-sm font-medium text-red-700" role="alert">{leaveError}</p> : null}
             <label className="mt-3 block text-sm font-medium text-stone-600">

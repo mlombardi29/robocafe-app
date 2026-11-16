@@ -28,7 +28,7 @@ type EditDraft = {
   paid: boolean;
 };
 
-export function ChargesPage() {
+export function ChargesPage({ embedded = false }: { embedded?: boolean }) {
   const { profile } = useAuth();
   const practice = profile ? inPractice(profile.role, profile.mode) : false;
   const admin = profile?.role === "admin";
@@ -39,7 +39,6 @@ export function ChargesPage() {
   const [amount, setAmount] = useState("");
   const [siteId, setSiteId] = useState("");
   const [note, setNote] = useState("");
-  const [receipt, setReceipt] = useState("");
   const [edit, setEdit] = useState<EditDraft | null>(null);
 
   const sites = useQuery({ queryKey: ["sites-charges"], queryFn: loadSites });
@@ -86,7 +85,6 @@ export function ChargesPage() {
     },
   });
 
-  const missing = turnedOff(charges.error as { message?: string } | null, "charges") || turnedOff(charges.error as { message?: string } | null, "add_charge");
   const modeSites = (sites.data ?? []).filter((site) => site.is_sandbox === practice);
   const unpaid = unpaidCharges(charges.data ?? []);
 
@@ -119,14 +117,13 @@ export function ChargesPage() {
         p_amount: parsed,
         p_site: siteId || null,
         p_note: note,
-        p_receipt_url: normalizeReceiptUrl(receipt),
+        p_receipt_url: null,
         p_key: crypto.randomUUID(),
       });
       if (rpcError) setError(turnedOff(rpcError, "add_charge") ? NOT_TURNED_ON : rpcError.message);
       else {
         setAmount("");
         setNote("");
-        setReceipt("");
         await queryClient.invalidateQueries({ queryKey: ["charges"] });
       }
     });
@@ -196,11 +193,9 @@ export function ChargesPage() {
         </p>
         {row.receipt_url ? (
           <a className="text-sm font-semibold text-[var(--accent)]" href={row.receipt_url} target="_blank" rel="noreferrer">
-            Receipt link
+            Receipt
           </a>
-        ) : (
-          <p className="text-sm text-stone-500">No receipt link yet</p>
-        )}
+        ) : null}
         <div className="mt-2 flex flex-wrap gap-2">
           {access.canEdit ? (
             <Button tone="quiet" disabled={Boolean(busy)} onClick={() => openEdit(row)}>
@@ -219,11 +214,10 @@ export function ChargesPage() {
     );
   }
 
-  return (
-    <Screen>
-      <Link to={admin ? "/admin" : "/"} className="text-sm font-semibold text-[var(--accent)]">{admin ? "Admin" : "Home"}</Link>
-      <Title sub="Log a purchase for reimbursement. Receipt link is optional until Drive upload is turned on. No email is sent.">Labour & reimbursements</Title>
-      {missing ? <p className="mb-3 text-sm font-medium text-amber-800">{NOT_TURNED_ON}</p> : null}
+  const body = (
+    <>
+      {embedded || !admin ? null : <Link to="/admin" className="text-sm font-semibold text-[var(--accent)]">Admin</Link>}
+      <Title sub="Log a purchase for reimbursement. No email is sent.">Labour & reimbursements</Title>
       <p className="mb-3 text-sm text-stone-600">
         Hours from completed visits stay on <Link className="font-semibold text-[var(--accent)]" to={admin ? "/admin/payroll" : "/pay"}>{admin ? "Payroll" : "Your pay"}</Link>.
         You can fix your own charge until midnight Toronto time on the day you logged it. After that, ask an admin.
@@ -255,9 +249,11 @@ export function ChargesPage() {
           <Field label="What for">
             <input className={inputClass} value={edit.note} onChange={(event) => setEdit({ ...edit, note: event.target.value })} />
           </Field>
-          <Field label="Receipt link (optional)">
-            <input className={inputClass} value={edit.receipt} onChange={(event) => setEdit({ ...edit, receipt: event.target.value })} />
-          </Field>
+          {edit.receipt ? (
+            <p className="mb-3 text-sm">
+              <a className="font-semibold text-[var(--accent)]" href={edit.receipt} target="_blank" rel="noreferrer">Receipt</a>
+            </p>
+          ) : null}
           <div className="mt-2 grid grid-cols-2 gap-2">
             <Button tone="quiet" disabled={Boolean(busy)} onClick={() => setEdit(null)}>Cancel</Button>
             <Button disabled={Boolean(busy)} onClick={() => void saveEdit()}>
@@ -281,9 +277,6 @@ export function ChargesPage() {
         </Field>
         <Field label="What for">
           <input className={inputClass} value={note} onChange={(event) => setNote(event.target.value)} placeholder="e.g. milk" />
-        </Field>
-        <Field label="Receipt link (optional)">
-          <input className={inputClass} value={receipt} onChange={(event) => setReceipt(event.target.value)} placeholder="Blank until Drive is configured" />
         </Field>
         <Button disabled={Boolean(busy)} onClick={() => void add()}>{busy === "add" ? "Saving…" : "Save charge"}</Button>
       </Card>
@@ -331,6 +324,8 @@ export function ChargesPage() {
         </Card>
       )}
       <ErrorText>{error}</ErrorText>
-    </Screen>
+    </>
   );
+  if (embedded) return body;
+  return <Screen>{body}</Screen>;
 }

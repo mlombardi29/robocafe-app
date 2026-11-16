@@ -12,6 +12,7 @@ import { warehouseNeedsReorder, warehouseRuleLabel } from "../lib/stockRules";
 import { supabase } from "../lib/supabase";
 import { Button, Card, ErrorText, Field, Screen, Title, inputClass } from "../ui";
 import { SkuPickList } from "./SkuPickList";
+import { FlagStockPanel } from "./VisitOps";
 
 type Sku = {
   id: string;
@@ -158,11 +159,6 @@ export function InventoryPage() {
     selectedSku && Number.isFinite(qtyNumber)
       ? conversionLabel(entryMode, qtyNumber, selectedPacks, selectedSku.base_unit)
       : null;
-  const missing =
-    turnedOff(skus.error as { message?: string } | null, "skus") ||
-    turnedOff(txs.error as { message?: string } | null, "location") ||
-    turnedOff(packs.error as { message?: string } | null, "sku_packs");
-
   function onHand(id: string, site: string): number {
     return (txs.data ?? [])
       .filter((row) => row.sku_id === id && row.is_sandbox === practice && (site === "dupont" ? row.location === "dupont" : row.site_id === site))
@@ -317,12 +313,14 @@ export function InventoryPage() {
 
   return (
     <Screen>
-      <Link to={admin ? "/admin" : "/"} className="text-sm font-semibold text-[var(--accent)]">{admin ? "Admin" : "Home"}</Link>
-      <Title sub={practice ? "Practice stock. Live counts stay untouched." : "Live stock. Dupont is the warehouse. A site is what is there."}>Stock</Title>
+      {admin ? <Link to="/admin" className="text-sm font-semibold text-[var(--accent)]">Admin</Link> : null}
+      <Title sub={practice ? "Practice stock. Live counts stay untouched." : "Counts and flags, in one place. Dupont is the warehouse. A site is what is there."}>Stock</Title>
+      <div className="mb-4">
+        <FlagStockPanel />
+      </div>
       <Link to={admin ? "/admin/stock-history" : "/stock-history"} className="mb-3 inline-block text-sm font-semibold text-[var(--accent)]">
         Stock history
       </Link>
-      {missing ? <p className="mb-3 text-sm font-medium text-amber-800">{NOT_TURNED_ON}</p> : null}
       <Card>
         <h2 className="font-semibold">Add, take, or recount one item</h2>
         <p className="mt-1 text-sm text-stone-600">
@@ -415,7 +413,7 @@ export function InventoryPage() {
           <Field label="Base unit"><input className={inputClass} placeholder="Blank" value={unit} onChange={(event) => setUnit(event.target.value)} /></Field>
           <Button disabled={Boolean(busy)} onClick={() => void addSku()}>{busy === "add-sku" ? "Saving…" : "Add item"}</Button>
           <h2 className="mt-5 font-semibold">Pack size</h2>
-          <p className="mt-1 text-sm text-stone-600">Optional. Example: sleeves of 50. Terminology stays as you type it until Michael confirms names later.</p>
+          <p className="mt-1 text-sm text-stone-600">Optional. Example: sleeves of 50.</p>
           <SkuPickList
             label="Item"
             skus={pickerSkus}

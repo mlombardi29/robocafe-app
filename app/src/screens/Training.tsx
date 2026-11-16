@@ -1,8 +1,9 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth";
 import { trainingContent } from "../content/trainingContent";
+import { inPractice } from "../lib/access";
 import { supabase } from "../lib/supabase";
 import { Button, Card, ErrorText, Screen, Title } from "../ui";
 
@@ -19,6 +20,17 @@ const STATUS_LABEL: Record<string, string> = {
 
 export function TrainingHome() {
   const { profile } = useAuth();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const practice = profile ? inPractice(profile.role, profile.mode) : false;
+  async function togglePractice() {
+    if (!profile || profile.role === "trainee") return;
+    const next = profile.mode === "practice" ? "live" : "practice";
+    const { error } = await supabase.rpc("set_mode", { p_mode: next });
+    if (error) return;
+    await queryClient.invalidateQueries();
+    if (next === "practice") navigate("/");
+  }
   const models = useQuery({
     queryKey: ["models"],
     queryFn: async () => {
@@ -38,12 +50,22 @@ export function TrainingHome() {
   });
   return (
     <Screen>
-      <Title sub="Text guide for Sunday. Photos come later.">Training</Title>
-      {trainingContent.draft ? (
-        <p className="mb-4 rounded-2xl bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950">
-          Draft for Michael to review. The quiz is not final.
+      <Title sub="Guides, then a practice visit that never changes live work.">Learn</Title>
+      <Card className="mb-5">
+        <h2 className="text-lg font-semibold">Practice</h2>
+        <p className="mt-1 text-sm text-stone-600">
+          {profile?.role === "trainee" ? "Trainees stay in practice." : "Practice visits stay separate from live visits."}
         </p>
-      ) : null}
+        <Button className="mt-3 w-full" tone={practice ? "primary" : "quiet"} disabled={profile?.role === "trainee"} onClick={() => void togglePractice()}>
+          {practice ? "Exit practice" : "Start a practice visit"}
+        </Button>
+        {practice ? (
+          <Link to="/" className="mt-3 flex min-h-12 items-center justify-center text-base font-semibold text-[var(--accent)]">
+            Go to today's practice visits
+          </Link>
+        ) : null}
+      </Card>
+      <h2 className="mb-3 text-xl font-semibold">Guides</h2>
       <div className="grid gap-3">
         {(models.data ?? []).map((model) => {
           const row = (progress.data ?? []).find((item) => item.model_id === model.id);
@@ -142,7 +164,6 @@ export function TrainingModelPage() {
       </div>
       <Card className="mt-4">
         <h2 className="font-semibold">Photo list for the first three visits</h2>
-        <p className="mt-1 text-sm text-stone-600">Text only for now. Upload is later.</p>
         <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-stone-700">
           {(trainingContent.photos[code as keyof typeof trainingContent.photos] ?? []).map((shot) => (
             <li key={shot}>{shot}</li>
@@ -209,7 +230,7 @@ export function QuizPage() {
       return;
     }
     const row = data as { score: number; passed: boolean };
-    setResult(row.passed ? "You got 100%." : `The server did not certify this yet (${row.score} correct).`);
+    setResult(row.passed ? "You got 100%." : `Not certified (${row.score} correct).`);
     await queryClient.invalidateQueries({ queryKey: ["training"] });
   }
 

@@ -108,9 +108,7 @@ export function SiteGuidance({ siteId }: { siteId: string }) {
       return (data ?? []) as Tx[];
     },
   });
-  if (missingTable(flags.error) || missingTable(skus.error)) {
-    return <p className="mt-2 text-sm text-stone-600">Stop-at-Dupont guidance is not turned on yet.</p>;
-  }
+  if (missingTable(flags.error) || missingTable(skus.error)) return null;
   const source = new Map((skus.data ?? []).map((row) => [row.id, row.source]));
   const onHand = new Map<string, number>();
   for (const row of stock.data ?? []) onHand.set(row.sku_id, (onHand.get(row.sku_id) ?? 0) + Number(row.delta_base));
@@ -162,7 +160,6 @@ export function VisitOps({
           Open stock flags: {(flags.data ?? []).map((row) => `${names.get(row.sku_id ?? "") ?? "Item"} ${row.status}`).join(", ")}
         </div>
       ) : null}
-      {missingTable(flags.error) ? <p className="text-sm text-stone-600">Stock flags are not turned on yet.</p> : null}
       <PhotoCapture sessionId={sessionId} modelCode={modelCode} required={photoAuditRequired} />
       <KcPanel siteId={siteId} sessionId={sessionId} doneSkuIds={doneSkuIds} />
     </div>
@@ -185,7 +182,7 @@ function PhotoCapture({ sessionId, modelCode, required }: { sessionId: string | 
     },
   });
   if (!sessionId || !required) return null;
-  if (missingTable(saved.error)) return <p className="text-sm text-stone-600">Photo audit is not turned on yet. This visit is not blocked by it.</p>;
+  if (missingTable(saved.error)) return null;
 
   async function take(shotKey: string, label: string, file: File) {
     setError("");
@@ -211,7 +208,7 @@ function PhotoCapture({ sessionId, modelCode, required }: { sessionId: string | 
     const token = auth.session?.access_token;
     const base = import.meta.env.VITE_SUPABASE_URL as string | undefined;
     if (!token || !base || !shot.id) {
-      setNotice("Photo saved on this phone. Drive upload is not set up yet.");
+      setNotice("Photo saved on this phone.");
       await queryClient.invalidateQueries({ queryKey: ["photo-audit", sessionId] });
       return;
     }
@@ -228,13 +225,13 @@ function PhotoCapture({ sessionId, modelCode, required }: { sessionId: string | 
     });
     const payload = await response.json().catch(() => ({ configured: false, stored: false }));
     if (!response.ok || payload.configured !== true || payload.stored !== true || !driveFileIdOk(payload.fileId)) {
-      setNotice("Photo saved on this phone. Drive upload is not set up yet.");
+      setNotice("Photo saved on this phone.");
       await queryClient.invalidateQueries({ queryKey: ["photo-audit", sessionId] });
       return;
     }
     const stored = await supabase.rpc("mark_photo_stored", { p_id: shot.id, p_drive_file_id: payload.fileId });
     if (stored.error) {
-      setNotice("Photo saved on this phone. Drive upload is not set up yet.");
+      setNotice("Photo saved on this phone.");
       await queryClient.invalidateQueries({ queryKey: ["photo-audit", sessionId] });
       return;
     }
@@ -252,7 +249,7 @@ function PhotoCapture({ sessionId, modelCode, required }: { sessionId: string | 
           return (
             <label key={shot.key} className="block text-sm">
               <span className="font-medium">{shot.label}</span>
-              <span className="mt-1 block text-stone-500">{row ? `${row.storage_state === "stored" ? "In Drive" : "On this phone only"} · ${row.review_status}` : "Not taken"}</span>
+              <span className="mt-1 block text-stone-500">{row ? `${row.storage_state === "stored" ? "Stored" : "On this phone"} · ${row.review_status}` : "Not taken"}</span>
               <input className="mt-1 block w-full" type="file" accept="image/*" capture="environment" onChange={(event) => {
                 const file = event.target.files?.[0];
                 if (file) void take(shot.key, shot.label, file);
@@ -300,7 +297,7 @@ function KcPanel({ siteId, sessionId, doneSkuIds }: { siteId: string; sessionId:
     },
   });
   if (!sessionId) return null;
-  if (missingTable(settings.error)) return <p className="text-sm text-stone-600">KC Manager lines are not turned on yet.</p>;
+  if (missingTable(settings.error)) return null;
   const lines = kcLines(doneSkuIds, (settings.data ?? []).map((row) => ({
     skuId: row.sku_id,
     name: (skus.data ?? []).find((sku) => sku.id === row.sku_id)?.name ?? "Item",
@@ -350,7 +347,7 @@ function KcPanel({ siteId, sessionId, doneSkuIds }: { siteId: string; sessionId:
   );
 }
 
-export function FlagsPage() {
+export function FlagStockPanel() {
   const { profile } = useAuth();
   const sites = useQuery({ queryKey: ["sites", profile?.id, profile?.mode], queryFn: loadSites });
   const skus = useQuery({
@@ -377,10 +374,9 @@ export function FlagsPage() {
   const visibleSites = (sites.data ?? []).filter((site) => site.is_sandbox === practice);
   const visibleSkus = (skus.data ?? []).filter((sku) => sku.is_sandbox === practice);
   return (
-    <Screen>
-      <Link to="/" className="text-sm font-semibold text-[var(--accent)]">Home</Link>
-      <Title sub="Low or Out only. One tap here, or on a linked step during a visit.">Flag stock</Title>
-      {missingTable(skus.error) ? <p className="text-sm text-stone-600">{NOT_TURNED_ON}</p> : null}
+    <Card>
+      <h2 className="text-lg font-semibold">Flag an item</h2>
+      <p className="mt-1 text-sm text-stone-600">Low or out. One tap here, or on a step during a visit.</p>
       <Field label="Kiosk">
         <select className={inputClass} value={siteId} onChange={(event) => setSiteId(event.target.value)}>
           <option value="">Choose</option>
@@ -402,6 +398,14 @@ export function FlagsPage() {
           {(flags.data ?? []).map((row) => <li key={row.id}>{visibleSkus.find((sku) => sku.id === row.sku_id)?.name ?? "Item"} · {row.status}</li>)}
         </ul>
       ) : null}
+    </Card>
+  );
+}
+
+export function FlagsPage() {
+  return (
+    <Screen>
+      <FlagStockPanel />
     </Screen>
   );
 }
@@ -581,7 +585,7 @@ export function PhotoReviewPage() {
         {(shots.data ?? []).map((shot) => (
           <Card key={shot.id}>
             <p className="font-semibold">{shot.shot_label}</p>
-            <p className="text-sm text-stone-600">{shot.storage_state === "stored" ? "In Drive" : "On the phone only. Drive is not set up."} · {shot.review_status}</p>
+            <p className="text-sm text-stone-600">{shot.storage_state === "stored" ? "Stored" : "On this phone"} · {shot.review_status}</p>
             {shot.storage_state === "stored" ? (
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <Button onClick={() => void review(shot.id, "ok")}>OK</Button>

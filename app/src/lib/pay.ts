@@ -16,6 +16,21 @@ export function ratesForShiftPay(workerRates: PayRate[]): PayRate[] {
   return workerRates;
 }
 
+/**
+ * Dollars for a shift the person actually worked.
+ * The original assignee's rate is not an input: a covered shift pays the worker's own rate.
+ */
+export function amountForWorkedShift(input: { workerRates: PayRate[]; minutes: number | null; day: string }): number | null {
+  if (input.minutes == null) return null;
+  const rate = rateForDay(ratesForShiftPay(input.workerRates), input.day);
+  if (rate == null) return null;
+  return lineAmount(input.minutes, rate);
+}
+
+export function hourlyRateForWorkedShift(workerRates: PayRate[], day: string): number | null {
+  return rateForDay(ratesForShiftPay(workerRates), day);
+}
+
 /** Latest rate whose effective date is on or before the shift. */
 export function rateForDay(rates: PayRate[], day: string): number | null {
   const match = rates

@@ -1,4 +1,4 @@
-/** Reimbursement charge helpers. Receipt URL is optional text until Drive is activated. */
+/** Reimbursement charge helpers. A receipt link is stored only after an upload, never typed in. */
 
 import { torontoNow } from "./dates";
 
@@ -22,7 +22,7 @@ export function parseChargeAmount(raw: string): number | null {
   return value;
 }
 
-/** Accept blank (Drive later) or a non-empty trimmed string. Do not invent a Drive file. */
+/** Keep a stored receipt link. Blank stays blank. Do not invent a file. */
 export function normalizeReceiptUrl(raw: string): string | null {
   const trimmed = raw.trim();
   return trimmed ? trimmed : null;

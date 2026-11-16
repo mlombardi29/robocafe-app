@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   COVERAGE_PAY_RULE,
+  amountForWorkedShift,
+  hourlyRateForWorkedShift,
   isCoveredShift,
   lineAmount,
   money,
@@ -44,6 +46,25 @@ describe("pay", () => {
         "original",
       ),
     ).toBe(false);
+  });
+
+  it("pays a covered shift at the worker's rate, never the original tech's rate", () => {
+    const original = [{ effectiveOn: "2026-01-01", hourlyRate: 40 }];
+    const worker = [{ effectiveOn: "2026-01-01", hourlyRate: 22 }];
+    expect(payPersonForShift("coverer")).toBe("coverer");
+    expect(hourlyRateForWorkedShift(worker, "2026-11-08")).toBe(22);
+    expect(amountForWorkedShift({ workerRates: worker, minutes: 60, day: "2026-11-08" })).toBe(22);
+    expect(amountForWorkedShift({ workerRates: worker, minutes: 60, day: "2026-11-08" })).not.toBe(
+      lineAmount(60, rateForDay(original, "2026-11-08") ?? 0),
+    );
+    expect(
+      isCoveredShift(
+        [{ site_id: "s1", service_date: "2026-11-08", claimed_by: "coverer" }],
+        "s1",
+        "2026-11-08",
+        "coverer",
+      ),
+    ).toBe(true);
   });
 
   it("rounds a shift to the cent", () => {
