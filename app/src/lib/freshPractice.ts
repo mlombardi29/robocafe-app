@@ -6,8 +6,7 @@ export const FRESH_OFFLINE =
 export const FRESH_UNSYNCED =
   "This phone still has unsynced work. Fresh start was not done, and nothing was discarded.";
 
-export const FRESH_NOT_READY =
-  "Fresh practice visits are not turned on yet. This visit was not changed.";
+export const FRESH_NOT_READY = "Could not start a fresh practice visit. This visit was not changed.";
 
 export type QueuedVisit =
   | { kind: "completion"; write: { sessionId: string } }

@@ -76,7 +76,7 @@ export function SignInPage() {
   if (!supabaseConfigured) {
     return (
       <Screen>
-        <Title sub="Add the Supabase URL and anon key, then reload.">KioskOps is not connected yet</Title>
+        <Title sub="Add the Supabase URL and anon key, then reload.">KioskOps is not connected</Title>
       </Screen>
     );
   }

@@ -27,7 +27,7 @@ type ListRow = {
   people: Named;
 };
 
-export function HistoryPage() {
+export function HistoryPage({ bare = false }: { bare?: boolean }) {
   const query = useQuery({
     queryKey: ["history"],
     queryFn: async () => {
@@ -48,11 +48,10 @@ export function HistoryPage() {
     groups.set(name, [...(groups.get(name) ?? []), row]);
   }
 
-  return (
-    <Screen>
-      <Link to="/" className="text-sm font-semibold text-[var(--accent)]">Home</Link>
-      <h1 className="mt-2 text-3xl font-semibold">Past visits</h1>
-      <p className="text-stone-600">Open a visit to see the submitted steps, notes, and outcomes. Admins can open any person’s visit.</p>
+  const body = (
+    <>
+      {bare ? <h2 className="text-xl font-semibold">Past visits</h2> : <h1 className="text-3xl font-semibold">Past visits</h1>}
+      <p className="text-stone-600">Open a visit to see the submitted steps, notes, and outcomes.</p>
       <div className="mt-4 grid gap-4">
         {[...groups.entries()].map(([name, rows]) => (
           <section key={name}>
@@ -73,8 +72,10 @@ export function HistoryPage() {
         {query.error ? <ErrorText>{query.error instanceof Error ? query.error.message : "Could not load visits."}</ErrorText> : null}
         {!query.isLoading && (query.data ?? []).length === 0 ? <p className="text-stone-600">No completed visits yet.</p> : null}
       </div>
-    </Screen>
+    </>
   );
+  if (bare) return body;
+  return <Screen>{body}</Screen>;
 }
 
 export function HistoryVisitPage() {

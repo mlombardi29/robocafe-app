@@ -11,7 +11,7 @@ import { NOT_TURNED_ON, turnedOff } from "../lib/rpcError";
 import { supabase } from "../lib/supabase";
 import { Button, Card, ErrorText, Field, Screen, Title, inputClass } from "../ui";
 
-export function CoveragePage() {
+export function CoveragePage({ bare = false }: { bare?: boolean }) {
   const { profile } = useAuth();
   const practice = profile ? inPractice(profile.role, profile.mode) : false;
   const admin = profile?.role === "admin";
@@ -46,7 +46,6 @@ export function CoveragePage() {
     },
   });
 
-  const missing = turnedOff(rows.error as { message?: string } | null, "schedule_overrides");
   const modeSites = (sites.data ?? []).filter((site) => site.is_sandbox === practice);
   const open = openCoverage(rows.data ?? [], today);
 
@@ -102,17 +101,13 @@ export function CoveragePage() {
     });
   }
 
-  return (
-    <Screen>
-      <Link to={admin ? "/admin" : "/"} className="text-sm font-semibold text-[var(--accent)]">{admin ? "Admin" : "Home"}</Link>
-      <Title sub="Ask for help on a visit day, claim an open ask, or cancel yours. No email is sent from here.">Coverage</Title>
-      {missing ? <p className="mb-3 text-sm font-medium text-amber-800">{NOT_TURNED_ON}</p> : null}
-      <p className="mb-3 text-sm text-stone-600">
-        Pay for a covered visit goes to the tech who actually works it, at that tech's normal hourly rate.
-      </p>
+  const body = (
+    <>
+      {admin && !bare ? <Link to="/admin" className="text-sm font-semibold text-[var(--accent)]">Admin</Link> : null}
+      {bare ? <h2 className="text-xl font-semibold">Coverage</h2> : <Title sub="Ask for help on a day you are scheduled, or pick up someone else's open request.">Coverage</Title>}
+      <p className="mb-3 mt-1 text-sm text-stone-600">No email is sent from here.</p>
       <Card>
         <h2 className="font-semibold">Request coverage</h2>
-        <p className="mt-1 text-sm text-stone-600">Original assignee stays blank until schedules assign people.</p>
         <Field label="Site">
           <select className={inputClass} value={siteId} onChange={(event) => setSiteId(event.target.value)}>
             <option value="">Choose</option>
@@ -159,6 +154,8 @@ export function CoveragePage() {
         </div>
       </Card>
       <ErrorText>{error}</ErrorText>
-    </Screen>
+    </>
   );
+  if (bare) return body;
+  return <Screen>{body}</Screen>;
 }

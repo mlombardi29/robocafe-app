@@ -1,15 +1,16 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth";
 import { inPractice } from "../lib/access";
 import { formatClockRange, formatVisitDay } from "../lib/correctionGlance";
 import { torontoNow } from "../lib/dates";
-import { isCoveredShift, lineAmount, money, rateForDay, ratesForShiftPay, type PayRate } from "../lib/pay";
-import { payPdf } from "../lib/payPdf";
+import { amountForWorkedShift, hourlyRateForWorkedShift, isCoveredShift, money, type PayRate } from "../lib/pay";
+import { ChargesPage } from "./Charges";
 import { NOT_TURNED_ON, turnedOff } from "../lib/rpcError";
 import { supabase } from "../lib/supabase";
-import { durationMinutes, rangeBounds } from "../lib/timeRange";
+import { durationLabel, durationMinutes, rangeBounds } from "../lib/timeRange";
+import { buildPayPeriod, currentPayPeriod, pastPayPeriods, type PayPeriodDetail, type PayWindow } from "../lib/payPeriod";
 import { Button, Card, ErrorText, Field, Screen, Title, inputClass } from "../ui";
 
 type Person = { id: string; goes_by: string; role: string };
@@ -35,6 +36,7 @@ type PayRow = {
   paid_on: string | null;
   is_sandbox: boolean;
   voided?: boolean;
+  payment_lines?: { session_id: string }[] | null;
 };
 
 function one<T>(value: T | T[] | null): T | null {
@@ -101,7 +103,7 @@ export function PayrollPage() {
     queryFn: async () => {
       const { data, error: queryError } = await supabase
         .from("payments")
-        .select("id, person_id, amount, status, period_start, period_end, paid_on, is_sandbox")
+        .select("id, person_id, amount, status, period_start, period_end, paid_on, is_sandbox, payment_lines(session_id)")
         .eq("period_start", week.from)
         .eq("period_end", week.to);
       if (queryError) throw new Error(queryError.message);
@@ -109,7 +111,6 @@ export function PayrollPage() {
     },
   });
 
-  const notReady = [rates.error, runs.error].some((item) => turnedOff(item as { message?: string } | null, "pay_rates") || turnedOff(item as { message?: string } | null, "period_start"));
   const visibleShifts = (shifts.data ?? []).filter((row) => row.is_sandbox === practice);
   const byPerson = useMemo(() => {
     const map = new Map<string, Shift[]>();
@@ -127,49 +128,54 @@ export function PayrollPage() {
     return picked[shift.id] !== false;
   }
 
-  async function save(personId: string, personShifts: Shift[]) {
+  async function markPaid(personId: string, personShifts: Shift[], existingId: string | undefined, locked: boolean) {
     setBusy(personId);
     setError("");
-    const ids = personShifts.filter(included).map((row) => row.id);
-    const { error: rpcError } = await supabase.rpc("save_pay_run", {
-      p_person: personId,
-      p_start: week.from,
-      p_end: week.to,
-      p_sessions: ids,
-      p_key: crypto.randomUUID(),
-    });
-    setBusy("");
-    if (rpcError) {
-      setError(turnedOff(rpcError, "save_pay_run") ? NOT_TURNED_ON : rpcError.message);
+    let id = existingId;
+    if (!locked) {
+      const ids = personShifts.filter(included).map((row) => row.id);
+      if (ids.length === 0) {
+        setBusy("");
+        setError("Leave at least one shift on Pay.");
+        return;
+      }
+      const { data, error: rpcError } = await supabase.rpc("save_pay_run", {
+        p_person: personId,
+        p_start: week.from,
+        p_end: week.to,
+        p_sessions: ids,
+        p_key: crypto.randomUUID(),
+      });
+      if (rpcError) {
+        setBusy("");
+        setError(turnedOff(rpcError, "save_pay_run") ? NOT_TURNED_ON : rpcError.message);
+        return;
+      }
+      const saved = data as { id?: string } | { id?: string }[] | null;
+      id = (Array.isArray(saved) ? saved[0]?.id : saved?.id) ?? id;
+    }
+    if (!id) {
+      setBusy("");
+      setError("Could not find this pay.");
       return;
     }
-    await queryClient.invalidateQueries({ queryKey: ["pay-runs"] });
-  }
-
-  async function mark(id: string, status: "submitted" | "paid") {
-    setBusy(id + status);
-    setError("");
-    const { error: rpcError } = await supabase.rpc("mark_pay_run", {
+    const { error: markError } = await supabase.rpc("mark_pay_run", {
       p_id: id,
-      p_status: status,
-      p_paid_on: status === "paid" ? paidOn : null,
+      p_status: "paid",
+      p_paid_on: paidOn,
     });
     setBusy("");
-    if (rpcError) setError(turnedOff(rpcError, "mark_pay_run") ? NOT_TURNED_ON : rpcError.message);
+    if (markError) setError(turnedOff(markError, "mark_pay_run") ? NOT_TURNED_ON : markError.message);
     else await queryClient.invalidateQueries({ queryKey: ["pay-runs"] });
   }
 
   return (
     <Screen>
       <Link to="/admin" className="text-sm font-semibold text-[var(--accent)]">Admin</Link>
-      <Title sub={`${week.from} to ${week.to}. Times already include approved corrections. Covered shifts pay the tech who worked them at that tech's own hourly rate.`}>
-        {practice ? "Practice pay" : "Last week's pay"}
+      <Title sub={`${week.from} to ${week.to}. These are the shifts technicians finished. Mark each paid, or leave it not yet paid. A covered shift pays the person who worked it, at their own rate.`}>
+        {practice ? "Practice pay" : "Payroll"}
       </Title>
       <Link to="/admin/payroll/rates" className="mb-4 inline-block font-semibold text-[var(--accent)]">Pay rates</Link>
-      {notReady ? <p className="mb-3 text-sm font-medium text-amber-800">{NOT_TURNED_ON}</p> : null}
-      {turnedOff(claims.error as { message?: string } | null, "schedule_overrides") ? (
-        <p className="mb-3 text-sm text-stone-600">Coverage labels need migration 0017. Pay still uses each worker's own rate.</p>
-      ) : null}
       <Field label="Date paid">
         <input className={inputClass} type="date" value={paidOn} onChange={(event) => setPaidOn(event.target.value)} />
       </Field>
@@ -177,47 +183,52 @@ export function PayrollPage() {
         {[...byPerson.entries()].map(([personId, personShifts]) => {
           const person = (people.data ?? []).find((row) => row.id === personId);
           const run = (runs.data ?? []).find((row) => row.person_id === personId && row.is_sandbox === practice && !row.voided);
+          const locked = run?.status === "submitted" || run?.status === "paid";
+          const paid = run?.status === "paid";
+          const paidIds = new Set((run?.payment_lines ?? []).map((line) => line.session_id));
           let total = 0;
           return (
             <Card key={personId}>
               <p className="text-lg font-semibold">{person?.goes_by ?? "Person"}</p>
               {personShifts.map((shift) => {
                 const minutes = durationMinutes(shift.start_at, shift.end_at);
-                const rate = rateForDay(ratesForShiftPay(ratesFor(personId)), shift.service_date);
-                const amount = minutes != null && rate != null ? lineAmount(minutes, rate) : null;
-                if (included(shift) && amount != null) total += amount;
+                const workerRates = ratesFor(personId);
+                const rate = hourlyRateForWorkedShift(workerRates, shift.service_date);
+                const amount = amountForWorkedShift({ workerRates, minutes, day: shift.service_date });
+                const paying = locked && paidIds.size > 0 ? paidIds.has(shift.id) : included(shift);
+                if (paying && amount != null) total += amount;
                 const site = one(shift.sites);
                 const covered = isCoveredShift(claims.data ?? [], shift.site_id, shift.service_date, shift.person_id);
                 return (
-                  <label key={shift.id} className="mt-3 flex items-start gap-3">
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={included(shift)}
-                      onChange={(event) => setPicked((current) => ({ ...current, [shift.id]: event.target.checked }))}
-                    />
-                    <span>
-                      <span className="block font-medium">{formatVisitDay(shift.service_date)} · {site?.short_name ?? "Visit"}</span>
-                      <span className="block text-sm text-stone-600">
-                        {formatClockRange(shift.start_at, shift.end_at)} · {minutes ?? "?"} min
-                        {amount == null ? " · No rate for this day" : ` · ${money(amount)}`}
-                        {covered ? " · Covered shift · worker's rate" : ""}
-                      </span>
-                    </span>
-                  </label>
+                  <div key={shift.id} className="mt-3">
+                    <p className="font-medium">{formatVisitDay(shift.service_date)} · {site?.short_name ?? "Visit"}</p>
+                    <p className="text-sm text-stone-600">
+                      {formatClockRange(shift.start_at, shift.end_at)} · {minutes ?? "?"} min
+                      {rate == null ? " · No rate for this day" : ` · ${money(rate)}/hr · ${amount == null ? "No amount" : money(amount)}`}
+                      {` · ${covered ? "Covered" : "Scheduled"}`}
+                    </p>
+                    {paid ? (
+                      <p className="mt-1 text-sm font-semibold text-emerald-800">{paying ? "Paid" : "Not yet paid"}</p>
+                    ) : (
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <Button tone={paying ? "primary" : "quiet"} disabled={locked || Boolean(busy)} onClick={() => setPicked((current) => ({ ...current, [shift.id]: true }))}>
+                          Pay
+                        </Button>
+                        <Button tone={!paying ? "primary" : "quiet"} disabled={locked || Boolean(busy)} onClick={() => setPicked((current) => ({ ...current, [shift.id]: false }))}>
+                          Not yet paid
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
-              <p className="mt-3 text-lg font-semibold">{money(Math.round(total * 100) / 100)}</p>
-              {run ? <p className="text-sm text-stone-600">{run.status}{run.paid_on ? ` · paid ${run.paid_on}` : ""} · saved {money(run.amount)}</p> : null}
-              <div className="mt-3 grid gap-2">
-                <Button disabled={busy === personId || run?.status === "paid"} onClick={() => void save(personId, personShifts)}>Save checked shifts</Button>
-                {run && run.status !== "paid" ? (
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button tone="quiet" disabled={busy.startsWith(run.id)} onClick={() => void mark(run.id, "submitted")}>Mark submitted</Button>
-                    <Button tone="quiet" disabled={busy.startsWith(run.id)} onClick={() => void mark(run.id, "paid")}>Mark paid</Button>
-                  </div>
-                ) : null}
-              </div>
+              <p className="mt-3 text-lg font-semibold">{paid ? "Paid" : "To pay"} {money(Math.round(total * 100) / 100)}</p>
+              {run?.paid_on ? <p className="text-sm text-stone-600">Paid {run.paid_on}</p> : null}
+              {paid ? null : (
+                <Button className="mt-3 w-full" disabled={busy === personId} onClick={() => void markPaid(personId, personShifts, run?.id, Boolean(locked))}>
+                  {busy === personId ? "Saving…" : "Mark paid"}
+                </Button>
+              )}
             </Card>
           );
         })}
@@ -277,8 +288,7 @@ export function PayRatesPage() {
   return (
     <Screen>
       <Link to="/admin/payroll" className="text-sm font-semibold text-[var(--accent)]">Payroll</Link>
-      <Title sub={practice ? "Practice rates stay off live pay." : "Live rates. A later date replaces the earlier one from that day on."}>Pay rates</Title>
-      {turnedOff(rates.error as { message?: string } | null, "pay_rates") ? <p className="mb-3 text-sm font-medium text-amber-800">{NOT_TURNED_ON}</p> : null}
+      <Title sub={practice ? "Practice rates stay off live pay." : "The rate used is the latest one dated on or before the shift."}>Pay rates</Title>
       <Field label="Person">
         <select className={inputClass} value={personId} onChange={(event) => setPersonId(event.target.value)}>
           <option value="">Choose</option>
@@ -304,84 +314,179 @@ export function PayRatesPage() {
   );
 }
 
-type Line = {
-  minutes: number;
-  amount: number;
-  service_sessions: {
-    service_date: string;
-    start_at: string | null;
-    end_at: string | null;
-    sites: { short_name: string } | { short_name: string }[] | null;
-  } | null;
-};
+export function PayHome() {
+  const [params, setParams] = useSearchParams();
+  const reimbursements = params.get("tab") === "reimbursements";
+  return (
+    <Screen>
+      {reimbursements ? (
+        <>
+          <button type="button" className="mb-3 text-sm font-semibold text-[var(--accent)]" onClick={() => setParams({})}>
+            Your pay
+          </button>
+          <ChargesPage embedded />
+        </>
+      ) : (
+        <TechPayList />
+      )}
+    </Screen>
+  );
+}
 
-export function TechPayPage() {
+function TechPayList() {
   const { profile } = useAuth();
-  const query = useQuery({
-    queryKey: ["my-pay", profile?.id],
+  const [params, setParams] = useSearchParams();
+  const today = torontoNow().today;
+  const current = currentPayPeriod(today);
+  const requested = params.get("period");
+  const selected = requested ? currentPayPeriod(requested) : current;
+  const viewingCurrent = selected.from === current.from;
+  const practice = profile ? inPractice(profile.role, profile.mode) : false;
+
+  const sessions = useQuery({
+    queryKey: ["my-shifts", profile?.id],
     enabled: Boolean(profile),
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("payments")
-        .select("id, amount, status, period_start, period_end, paid_on, is_sandbox, payment_lines(minutes, amount, service_sessions(service_date, start_at, end_at, sites(short_name)))")
+        .from("service_sessions")
+        .select("id, service_date, start_at, end_at, site_id, sites(short_name)")
         .eq("person_id", profile!.id)
-        .order("period_end", { ascending: false });
+        .eq("status", "completed")
+        .order("service_date", { ascending: false });
       if (error) throw new Error(error.message);
       return data ?? [];
     },
   });
+  const charges = useQuery({
+    queryKey: ["my-charges-pay", profile?.id, practice],
+    enabled: Boolean(profile),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("charges")
+        .select("id, amount, note, created_at, voided, is_sandbox")
+        .eq("person_id", profile!.id)
+        .eq("is_sandbox", practice);
+      if (error) return [] as { id: string; amount: number | null; note: string | null; created_at: string | null; voided?: boolean }[];
+      return (data ?? []) as { id: string; amount: number | null; note: string | null; created_at: string | null; voided?: boolean }[];
+    },
+  });
+  const rates = useQuery({
+    queryKey: ["my-rates", profile?.id, practice],
+    enabled: Boolean(profile),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("pay_rates")
+        .select("hourly_rate, effective_on, is_sandbox")
+        .eq("person_id", profile!.id)
+        .eq("is_sandbox", practice);
+      if (error) return [] as { hourly_rate: number; effective_on: string }[];
+      return (data ?? []) as { hourly_rate: number; effective_on: string }[];
+    },
+  });
 
-  function download(row: {
-    amount: number | string | null;
-    period_start: string | null;
-    period_end: string | null;
-    paid_on: string | null;
-    payment_lines: { minutes: number; amount: number; service_sessions: unknown }[] | null;
-  }) {
-    const lines = (row.payment_lines ?? []).map((line) => {
-      const session = one(line.service_sessions as Line["service_sessions"]);
-      return {
-        day: session ? formatVisitDay(session.service_date) : "Shift",
-        when: session ? formatClockRange(session.start_at, session.end_at) : "",
-        minutes: Number(line.minutes),
-        amount: Number(line.amount),
-      };
-    });
-    const text = payPdf({
-      person: profile?.goes_by ?? "Pay",
-      periodStart: row.period_start ?? "",
-      periodEnd: row.period_end ?? "",
-      paidOn: row.paid_on ?? "",
-      lines,
-      total: Number(row.amount ?? 0),
-    });
-    const url = URL.createObjectURL(new Blob([text], { type: "application/pdf" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `pay-${row.period_start ?? "statement"}.pdf`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
+  const workerRates = (rates.data ?? []).map((row) => ({ effectiveOn: row.effective_on, hourlyRate: Number(row.hourly_rate) }));
+  const shifts = (sessions.data ?? []).map((row) => {
+    const site = one(row.sites as { short_name: string } | { short_name: string }[] | null);
+    const minutes = durationMinutes(row.start_at, row.end_at);
+    return {
+      date: row.service_date as string,
+      site: site?.short_name ?? "Visit",
+      minutes,
+      amount: amountForWorkedShift({ workerRates, minutes, day: row.service_date as string }),
+    };
+  });
+  const reimbursements = (charges.data ?? [])
+    .filter((row) => !row.voided)
+    .map((row) => ({
+      date: row.created_at ? torontoNow(new Date(row.created_at)).today : "",
+      note: row.note?.trim() || "Reimbursement",
+      amount: row.amount == null ? null : Number(row.amount),
+    }));
+  const detail = buildPayPeriod({ ...selected, shifts, reimbursements });
+  const past = pastPayPeriods(today, [...shifts.map((row) => row.date), ...reimbursements.map((row) => row.date)]);
 
   return (
-    <Screen>
-      <Link to="/time" className="text-sm font-semibold text-[var(--accent)]">My time</Link>
-      <Title sub="Paid weeks only include shifts an admin checked and marked paid.">Your pay</Title>
-      {turnedOff(query.error as { message?: string } | null, "payment_lines") ? <p className="text-sm font-medium text-amber-800">{NOT_TURNED_ON}</p> : null}
-      <div className="grid gap-3">
-        {(query.data ?? []).map((row) => (
-          <Card key={row.id}>
-            <p className="font-semibold">{money(row.amount == null ? null : Number(row.amount))}</p>
-            <p className="text-sm text-stone-600">
-              {row.period_start} to {row.period_end}
-              {row.paid_on ? ` · paid ${row.paid_on}` : ""} · {row.status}
-            </p>
-            {row.status === "paid" ? <Button className="mt-3" tone="quiet" onClick={() => download(row)}>Download PDF</Button> : null}
-          </Card>
-        ))}
-        {!query.isLoading && (query.data ?? []).length === 0 ? <p className="text-stone-600">No pay runs yet.</p> : null}
-      </div>
-      <ErrorText>{query.error && !turnedOff(query.error as { message?: string }, "payment_lines") ? (query.error as Error).message : ""}</ErrorText>
-    </Screen>
+    <PayPeriodDetailView
+      heading={viewingCurrent ? "This period" : "Past period"}
+      detail={detail}
+      past={viewingCurrent ? past : []}
+      onPast={(period) => setParams({ period: period.from })}
+      onCurrent={viewingCurrent ? undefined : () => setParams({})}
+      error={sessions.error instanceof Error ? sessions.error.message : ""}
+    />
+  );
+}
+
+export function PayPeriodDetailView({
+  heading,
+  detail,
+  past,
+  onPast,
+  onCurrent,
+  error,
+}: {
+  heading: string;
+  detail: PayPeriodDetail;
+  past: PayWindow[];
+  onPast?: (period: PayWindow) => void;
+  onCurrent?: () => void;
+  error?: string;
+}) {
+  return (
+    <>
+      {onCurrent ? (
+        <button type="button" className="mb-3 text-sm font-semibold text-[var(--accent)]" onClick={onCurrent}>
+          This period
+        </button>
+      ) : null}
+      <Title sub={`${formatVisitDay(detail.from)} – ${formatVisitDay(detail.to)}`}>Your pay</Title>
+      <h2 className="mb-3 text-xl font-semibold">{heading}</h2>
+      <Card>
+        {detail.shifts.length === 0 && detail.reimbursements.length === 0 ? (
+          <p className="text-stone-600">Nothing in this period.</p>
+        ) : null}
+        <ul className="grid gap-3">
+          {detail.shifts.map((shift) => (
+            <li key={`${shift.date}-${shift.site}-${shift.minutes}`}>
+              <p className="font-semibold">{formatVisitDay(shift.date)} · {shift.site}</p>
+              <p className="text-sm text-stone-600">
+                {durationLabel(shift.minutes)}
+                {shift.amount == null ? "" : ` · ${money(shift.amount)}`}
+              </p>
+            </li>
+          ))}
+          {detail.reimbursements.map((row) => (
+            <li key={`${row.date}-${row.note}`}>
+              <p className="font-semibold">{row.note}</p>
+              <p className="text-sm text-stone-600">
+                {formatVisitDay(row.date)}
+                {row.amount == null ? "" : ` · ${money(row.amount)}`}
+              </p>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-4 text-xl font-semibold">Total {money(detail.total)}</p>
+      </Card>
+      {past.length > 0 ? (
+        <section className="mt-5">
+          <h2 className="mb-2 text-xl font-semibold">Past periods</h2>
+          <div className="grid gap-2">
+            {past.map((period) => (
+              <button
+                key={period.from}
+                type="button"
+                className="flex min-h-14 items-center justify-between rounded-2xl bg-white px-4 text-left text-base font-semibold shadow-sm ring-1 ring-black/5"
+                onClick={() => onPast?.(period)}
+              >
+                <span>{formatVisitDay(period.from)} – {formatVisitDay(period.to)}</span>
+                <span className="text-[var(--accent)]">Open</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+      <Link to="/pay?tab=reimbursements" className="mt-4 inline-block text-base font-semibold text-[var(--accent)]">Log a charge</Link>
+      <ErrorText>{error}</ErrorText>
+    </>
   );
 }

@@ -60,7 +60,7 @@ export function StockHistoryPage() {
       </Link>
       <Title sub="Adds, takes, and recounts. Newest first.">Stock history</Title>
       {query.data?.missing ? (
-        <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900">Stock history is not available on this database yet.</p>
+        <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900">Could not load stock history.</p>
       ) : null}
       <div className="mt-4 grid gap-3">
         {(query.data?.rows ?? []).map((row) => {

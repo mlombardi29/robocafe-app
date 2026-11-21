@@ -4,21 +4,20 @@
 
 :root {
   color-scheme: light;
-  --bg: #f4f1ea;
-  --accent: #0f766e;
+  /* One blue on white. Practice uses these same tokens; the orange banner marks that mode. */
+  --bg: #ffffff;
+  --ink: #0f172a;
+  --accent: #1d4ed8;
+  --line: #cbd5e1;
   --nav-stack: calc(5.75rem + env(safe-area-inset-bottom));
-}
-
-html[data-mode="practice"] {
-  --bg: #fff4e8;
-  --accent: #c2410c;
+  accent-color: var(--accent);
 }
 
 body {
   margin: 0;
   min-height: 100vh;
   background: var(--bg);
-  color: #1c1917;
+  color: var(--ink);
   font-family: Figtree, ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -34,4 +33,14 @@ button {
 
 #root {
   min-height: 100vh;
+}
+
+/* The old 5% black edge vanishes on a white page in a bright room.
+   These rules redraw every card, tile, and bar that already uses them. */
+.ring-black\/5 {
+  --tw-ring-color: var(--line);
+}
+
+.border-black\/5 {
+  border-color: var(--line);
 }
