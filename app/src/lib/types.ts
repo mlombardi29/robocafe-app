@@ -1,0 +1,88 @@
+import type { CadenceType } from "./due";
+
+export type Role = "admin" | "tech" | "trainee" | "visitor";
+export type Mode = "live" | "practice";
+
+export type Profile = {
+  id: string;
+  full_name: string;
+  goes_by: string;
+  email: string | null;
+  phone: string | null;
+  role: Role;
+  mode: Mode;
+  active: boolean;
+  must_change_pin: boolean;
+};
+
+export type SnapItem = {
+  id: string;
+  key: string;
+  title: string;
+  details: string | null;
+  required: boolean;
+  cadence_type: CadenceType;
+  cadence_days: number | null;
+  threshold_label: string | null;
+  locked_during_clean: boolean;
+  blocks_clean_start: boolean;
+  sku_id?: string | null;
+  status: "active" | "pending_validation";
+  position: number;
+  /** Absent on visits started before this rule. False hides Not needed. */
+  not_needed_allowed?: boolean;
+};
+
+export type SnapSection = {
+  id: string;
+  title: string;
+  phase: string;
+  position: number;
+  items: SnapItem[];
+};
+
+export type Snapshot = {
+  version: number;
+  template_id: string;
+  model_code: string;
+  milk_clean_minutes: number;
+  sections: SnapSection[];
+  /** Written once when a visit starts on a phone that knows about photo audit. Absent on older visits. */
+  photo_audit?: { required?: boolean };
+};
+
+export type SiteRow = {
+  id: string;
+  name: string;
+  short_name: string;
+  model_id: string;
+  serial: string | null;
+  cadence: "daily" | "mwf" | "show_days";
+  opening_time: string | null;
+  closing_time?: string | null;
+  /** Soft preferred service ends here (e.g. 11:00). Null = no soft window. */
+  soft_prefer_before?: string | null;
+  /** Soft preferred service resumes here (e.g. 15:00). */
+  soft_prefer_after?: string | null;
+  active: boolean;
+  is_sandbox: boolean;
+  models: { code: string; name: string; milk_clean_minutes: number } | null;
+};
+
+export type SessionRow = {
+  id: string;
+  site_id: string;
+  person_id: string;
+  template_version: number | null;
+  checklist_snapshot: Snapshot | null;
+  service_date: string;
+  start_at: string | null;
+  end_at: string | null;
+  start_estimated: boolean;
+  status: "open" | "completed" | "voided";
+  current_step_key: string | null;
+  milk_clean_started_at: string | null;
+  milk_clean_done_at: string | null;
+  notes: string | null;
+  submitted_at: string | null;
+};

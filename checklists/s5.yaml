@@ -1,0 +1,172 @@
+code: s5
+name: Series 5 (Lite Gen 5.2)
+milk_clean_minutes: 18
+sections:
+  - phase: before_maint
+    title: Before maintenance mode
+    items:
+      - key: kc_sign_in
+        title: "Sign in to KC Manager: scan your QR code at the kiosk"
+        cadence: every_visit
+        required: true
+      - key: gloves
+        title: Wash hands, put on gloves
+        cadence: every_visit
+        required: true
+      - key: arm_calibration
+        title: Robot arm calibration
+        cadence: weekly
+        required: true
+        details: "1. On the order tablet go to Robot API.\n2. Press Get Weight. It should read 0 g.\n3. Press Close Claw and place the weighing cup from the top into the claw.\n4. Press Get Weight. 190–210 g inclusive is successful.\n5. Remove the weighing cup. Open the claw using the button.\n6. If the weight is outside that range, still remove the cup and open the claw, then press Auto Calibrate. The robot picks up the cup itself.\n7. When it does, read the displayed weight. It should say 200 and success.\n\nAdditional info\nDo not press a manual Calibrate 200 command. This weight check is not the cup presence sensor."
+      - key: arm_sensor
+        title: Arm sensor check
+        cadence: weekly
+        required: true
+        details: "This arm sensor solid-green check is for Mount Sinai only. At RBC, mark Not needed.\n\nAdditional info\nDo not invent Sinai sensor criteria at RBC. Robot arm weight / Auto Calibrate remains the weekly weight check on this model."
+
+  - phase: prep
+    title: Get the Cameo ready
+    items:
+      - key: maintenance_mode
+        title: Put the kiosk in maintenance mode
+        cadence: every_visit
+        required: true
+        blocks_clean_start: true
+        details: "1. Scan in with the KCM app. The options appear after that scan.\n2. On the order pickup tablet, press Maintenance Mode."
+      - key: fill_beans
+        title: Fill beans
+        cadence: below_threshold
+        required: true
+        blocks_clean_start: true
+        locked_during_clean: true
+        details: "Minimum two-thirds full. If below two-thirds, refill. If at or above two-thirds, leave alone. Exactly two-thirds is not below, so do not refill."
+      - key: empty_pucks
+        title: Empty pucks, if needed
+        cadence: check_decide
+        required: true
+        blocks_clean_start: true
+        locked_during_clean: true
+        details: "Empty it by volume, or whenever it has been 2 days or more since it was last emptied. This follows days since it was emptied, not each show."
+      - key: cleaning_balls
+        title: Add cleaning balls, if needed (at least 7, none cracked)
+        cadence: every_visit
+        required: true
+        blocks_clean_start: true
+        locked_during_clean: true
+        details: "If you need to remove any balls that are cracked, do so, or else it will damage the machine."
+      - key: long_water
+        title: Long Water Pour
+        cadence: every_visit
+        required: true
+        blocks_clean_start: true
+        locked_during_clean: true
+        details: "1. Scroll through the product pages on the Cameo. You may need to press Next a few times.\n2. Select the Long Water Pour.\n3. With a container underneath the Cameo nozzle, this water will be used for the syrup cleaning. You may need to dispense it twice."
+
+  - phase: clean_start
+    title: Milk cleaning
+    items:
+      - key: start_milk_clean
+        title: Start milk cleaning
+        cadence: every_visit
+        required: true
+        details: "1. Cameo menu, top middle, Clean.\n2. Follow the prompts on the screen.\n3. Use a container with 30 mL of EverClean (not Rinza) when the Cameo asks for cleaner.\n\nAdditional info\nThe cleaning runs about 18 minutes. EverClean is required here — do not use blue Rinza for this Cameo milk clean."
+
+  - phase: during_clean
+    title: While the cleaning runs
+    items:
+      - key: milk_bag
+        title: Change the milk bag if it is due
+        cadence: every_n_days
+        days: 4
+        required: true
+        details: "No milk stays in a bag more than 4 days. Count days since the fresh bag, not shows. Don't touch the tubes. During cleaning the tubes are in the hot water and EverClean container (30 mL EverClean, not Rinza), so you can change the bag."
+      - key: milk_topup
+        title: Top up 2% and oat
+        cadence: every_visit
+        required: true
+        details: "Don't touch the tubes."
+      - key: grey_water
+        title: Grey water
+        cadence: every_visit
+        required: true
+        details: "RBC / PRACTICE RBC only. Grey water collects in a container underneath the kiosk with a coiled hose (not a fixed direct drain into plumbing).\n1. Uncoil the hose and position the end near the ground drain.\n2. Turn the handle/clasp so the container drains through the hose into that drain.\n3. Turn the clasp back to perpendicular (closed) BEFORE you bring the hose in, and coil the hose back up.\n\nAdditional info\nIf the clasp stays open, the next drink's grey water floods inside the kiosk."
+      - key: syrup
+        title: Syrup cleaning and top-ups
+        cadence: every_visit
+        required: true
+        details: "1. Open the syrup drawer.\n2. Press Clean.\n3. Follow the prompts on the syrup containers.\n4. At the final tube refill, when syrup is visible from all spouts, press OK so it does not keep pouring.\n5. Wipe the bottles with hot water.\n6. Push the nozzles at the end of the tubes fully down so they reach deep into the liquid, not just the surface.\n7. Caps tight on top.\n8. Run a pipe cleaner through the syrup nozzles so they don't clog.\n\nAdditional info\nAt UofT (2.2), move the cup holder out of the way. At Sinai (3.5) and RBC (S5), park the robotic arm out of the way."
+      - key: powder_clean
+        title: Clean the powder nozzles
+        cadence: every_visit
+        required: true
+        details: "1. Lay a damp paper towel under the dispenser first to catch fallout.\n2. Turn the nozzles upward and take out the funnels.\n3. Check for powder buildup or residue. If there is residue, deep clean it, and it must be completely dry before you put it back. Wetness causes more buildup.\n4. Vacuum any loose powder with the handheld vacuum.\n5. Turn all three powder spouts back to down-facing, or powder drinks come out as plain hot water.\n\nAdditional info\nPowdered matcha is not in use right now — do not spend time servicing an unused matcha container. Do not delete history for past matcha rows."
+      - key: powder_fill
+        title: Powders
+        cadence: below_threshold
+        required: true
+        details: "Fill only if below half. Matcha is unused — leave that container alone."
+      - key: cups_lids
+        title: Cups and lids
+        cadence: below_threshold
+        required: true
+        details: "Fill cups and lids to the top. Gently twist stuck 16 oz cold cups apart before loading, then seat them lightly in the cup holder. Otherwise they jam at the top and won't dispense."
+      - key: garbage
+        title: Cup and drink garbage
+        cadence: check_decide
+        required: true
+        details: "Quick look. Empty it only if it is worth it."
+      - key: claw
+        title: Clean Robot Claw (delicately)
+        cadence: check_decide
+        required: true
+        details: "1. The arm and claw are very sensitive to pressure and easy to knock off calibration.\n2. Use very hot water on a towel and press lightly.\n3. Don't scrub and don't push."
+      - key: glass
+        title: Glass and surfaces
+        cadence: every_visit
+        required: true
+        details: "If splashes or marks would make you not want to buy from it, wipe it."
+
+  - phase: after_clean
+    title: After the cleaning
+    items:
+      - key: wipe_cameo
+        title: Wipe the Cameo
+        cadence: every_visit
+        required: true
+        locked_during_clean: true
+        details: "If splashes or marks would make you not want to buy from it, wipe it."
+
+  - phase: close
+    title: Close up
+    items:
+      - key: door_check
+        title: Close-up check
+        cadence: every_visit
+        required: true
+        details: "1. The drink dispensing elevators sit higher when the kiosk is running than when they are open for servicing.\n2. They slide down to the customer opening, and there is less space at the top.\n3. Leave clear space above anything you put back, and do not stack anything into that path.\n4. A blocked elevator takes the kiosk out of service and can break it.\n\nAdditional info\nOther doors on the kiosk are separate. Do not block those either."
+      - key: kc_consumables
+        title: Update consumables in KC Manager
+        cadence: every_visit
+        required: true
+        details: "Enter what you filled. Confirm updates in command history.\n\nAdditional info\nFor milk in the Kiosoft consumables app only: enter the actual amount added minus 500 mL (example: add 8,000 mL → enter 7,500 mL). This does not change how much milk you actually add, and it does not change KioskOps inventory or rewrite history. Do not use the old 1,000–1,500 mL under-report text."
+      - key: exit_maint
+        title: Exit maintenance mode
+        cadence: every_visit
+        required: true
+      - key: test_drink
+        title: Test drink
+        cadence: every_visit
+        required: true
+        details: "Have a test drink, whatever you want. You can also offer it to someone nearby. If you're unsure a drink will make properly, test that one."
+
+  - phase: rare
+    title: Less often
+    items:
+      - key: deep_clean_nozzles
+        title: Deep clean milk nozzles
+        cadence: biweekly
+        required: true
+      - key: deep_clean_fridges
+        title: Deep clean fridges
+        cadence: monthly
+        required: true
