@@ -7,10 +7,10 @@ import { formatClockRange, formatVisitDay } from "../lib/correctionGlance";
 import { torontoNow } from "../lib/dates";
 import { amountForWorkedShift, hourlyRateForWorkedShift, isCoveredShift, money, type PayRate } from "../lib/pay";
 import { ChargesPage } from "./Charges";
-import { payPdf } from "../lib/payPdf";
 import { NOT_TURNED_ON, turnedOff } from "../lib/rpcError";
 import { supabase } from "../lib/supabase";
-import { durationMinutes, rangeBounds } from "../lib/timeRange";
+import { durationLabel, durationMinutes, rangeBounds } from "../lib/timeRange";
+import { buildPayPeriod, currentPayPeriod, pastPayPeriods, type PayPeriodDetail, type PayWindow } from "../lib/payPeriod";
 import { Button, Card, ErrorText, Field, Screen, Title, inputClass } from "../ui";
 
 type Person = { id: string; goes_by: string; role: string };
@@ -314,125 +314,179 @@ export function PayRatesPage() {
   );
 }
 
-type Line = {
-  minutes: number;
-  amount: number;
-  service_sessions: {
-    service_date: string;
-    start_at: string | null;
-    end_at: string | null;
-    sites: { short_name: string } | { short_name: string }[] | null;
-  } | null;
-};
-
 export function PayHome() {
   const [params, setParams] = useSearchParams();
   const reimbursements = params.get("tab") === "reimbursements";
   return (
     <Screen>
-      <div className="mb-4 grid grid-cols-2 gap-2" role="tablist" aria-label="Pay">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={!reimbursements}
-          className={`min-h-12 rounded-2xl px-3 text-base font-semibold ${reimbursements ? "bg-white text-stone-800 ring-1 ring-stone-200" : "bg-[var(--accent)] text-white"}`}
-          onClick={() => setParams({})}
-        >
-          Shifts
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={reimbursements}
-          className={`min-h-12 rounded-2xl px-3 text-base font-semibold ${reimbursements ? "bg-[var(--accent)] text-white" : "bg-white text-stone-800 ring-1 ring-stone-200"}`}
-          onClick={() => setParams({ tab: "reimbursements" })}
-        >
-          Reimbursements
-        </button>
-      </div>
-      {reimbursements ? <ChargesPage embedded /> : <TechPayList />}
+      {reimbursements ? (
+        <>
+          <button type="button" className="mb-3 text-sm font-semibold text-[var(--accent)]" onClick={() => setParams({})}>
+            Your pay
+          </button>
+          <ChargesPage embedded />
+        </>
+      ) : (
+        <TechPayList />
+      )}
     </Screen>
   );
 }
 
 function TechPayList() {
   const { profile } = useAuth();
-  const query = useQuery({
-    queryKey: ["my-pay", profile?.id],
+  const [params, setParams] = useSearchParams();
+  const today = torontoNow().today;
+  const current = currentPayPeriod(today);
+  const requested = params.get("period");
+  const selected = requested ? currentPayPeriod(requested) : current;
+  const viewingCurrent = selected.from === current.from;
+  const practice = profile ? inPractice(profile.role, profile.mode) : false;
+
+  const sessions = useQuery({
+    queryKey: ["my-shifts", profile?.id],
     enabled: Boolean(profile),
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("payments")
-        .select("id, amount, status, period_start, period_end, paid_on, is_sandbox, payment_lines(minutes, amount, service_sessions(service_date, start_at, end_at, sites(short_name)))")
+        .from("service_sessions")
+        .select("id, service_date, start_at, end_at, site_id, sites(short_name)")
         .eq("person_id", profile!.id)
-        .order("period_end", { ascending: false });
+        .eq("status", "completed")
+        .order("service_date", { ascending: false });
       if (error) throw new Error(error.message);
       return data ?? [];
     },
   });
+  const charges = useQuery({
+    queryKey: ["my-charges-pay", profile?.id, practice],
+    enabled: Boolean(profile),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("charges")
+        .select("id, amount, note, created_at, voided, is_sandbox")
+        .eq("person_id", profile!.id)
+        .eq("is_sandbox", practice);
+      if (error) return [] as { id: string; amount: number | null; note: string | null; created_at: string | null; voided?: boolean }[];
+      return (data ?? []) as { id: string; amount: number | null; note: string | null; created_at: string | null; voided?: boolean }[];
+    },
+  });
+  const rates = useQuery({
+    queryKey: ["my-rates", profile?.id, practice],
+    enabled: Boolean(profile),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("pay_rates")
+        .select("hourly_rate, effective_on, is_sandbox")
+        .eq("person_id", profile!.id)
+        .eq("is_sandbox", practice);
+      if (error) return [] as { hourly_rate: number; effective_on: string }[];
+      return (data ?? []) as { hourly_rate: number; effective_on: string }[];
+    },
+  });
 
-  function download(row: {
-    amount: number | string | null;
-    period_start: string | null;
-    period_end: string | null;
-    paid_on: string | null;
-    payment_lines: { minutes: number; amount: number; service_sessions: unknown }[] | null;
-  }) {
-    const lines = (row.payment_lines ?? []).map((line) => {
-      const session = one(line.service_sessions as Line["service_sessions"]);
-      return {
-        day: session ? formatVisitDay(session.service_date) : "Shift",
-        when: session ? formatClockRange(session.start_at, session.end_at) : "",
-        minutes: Number(line.minutes),
-        amount: Number(line.amount),
-      };
-    });
-    const text = payPdf({
-      person: profile?.goes_by ?? "Pay",
-      periodStart: row.period_start ?? "",
-      periodEnd: row.period_end ?? "",
-      paidOn: row.paid_on ?? "",
-      lines,
-      total: Number(row.amount ?? 0),
-    });
-    const url = URL.createObjectURL(new Blob([text], { type: "application/pdf" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `pay-${row.period_start ?? "statement"}.pdf`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
+  const workerRates = (rates.data ?? []).map((row) => ({ effectiveOn: row.effective_on, hourlyRate: Number(row.hourly_rate) }));
+  const shifts = (sessions.data ?? []).map((row) => {
+    const site = one(row.sites as { short_name: string } | { short_name: string }[] | null);
+    const minutes = durationMinutes(row.start_at, row.end_at);
+    return {
+      date: row.service_date as string,
+      site: site?.short_name ?? "Visit",
+      minutes,
+      amount: amountForWorkedShift({ workerRates, minutes, day: row.service_date as string }),
+    };
+  });
+  const reimbursements = (charges.data ?? [])
+    .filter((row) => !row.voided)
+    .map((row) => ({
+      date: row.created_at ? torontoNow(new Date(row.created_at)).today : "",
+      note: row.note?.trim() || "Reimbursement",
+      amount: row.amount == null ? null : Number(row.amount),
+    }));
+  const detail = buildPayPeriod({ ...selected, shifts, reimbursements });
+  const past = pastPayPeriods(today, [...shifts.map((row) => row.date), ...reimbursements.map((row) => row.date)]);
 
   return (
+    <PayPeriodDetailView
+      heading={viewingCurrent ? "This period" : "Past period"}
+      detail={detail}
+      past={viewingCurrent ? past : []}
+      onPast={(period) => setParams({ period: period.from })}
+      onCurrent={viewingCurrent ? undefined : () => setParams({})}
+      error={sessions.error instanceof Error ? sessions.error.message : ""}
+    />
+  );
+}
+
+export function PayPeriodDetailView({
+  heading,
+  detail,
+  past,
+  onPast,
+  onCurrent,
+  error,
+}: {
+  heading: string;
+  detail: PayPeriodDetail;
+  past: PayWindow[];
+  onPast?: (period: PayWindow) => void;
+  onCurrent?: () => void;
+  error?: string;
+}) {
+  return (
     <>
-      <Title sub="A shift you worked is just a shift you worked.">Your pay</Title>
-      <div className="grid gap-3">
-        {(query.data ?? []).map((row) => (
-          <Card key={row.id}>
-            <p className="font-semibold">{money(row.amount == null ? null : Number(row.amount))}</p>
-            <p className="text-sm text-stone-600">
-              {row.period_start} to {row.period_end}
-              {row.paid_on ? ` · paid ${row.paid_on}` : ""} · {row.status === "paid" ? "Paid" : "Not yet paid"}
-            </p>
-            <ul className="mt-2 grid gap-1">
-              {(row.payment_lines ?? []).map((line, index) => {
-                const session = one(line.service_sessions as unknown as Line["service_sessions"]);
-                const site = session ? one(session.sites) : null;
-                return (
-                  <li key={`${row.id}-${index}`} className="text-sm text-stone-700">
-                    {session ? formatVisitDay(session.service_date) : "Shift"}
-                    {site?.short_name ? ` · ${site.short_name}` : ""}
-                    {session ? ` · ${formatClockRange(session.start_at, session.end_at)}` : ""}
-                  </li>
-                );
-              })}
-            </ul>
-            {row.status === "paid" ? <Button className="mt-3" tone="quiet" onClick={() => download(row)}>Download PDF</Button> : null}
-          </Card>
-        ))}
-        {!query.isLoading && (query.data ?? []).length === 0 ? <p className="text-stone-600">No pay yet.</p> : null}
-      </div>
-      <ErrorText>{query.error && !turnedOff(query.error as { message?: string }, "payment_lines") ? (query.error as Error).message : ""}</ErrorText>
+      {onCurrent ? (
+        <button type="button" className="mb-3 text-sm font-semibold text-[var(--accent)]" onClick={onCurrent}>
+          This period
+        </button>
+      ) : null}
+      <Title sub={`${formatVisitDay(detail.from)} – ${formatVisitDay(detail.to)}`}>Your pay</Title>
+      <h2 className="mb-3 text-xl font-semibold">{heading}</h2>
+      <Card>
+        {detail.shifts.length === 0 && detail.reimbursements.length === 0 ? (
+          <p className="text-stone-600">Nothing in this period.</p>
+        ) : null}
+        <ul className="grid gap-3">
+          {detail.shifts.map((shift) => (
+            <li key={`${shift.date}-${shift.site}-${shift.minutes}`}>
+              <p className="font-semibold">{formatVisitDay(shift.date)} · {shift.site}</p>
+              <p className="text-sm text-stone-600">
+                {durationLabel(shift.minutes)}
+                {shift.amount == null ? "" : ` · ${money(shift.amount)}`}
+              </p>
+            </li>
+          ))}
+          {detail.reimbursements.map((row) => (
+            <li key={`${row.date}-${row.note}`}>
+              <p className="font-semibold">{row.note}</p>
+              <p className="text-sm text-stone-600">
+                {formatVisitDay(row.date)}
+                {row.amount == null ? "" : ` · ${money(row.amount)}`}
+              </p>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-4 text-xl font-semibold">Total {money(detail.total)}</p>
+      </Card>
+      {past.length > 0 ? (
+        <section className="mt-5">
+          <h2 className="mb-2 text-xl font-semibold">Past periods</h2>
+          <div className="grid gap-2">
+            {past.map((period) => (
+              <button
+                key={period.from}
+                type="button"
+                className="flex min-h-14 items-center justify-between rounded-2xl bg-white px-4 text-left text-base font-semibold shadow-sm ring-1 ring-black/5"
+                onClick={() => onPast?.(period)}
+              >
+                <span>{formatVisitDay(period.from)} – {formatVisitDay(period.to)}</span>
+                <span className="text-[var(--accent)]">Open</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+      <Link to="/pay?tab=reimbursements" className="mt-4 inline-block text-base font-semibold text-[var(--accent)]">Log a charge</Link>
+      <ErrorText>{error}</ErrorText>
     </>
   );
 }

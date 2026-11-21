@@ -9,6 +9,9 @@ import { MILK_LOCK_NOT_NEEDED_OK } from "../lib/milkLock";
 import { correctionGlance } from "../lib/correctionGlance";
 import { CorrectionGlanceView } from "../screens/CorrectionGlance";
 import { TodayView } from "../screens/Home";
+import { PayPeriodDetailView } from "../screens/Payroll";
+import { LowOutListView, ReorderBanner, StockGlanceView, WarehouseListView } from "../screens/stockViews";
+import { toWarehouseRow } from "../lib/stockGlance";
 import { PreviewTabs } from "../navIcons";
 import { Button, Card, CheckItem, Field, FreshPracticeDialog, MilkStepCard, PinPad, PracticeBanner, Screen, Title, inputClass } from "../ui";
 
@@ -82,6 +85,13 @@ export default function PreviewApp() {
   }
 
   if (screen === "home-one" || screen === "home-two" || screen === "home-none") return <HomeLook screen={screen} />;
+  if (screen === "stock-tech") return <StockTechLook />;
+  if (screen === "stock-admin") return <StockAdminLook />;
+  if (screen === "dupont") return <DupontLook />;
+  if (screen === "low-out") return <LowOutLook />;
+  if (screen === "flag") return <FlagLook />;
+  if (screen === "pay-now") return <PayNowLook />;
+  if (screen === "pay-past") return <PayPastLook />;
   if (screen === "schedule") return <ScheduleLook />;
   if (screen === "stock") return <StockLook />;
   if (screen === "learn") return <LearnLook />;
@@ -513,6 +523,151 @@ function ChargeLook() {
         <Field label="What for"><input className={inputClass} placeholder="e.g. milk" readOnly /></Field>
         <Button>Save charge</Button>
       </Card>
+      <PreviewTabs active="Pay" />
+    </Screen>
+  );
+}
+
+const cupPacks = [
+  { name: "sleeve", perBase: 50 },
+  { name: "box", perBase: 1000 },
+];
+const oatPacks = [{ name: "box", perBase: 6 }];
+
+function demoRows() {
+  const oat = toWarehouseRow({ skuId: "oat", name: "Oat milk", baseUnit: "cartons", onHand: 6, reorderBelow: 12, packs: oatPacks });
+  const cups = toWarehouseRow({ skuId: "cups", name: "12 oz hot cups", baseUnit: "cups", onHand: 0, reorderBelow: 1000, packs: cupPacks });
+  const lids = toWarehouseRow({ skuId: "lids", name: "Lids", baseUnit: "lids", onHand: 2000, reorderBelow: 1000, packs: [{ name: "box", perBase: 1000 }] });
+  return [oat, cups, lids].map((row) => ({ ...row, draft: 0 }));
+}
+
+function StockTechLook() {
+  return (
+    <Screen>
+      <Title sub="Low, out, or OK at each place. Dupont is the warehouse.">Stock</Title>
+      <StockGlanceView
+        locations={[
+          { id: "sinai", name: "Sinai", status: "out" },
+          { id: "uoft", name: "UofT", status: "low" },
+        ]}
+        dupontStatus="reorder"
+        lowCount={2}
+        reorderItems={null}
+      />
+      <PreviewTabs active="Stock" />
+    </Screen>
+  );
+}
+
+function StockAdminLook() {
+  const rows = demoRows().filter((row) => row.reorder);
+  return (
+    <Screen>
+      <Title sub="Low, out, or OK at each place. Dupont is the warehouse.">Stock</Title>
+      <ReorderBanner items={rows.map((row) => ({ id: row.skuId, name: row.name, amount: row.amount }))} />
+      <StockGlanceView
+        locations={[
+          { id: "sinai", name: "Sinai", status: "out" },
+          { id: "uoft", name: "UofT", status: "low" },
+        ]}
+        dupontStatus="reorder"
+        lowCount={2}
+        reorderItems={null}
+      />
+      <PreviewTabs active="Stock" />
+    </Screen>
+  );
+}
+
+function DupontLook() {
+  const rows = demoRows().map((row) => (row.skuId === "oat" ? { ...row, draft: 1, amount: "2 boxes", reorder: false } : row));
+  return (
+    <Screen>
+      <p className="text-sm font-semibold text-[var(--accent)]">Stock</p>
+      <Title sub="Minus or plus one pack, then Save. Each save is a recount on the stock history.">Dupont</Title>
+      <WarehouseListView rows={rows} busyId="" onStep={() => undefined} onSave={() => undefined} />
+      <PreviewTabs active="Stock" />
+    </Screen>
+  );
+}
+
+function LowOutLook() {
+  return (
+    <Screen>
+      <p className="text-sm font-semibold text-[var(--accent)]">Stock</p>
+      <Title sub="Every item flagged low or out. Status only.">Low or out</Title>
+      <LowOutListView
+        rows={[
+          { id: "1", place: "Sinai", item: "Oat milk", status: "out" },
+          { id: "2", place: "UofT", item: "12 oz hot cups", status: "low" },
+        ]}
+      />
+      <PreviewTabs active="Stock" />
+    </Screen>
+  );
+}
+
+function FlagLook() {
+  return (
+    <Screen>
+      <Title>Stock</Title>
+      <Card>
+        <h2 className="text-lg font-semibold">Flag an item</h2>
+        <p className="mt-1 text-sm text-stone-600">Pick a location, pick an item, then mark it.</p>
+        <Field label="Location">
+          <select className={inputClass} defaultValue="sinai"><option>Sinai</option></select>
+        </Field>
+        <p className="mb-2 text-sm font-medium text-stone-600">Item</p>
+        <p className="rounded-2xl bg-[var(--accent)] px-4 py-3 font-semibold text-white">Oat milk</p>
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <Button tone="quiet">Low</Button>
+          <Button tone="quiet">Out</Button>
+          <Button tone="quiet">Restocked</Button>
+        </div>
+      </Card>
+      <PreviewTabs active="Stock" />
+    </Screen>
+  );
+}
+
+function PayNowLook() {
+  return (
+    <Screen>
+      <PayPeriodDetailView
+        heading="This period"
+        detail={{
+          from: "2026-11-16",
+          to: "2026-11-22",
+          shifts: [{ date: "2026-11-16", site: "Sinai", minutes: 65, amount: 23.83 }],
+          reimbursements: [{ date: "2026-11-16", note: "Oat milk", amount: 18.4 }],
+          total: 42.23,
+        }}
+        past={[{ from: "2026-11-09", to: "2026-11-15" }]}
+        onPast={() => undefined}
+      />
+      <PreviewTabs active="Pay" />
+    </Screen>
+  );
+}
+
+function PayPastLook() {
+  return (
+    <Screen>
+      <PayPeriodDetailView
+        heading="Past period"
+        detail={{
+          from: "2026-11-09",
+          to: "2026-11-15",
+          shifts: [
+            { date: "2026-11-09", site: "UofT", minutes: 65, amount: 23.83 },
+            { date: "2026-11-11", site: "Sinai", minutes: 80, amount: 29.33 },
+          ],
+          reimbursements: [{ date: "2026-11-10", note: "Cups", amount: 12.5 }],
+          total: 65.66,
+        }}
+        past={[]}
+        onCurrent={() => undefined}
+      />
       <PreviewTabs active="Pay" />
     </Screen>
   );

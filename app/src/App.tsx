@@ -20,6 +20,7 @@ import {
 } from "./screens/Admin";
 import { HistoryPage, HistoryVisitPage } from "./screens/History";
 import { InventoryPage } from "./screens/Inventory";
+import { LowOutPage, StockHomePage, WarehousePage } from "./screens/StockPages";
 import { ImportPreviewPage } from "./screens/ImportPreview";
 import { DuplicateSessionsPage } from "./screens/DuplicateSessions";
 import { SettingsPage } from "./screens/Settings";
@@ -74,7 +75,10 @@ export function App() {
                 <Route path="/charges" element={<Navigate to="/pay?tab=reimbursements" replace />} />
                 <Route path="/coverage" element={<Navigate to="/schedule" replace />} />
                 <Route path="/flags" element={<Navigate to="/inventory" replace />} />
-                <Route path="/inventory" element={<InventoryPage />} />
+                <Route path="/inventory" element={<StockHomePage />} />
+                <Route path="/inventory/dupont" element={<WarehousePage />} />
+                <Route path="/inventory/low" element={<LowOutPage />} />
+                <Route path="/inventory/setup" element={<AdminOnly><InventoryPage /></AdminOnly>} />
                 <Route path="/stock-history" element={<StockHistoryPage />} />
                 <Route path="/flags" element={<FlagsPage />} />
                 <Route path="/pickup/:siteId" element={<PickupPage />} />

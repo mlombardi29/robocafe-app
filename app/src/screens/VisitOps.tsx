@@ -376,8 +376,8 @@ export function FlagStockPanel() {
   return (
     <Card>
       <h2 className="text-lg font-semibold">Flag an item</h2>
-      <p className="mt-1 text-sm text-stone-600">Low or out. One tap here, or on a step during a visit.</p>
-      <Field label="Kiosk">
+      <p className="mt-1 text-sm text-stone-600">Pick a location, pick an item, then mark it.</p>
+      <Field label="Location">
         <select className={inputClass} value={siteId} onChange={(event) => setSiteId(event.target.value)}>
           <option value="">Choose</option>
           {visibleSites.map((site) => <option key={site.id} value={site.id}>{site.short_name}</option>)}

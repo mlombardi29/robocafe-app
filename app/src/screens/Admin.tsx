@@ -16,6 +16,8 @@ import { supabase } from "../lib/supabase";
 import type { Role, SiteRow } from "../lib/types";
 import { CorrectionGlanceView } from "./CorrectionGlance";
 import { Button, Card, ErrorText, Field, Screen, Title, inputClass } from "../ui";
+import { useReorderBanner } from "./StockPages";
+import { ReorderBanner } from "./stockViews";
 
 const sections: { title: string; links: [string, string][] }[] = [
   {
@@ -111,9 +113,11 @@ export function AdminHome() {
       };
     },
   });
+  const reorder = useReorderBanner();
   return (
     <Screen>
       <Title sub={pending.data ? `${pending.data} waiting` : "Nothing waiting"}>Admin</Title>
+      <ReorderBanner items={reorder} />
       <div className="grid gap-5">
         {sections.map((section) => (
           <section key={section.title}>
