@@ -11,6 +11,9 @@ describe("configKeys", () => {
     expect(isEditableConfigKey("uoft_before_opening")).toBe(true);
     expect(isEditableConfigKey("dupont_espresso_float_bags")).toBe(true);
     expect(isEditableConfigKey("reimbursement_approval_limit")).toBe(true);
+    expect(isEditableConfigKey("trip_rate_warehouse_pickup")).toBe(true);
+    expect(isEditableConfigKey("trip_rate_milk_run")).toBe(true);
+    expect(isEditableConfigKey("trip_pay_effective_on")).toBe(false);
     expect(isEditableConfigKey("coverage_charges_migration")).toBe(false);
     expect(isEditableConfigKey("coverage_pay_rule")).toBe(false);
   });

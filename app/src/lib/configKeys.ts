@@ -46,6 +46,24 @@ export const CONFIG_KEY_SPECS: ConfigKeySpec[] = [
     editable: true,
   },
   {
+    key: "trip_rate_warehouse_pickup",
+    label: "Warehouse pickup trip rate",
+    help: "Flat dollars per warehouse pickup. Saved onto each trip, so changing it does not rewrite trips already logged.",
+    editable: true,
+  },
+  {
+    key: "trip_rate_milk_run",
+    label: "Milk run trip rate",
+    help: "Flat dollars per milk run, once, however many sites are on it. The milk receipt is a separate reimbursement. Saved onto each trip.",
+    editable: true,
+  },
+  {
+    key: "trip_pay_effective_on",
+    label: "Trip pay starts",
+    help: "Trips before this date are refused. Not backdated.",
+    editable: false,
+  },
+  {
     key: "milk_stock_entry_rule",
     label: "Milk stock entry rule",
     help: "How milk bag stock is entered after a visit.",

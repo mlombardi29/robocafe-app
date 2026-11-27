@@ -99,6 +99,15 @@ async function main() {
     }
   }
 
+  async function errorIncludes(userId: string | null, sql: string, text: string) {
+    try {
+      await asUser(userId, sql);
+      return false;
+    } catch (err) {
+      return String(err).toLowerCase().includes(text.toLowerCase());
+    }
+  }
+
   const anonDenied = await fails(null, "select * from public.sites");
   // anon is a different role
   let anonBlocked = false;
@@ -1162,6 +1171,246 @@ async function main() {
     where sess.id = '${policyVisit}' and item->>'key' = 'long_water'
   `);
   assert(afterTitle.rows[0].title === beforeTitle, "a template edit changed an open visit snapshot");
+
+  // Trip pay is applied after the earlier checks. 0017 sets UofT hours, which those checks still expect to be unset.
+  for (const file of ["0017_coverage_charges.sql", "0018_edit_charges.sql", "0019_tech_warehouse_recount.sql", "0020_trip_pay.sql"]) {
+    await db.exec(readFileSync(resolve(root, "supabase/migrations", file), "utf8"));
+  }
+
+  // Trip pay. One trip per tech per Toronto day. A milk run names many sites and pays once.
+  await db.exec(`update public.people set mode = 'live' where id in ('${ADMIN}', '${TECH}', '${OTHER}')`);
+  const tripDay = await db.query<{ today: string; yesterday: string; effective: string }>(`
+    select (now() at time zone 'America/Toronto')::date::text as today,
+           ((now() at time zone 'America/Toronto')::date - 1)::text as yesterday,
+           (select value from public.config where key = 'trip_pay_effective_on') as effective
+  `);
+  const tripToday = tripDay.rows[0].today;
+  const tripYesterday = tripDay.rows[0].yesterday;
+  assert(tripToday >= tripDay.rows[0].effective, "trip tests need a clock on or after the trip effective date");
+  assert(tripYesterday >= tripDay.rows[0].effective, "trip tests need yesterday on or after the trip effective date");
+  const uoft = await db.query<{ id: string }>(
+    `select id from public.sites where short_name = 'UofT' and is_sandbox = false`,
+  );
+  const practiceUoft = await db.query<{ id: string }>(
+    `select id from public.sites where short_name = 'PRACTICE UofT'`,
+  );
+  await db.exec(`
+    insert into public.person_sites (person_id, site_id)
+    values ('${TECH}', '${uoft.rows[0].id}')
+    on conflict (person_id, site_id) do nothing
+  `);
+
+  const noSite = await errorIncludes(
+    TECH,
+    `select public.log_trip('milk_run', '${tripToday}'::date, '{}'::uuid[], null, 4, true, '${crypto.randomUUID()}'::uuid)`,
+    "at least one site",
+  );
+  assert(noSite, "a milk run with no site was saved");
+
+  const milkKey = crypto.randomUUID();
+  const milk = await asUser<{ id: string; rate: string; sites: number; charge: string }>(
+    TECH,
+    `select payload->>'id' as id,
+            payload->>'rate_amount' as rate,
+            jsonb_array_length(payload->'site_ids') as sites,
+            payload->>'charge_id' as charge
+     from (
+       select public.log_trip(
+         'milk_run', '${tripYesterday}'::date,
+         array['${sinai}'::uuid, '${uoft.rows[0].id}'::uuid],
+         null, 6.40, true, '${milkKey}'::uuid
+       ) as payload
+     ) s`,
+  );
+  assert(milk.rows[0].rate === "10.00" || Number(milk.rows[0].rate) === 10, "a two-site milk run did not pay $10 once");
+  assert(Number(milk.rows[0].sites) === 2, "a milk run did not keep both sites");
+  const milkCharges = await db.query<{ n: number; amount: string; url: string | null }>(
+    `select count(*)::int as n, max(amount)::text as amount, max(receipt_url) as url
+     from public.charges where trip_log_id = '${milk.rows[0].id}'`,
+  );
+  assert(milkCharges.rows[0].n === 1 && Number(milkCharges.rows[0].amount) === 6.4, "a milk run did not create one linked reimbursement");
+  assert(milkCharges.rows[0].url == null, "a milk run stored a receipt url");
+  const milkReplay = await asUser<{ id: string }>(
+    TECH,
+    `select public.log_trip('milk_run', '${tripYesterday}'::date, array['${sinai}'::uuid], null, 99, true, '${milkKey}'::uuid)->>'id' as id`,
+  );
+  assert(milkReplay.rows[0].id === milk.rows[0].id, "replaying a trip key created another trip");
+  const milkChargeCount = await db.query<{ n: number }>(
+    `select count(*)::int as n from public.charges where person_id = '${TECH}' and note = 'Milk run' and not voided`,
+  );
+  assert(milkChargeCount.rows[0].n === 1, "replaying a milk run created another reimbursement");
+
+  const tripPickupKey = crypto.randomUUID();
+  const pickup = await asUser<{ id: string; rate: string }>(
+    TECH,
+    `select payload->>'id' as id, payload->>'rate_amount' as rate
+     from (select public.log_trip('warehouse_pickup', '${tripToday}'::date, '{}'::uuid[], 'bags', null, false, '${tripPickupKey}'::uuid) as payload) s`,
+  );
+  assert(Number(pickup.rows[0].rate) === 12, "warehouse pickup did not copy the $12 rate");
+  const sameDayMilk = await asUser<{ rate: string }>(
+    TECH,
+    `select public.log_trip('milk_run', '${tripToday}'::date, array['${sinai}'::uuid, '${uoft.rows[0].id}'::uuid], null, 4.25, true, '${crypto.randomUUID()}'::uuid)->>'rate_amount' as rate`,
+  );
+  assert(Number(sameDayMilk.rows[0].rate) === 10, "a pickup and a milk run on the same day were not both allowed");
+  const secondPickup = await errorIncludes(
+    TECH,
+    `select public.log_trip('warehouse_pickup', '${tripToday}'::date, '{}'::uuid[], null, null, false, '${crypto.randomUUID()}'::uuid)`,
+    "warehouse pickup",
+  );
+  assert(secondPickup, "a second warehouse pickup on the same day was saved");
+  const secondMilk = await errorIncludes(
+    TECH,
+    `select public.log_trip('milk_run', '${tripToday}'::date, array['${sinai}'::uuid], null, 1, true, '${crypto.randomUUID()}'::uuid)`,
+    "milk run",
+  );
+  assert(secondMilk, "a second milk run on the same day was saved");
+
+  await db.exec(`update public.config set value = '15' where key = 'trip_rate_milk_run'`);
+  const editedMilk = await asUser<{ rate: string; sites: number }>(
+    TECH,
+    `select payload->>'rate_amount' as rate, jsonb_array_length(payload->'site_ids') as sites
+     from (
+       select public.edit_trip(
+         '${milk.rows[0].id}'::uuid,
+         array['${uoft.rows[0].id}'::uuid, '${sinai}'::uuid],
+         'oat', 7.10, true, '${crypto.randomUUID()}'::uuid
+       ) as payload
+     ) s`,
+  );
+  assert(Number(editedMilk.rows[0].rate) === 10, "editing a trip rewrote the copied rate");
+  assert(Number(editedMilk.rows[0].sites) === 2, "editing a trip dropped a site");
+  await db.exec(`update public.config set value = '10' where key = 'trip_rate_milk_run'`);
+
+  const otherKey = crypto.randomUUID();
+  const otherTrip = await asUser<{ id: string; person: string }>(
+    OTHER,
+    `select payload->>'id' as id, payload->>'person_id' as person
+     from (select public.log_trip('warehouse_pickup', '${tripToday}'::date, '{}'::uuid[], null, null, false, '${otherKey}'::uuid) as payload) s`,
+  );
+  assert(otherTrip.rows[0].person === OTHER, "a trip was logged for someone other than the signed-in tech");
+  const editOther = await fails(
+    TECH,
+    `select public.edit_trip('${otherTrip.rows[0].id}'::uuid, '{}'::uuid[], 'no', null, false, '${crypto.randomUUID()}'::uuid)`,
+  );
+  assert(editOther, "a tech edited another person's trip");
+  const insertOther = await fails(
+    OTHER,
+    `insert into public.trip_logs (person_id, trip_on, kind, rate_amount, receipt_attested, is_sandbox)
+     values ('${TECH}', '${tripYesterday}'::date, 'warehouse_pickup', 12, false, false)`,
+  );
+  assert(insertOther, "a tech inserted a trip row for someone else");
+
+  const otherSecond = await errorIncludes(
+    OTHER,
+    `select public.log_trip('warehouse_pickup', '${tripToday}'::date, '{}'::uuid[], null, null, false, '${crypto.randomUUID()}'::uuid)`,
+    "warehouse pickup",
+  );
+  assert(otherSecond, "a second pickup was saved before the first was voided");
+  await asUser(ADMIN, `select public.void_trip('${otherTrip.rows[0].id}'::uuid, '${crypto.randomUUID()}'::uuid)`);
+  const freed = await asUser<{ id: string }>(
+    OTHER,
+    `select public.log_trip('warehouse_pickup', '${tripToday}'::date, '{}'::uuid[], 'replacement', null, false, '${crypto.randomUUID()}'::uuid)->>'id' as id`,
+  );
+  assert(freed.rows[0].id !== otherTrip.rows[0].id, "voiding a pickup did not free that slot");
+  const editVoided = await errorIncludes(
+    OTHER,
+    `select public.edit_trip('${otherTrip.rows[0].id}'::uuid, '{}'::uuid[], 'back', null, false, '${crypto.randomUUID()}'::uuid)`,
+    "voided",
+  );
+  assert(editVoided, "a voided trip was edited");
+  const adminEditVoided = await fails(
+    ADMIN,
+    `select public.edit_trip('${otherTrip.rows[0].id}'::uuid, '{}'::uuid[], 'back', null, false, '${crypto.randomUUID()}'::uuid)`,
+  );
+  assert(adminEditVoided, "an admin edited a voided trip");
+
+  const shiftId = crypto.randomUUID();
+  await db.exec(`
+    insert into public.pay_rates (person_id, hourly_rate, effective_on, is_sandbox)
+    values ('${TECH}', 20, '2026-01-01', false);
+    insert into public.service_sessions (id, site_id, person_id, service_date, status, start_at, end_at, is_sandbox)
+    values (
+      '${shiftId}', '${sinai}', '${TECH}', '${tripToday}'::date, 'completed',
+      '${tripToday} 15:00:00+00', '${tripToday} 16:00:00+00', false
+    );
+  `);
+  const savedPay = await asUser<{ amount: string; trips: string }>(
+    ADMIN,
+    `select payload->>'amount' as amount, payload->>'trips_amount' as trips
+     from (
+       select public.save_pay_run(
+         '${TECH}'::uuid, date_trunc('week', '${tripToday}'::date)::date,
+         (date_trunc('week', '${tripToday}'::date)::date + 6),
+         array['${shiftId}'::uuid], '${crypto.randomUUID()}'::uuid
+       ) as payload
+     ) s`,
+  );
+  assert(Number(savedPay.rows[0].amount) === 20, "shift pay changed when trips were added");
+  const paidRun = await asUser<{ id: string }>(
+    ADMIN,
+    `select public.mark_pay_run(
+       (select id from public.payments where person_id = '${TECH}' and status = 'draft' and is_sandbox = false order by created_at desc limit 1),
+       'paid', '${tripToday}'::date
+     )->>'id' as id`,
+  );
+  assert(Boolean(paidRun.rows[0].id), "pay run was not marked paid");
+  const editPaid = await errorIncludes(
+    TECH,
+    `select public.edit_trip('${pickup.rows[0].id}'::uuid, '{}'::uuid[], 'late', null, false, '${crypto.randomUUID()}'::uuid)`,
+    "paid week",
+  );
+  assert(editPaid, "a trip on a paid week was edited");
+  const voidPaid = await errorIncludes(
+    ADMIN,
+    `select public.void_trip('${pickup.rows[0].id}'::uuid, '${crypto.randomUUID()}'::uuid)`,
+    "paid week",
+  );
+  assert(voidPaid, "a trip on a paid week was voided");
+
+  await db.exec(`update public.people set mode = 'practice' where id = '${TECH}'`);
+  const practiceTrip = await asUser<{ id: string; sandbox: boolean }>(
+    TECH,
+    `select payload->>'id' as id, (payload->>'is_sandbox')::boolean as sandbox
+     from (
+       select public.log_trip(
+         'milk_run', '${tripToday}'::date,
+         array['${practiceSinai}'::uuid, '${practiceUoft.rows[0].id}'::uuid],
+         null, 3.25, true, '${crypto.randomUUID()}'::uuid
+       ) as payload
+     ) s`,
+  );
+  assert(practiceTrip.rows[0].sandbox === true, "a practice trip was stored as live");
+  const liveSeesPractice = await asUser<{ n: number }>(
+    TECH,
+    `select count(*)::int as n from public.trip_logs where id = '${practiceTrip.rows[0].id}'`,
+  );
+  await db.exec(`update public.people set mode = 'live' where id = '${TECH}'`);
+  const liveHidden = await asUser<{ n: number }>(
+    TECH,
+    `select count(*)::int as n from public.trip_logs where id = '${practiceTrip.rows[0].id}'`,
+  );
+  assert(liveHidden.rows[0].n === 0, "live mode can see a practice trip");
+  const practiceBlocked = await fails(
+    TECH,
+    `select public.log_trip('milk_run', '${tripYesterday}'::date, array['${practiceSinai}'::uuid], null, 2, true, '${crypto.randomUUID()}'::uuid)`,
+  );
+  assert(practiceBlocked, "live mode logged a practice milk run");
+  await db.exec(`update public.people set mode = 'practice' where id = '${TECH}'`);
+  const practiceHidden = await asUser<{ n: number }>(
+    TECH,
+    `select count(*)::int as n from public.trip_logs where id = '${pickup.rows[0].id}'`,
+  );
+  assert(practiceHidden.rows[0].n === 0, "practice mode can see a live trip");
+  assert(liveSeesPractice.rows[0].n === 1, "practice mode could not read its own trip");
+  await db.exec(`update public.people set mode = 'live' where id = '${TECH}'`);
+
+  const tripPriv = await db.query<{ anon_can: boolean; auth_can: boolean }>(`
+    select
+      has_function_privilege('anon', 'public.log_trip(text, date, uuid[], text, numeric, boolean, uuid)', 'execute') as anon_can,
+      has_function_privilege('authenticated', 'public.log_trip(text, date, uuid[], text, numeric, boolean, uuid)', 'execute') as auth_can
+  `);
+  assert(tripPriv.rows[0].anon_can !== true, "anon can call log_trip");
+  assert(tripPriv.rows[0].auth_can === true, "a signed-in person cannot call log_trip");
 
   console.log("RLS checks passed");
   await db.close();
