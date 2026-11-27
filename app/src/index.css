@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  /* One blue on white. Practice uses these same tokens; the orange banner marks that mode. */
+  --bg: #ffffff;
+  --ink: #0f172a;
+  --accent: #1d4ed8;
+  --line: #cbd5e1;
+  --nav-stack: calc(5.75rem + env(safe-area-inset-bottom));
+  accent-color: var(--accent);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: Figtree, ui-sans-serif, system-ui, sans-serif;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* The old 5% black edge vanishes on a white page in a bright room.
+   These rules redraw every card, tile, and bar that already uses them. */
+.ring-black\/5 {
+  --tw-ring-color: var(--line);
+}
+
+.border-black\/5 {
+  border-color: var(--line);
+}
