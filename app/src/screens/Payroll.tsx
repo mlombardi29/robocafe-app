@@ -10,7 +10,9 @@ import { ChargesPage } from "./Charges";
 import { NOT_TURNED_ON, turnedOff } from "../lib/rpcError";
 import { supabase } from "../lib/supabase";
 import { durationLabel, durationMinutes, rangeBounds } from "../lib/timeRange";
-import { buildPayPeriod, currentPayPeriod, pastPayPeriods, type PayPeriodDetail, type PayWindow } from "../lib/payPeriod";
+import { buildPayPeriod, currentPayPeriod, inPayPeriod, pastPayPeriods, sumMoney, type PayPeriodDetail, type PayWindow, type PeriodTrip } from "../lib/payPeriod";
+import { tripKindLabel, tripSitesLabel } from "../lib/trips";
+import { LogTripCard } from "./LogTrip";
 import { Button, Card, ErrorText, Field, Screen, Title, inputClass } from "../ui";
 
 type Person = { id: string; goes_by: string; role: string };
@@ -26,6 +28,68 @@ type Shift = {
 };
 type CoverageClaim = { site_id: string; service_date: string; claimed_by: string | null; is_sandbox: boolean };
 type RateRow = { person_id: string; hourly_rate: number; effective_on: string; is_sandbox: boolean };
+type PayCharge = {
+  id: string;
+  person_id: string;
+  amount: number | null;
+  note: string | null;
+  created_at: string | null;
+  voided?: boolean;
+  paid?: boolean;
+  is_sandbox?: boolean;
+  trip_log_id?: string | null;
+  payment_id?: string | null;
+};
+type TechCharge = {
+  id: string;
+  amount: number | null;
+  note: string | null;
+  created_at: string | null;
+  voided?: boolean;
+  paid?: boolean;
+  trip_log_id?: string | null;
+};
+type TripSiteEmbed = {
+  site_id: string;
+  sites: { short_name: string } | { short_name: string }[] | null;
+};
+type TechTrip = {
+  id: string;
+  person_id: string;
+  trip_on: string;
+  kind: "warehouse_pickup" | "milk_run";
+  rate_amount: number | null;
+  note: string | null;
+  milk_cost: number | null;
+  receipt_received_at: string | null;
+  voided?: boolean;
+  created_at?: string;
+  payment_id?: string | null;
+  trip_log_sites?: TripSiteEmbed[] | null;
+};
+
+function siteName(value: TripSiteEmbed["sites"]): string {
+  const row = one(value);
+  return row?.short_name ?? "";
+}
+
+function asPeriodTrip(row: TechTrip): PeriodTrip {
+  const sites = (row.trip_log_sites ?? []).map((link) => siteName(link.sites)).filter(Boolean);
+  return {
+    id: row.id,
+    date: row.trip_on,
+    kind: row.kind,
+    sites,
+    note: row.note?.trim() || "",
+    amount: row.rate_amount == null ? null : Number(row.rate_amount),
+    voided: Boolean(row.voided),
+    milkCost: row.milk_cost == null ? null : Number(row.milk_cost),
+    receiptReceived: Boolean(row.receipt_received_at),
+    createdAt: row.created_at,
+    personId: row.person_id,
+  };
+}
+
 type PayRow = {
   id: string;
   person_id: string;
@@ -110,13 +174,52 @@ export function PayrollPage() {
       return (data ?? []) as PayRow[];
     },
   });
+  const trips = useQuery({
+    queryKey: ["pay-trips", week.from, week.to, practice],
+    queryFn: async () => {
+      const { data, error: queryError } = await supabase
+        .from("trip_logs")
+        .select("id, person_id, trip_on, kind, rate_amount, note, milk_cost, receipt_received_at, voided, created_at, payment_id, trip_log_sites(site_id, sites(short_name))")
+        .eq("is_sandbox", practice)
+        .gte("trip_on", week.from)
+        .lte("trip_on", week.to);
+      if (queryError) return [] as TechTrip[];
+      return (data ?? []) as TechTrip[];
+    },
+  });
+  const charges = useQuery({
+    queryKey: ["pay-charges", practice],
+    queryFn: async () => {
+      const full = await supabase
+        .from("charges")
+        .select("id, person_id, amount, note, created_at, voided, paid, is_sandbox, trip_log_id, payment_id")
+        .eq("is_sandbox", practice);
+      if (!full.error) return (full.data ?? []) as PayCharge[];
+      const basic = await supabase
+        .from("charges")
+        .select("id, person_id, amount, note, created_at, paid, is_sandbox")
+        .eq("is_sandbox", practice);
+      if (basic.error) return [] as PayCharge[];
+      return ((basic.data ?? []) as PayCharge[]).map((row) => ({ ...row, voided: false, trip_log_id: null, payment_id: null }));
+    },
+  });
 
   const visibleShifts = (shifts.data ?? []).filter((row) => row.is_sandbox === practice);
-  const byPerson = useMemo(() => {
-    const map = new Map<string, Shift[]>();
-    for (const row of visibleShifts) map.set(row.person_id, [...(map.get(row.person_id) ?? []), row]);
-    return map;
-  }, [visibleShifts]);
+  const visibleTrips = useMemo(() => trips.data ?? [], [trips.data]);
+  const visibleCharges = useMemo(() => charges.data ?? [], [charges.data]);
+  const tripById = useMemo(() => new Map(visibleTrips.map((row) => [row.id, row])), [visibleTrips]);
+  const personIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const row of visibleShifts) ids.add(row.person_id);
+    for (const row of visibleTrips) if (!row.voided) ids.add(row.person_id);
+    for (const row of visibleCharges) {
+      if (row.voided) continue;
+      const trip = row.trip_log_id ? tripById.get(row.trip_log_id) : undefined;
+      const date = trip?.trip_on || (row.created_at ? torontoNow(new Date(row.created_at)).today : "");
+      if (inPayPeriod(date, week)) ids.add(row.person_id);
+    }
+    return [...ids];
+  }, [visibleShifts, visibleTrips, visibleCharges, tripById, week]);
 
   function ratesFor(personId: string): PayRate[] {
     return (rates.data ?? [])
@@ -128,15 +231,15 @@ export function PayrollPage() {
     return picked[shift.id] !== false;
   }
 
-  async function markPaid(personId: string, personShifts: Shift[], existingId: string | undefined, locked: boolean) {
+  async function markPaid(personId: string, personShifts: Shift[], existingId: string | undefined, locked: boolean, hasOtherPay: boolean) {
     setBusy(personId);
     setError("");
     let id = existingId;
     if (!locked) {
       const ids = personShifts.filter(included).map((row) => row.id);
-      if (ids.length === 0) {
+      if (ids.length === 0 && !hasOtherPay) {
         setBusy("");
-        setError("Leave at least one shift on Pay.");
+        setError("Nothing to pay for this person.");
         return;
       }
       const { data, error: rpcError } = await supabase.rpc("save_pay_run", {
@@ -166,13 +269,35 @@ export function PayrollPage() {
     });
     setBusy("");
     if (markError) setError(turnedOff(markError, "mark_pay_run") ? NOT_TURNED_ON : markError.message);
-    else await queryClient.invalidateQueries({ queryKey: ["pay-runs"] });
+    else {
+      await queryClient.invalidateQueries({ queryKey: ["pay-runs"] });
+      await queryClient.invalidateQueries({ queryKey: ["pay-trips"] });
+      await queryClient.invalidateQueries({ queryKey: ["pay-charges"] });
+    }
+  }
+
+  async function changeTrip(id: string, action: "void" | "receipt") {
+    if (action === "void" && !window.confirm("Remove this trip? Its flat pay comes off this week. An unpaid milk reimbursement is removed too.")) return;
+    setBusy(id);
+    setError("");
+    const fn = action === "void" ? "void_trip" : "set_trip_receipt";
+    const args = action === "void"
+      ? { p_id: id, p_key: crypto.randomUUID() }
+      : { p_id: id, p_received: true, p_key: crypto.randomUUID() };
+    const { error: rpcError } = await supabase.rpc(fn, args);
+    setBusy("");
+    if (rpcError) {
+      setError(turnedOff(rpcError, fn) ? NOT_TURNED_ON : rpcError.message);
+      return;
+    }
+    await queryClient.invalidateQueries({ queryKey: ["pay-trips"] });
+    await queryClient.invalidateQueries({ queryKey: ["pay-charges"] });
   }
 
   return (
     <Screen>
       <Link to="/admin" className="text-sm font-semibold text-[var(--accent)]">Admin</Link>
-      <Title sub={`${week.from} to ${week.to}. These are the shifts technicians finished. Mark each paid, or leave it not yet paid. A covered shift pays the person who worked it, at their own rate.`}>
+      <Title sub={`${week.from} to ${week.to}. Shifts stay hourly. Trips are a flat rate. Reimbursements are listed on their own. A covered shift pays the person who worked it, at their own rate.`}>
         {practice ? "Practice pay" : "Payroll"}
       </Title>
       <Link to="/admin/payroll/rates" className="mb-4 inline-block font-semibold text-[var(--accent)]">Pay rates</Link>
@@ -180,23 +305,48 @@ export function PayrollPage() {
         <input className={inputClass} type="date" value={paidOn} onChange={(event) => setPaidOn(event.target.value)} />
       </Field>
       <div className="grid gap-3">
-        {[...byPerson.entries()].map(([personId, personShifts]) => {
+        {personIds.map((personId) => {
           const person = (people.data ?? []).find((row) => row.id === personId);
+          const personShifts = visibleShifts.filter((row) => row.person_id === personId);
           const run = (runs.data ?? []).find((row) => row.person_id === personId && row.is_sandbox === practice && !row.voided);
           const locked = run?.status === "submitted" || run?.status === "paid";
           const paid = run?.status === "paid";
           const paidIds = new Set((run?.payment_lines ?? []).map((line) => line.session_id));
-          let total = 0;
+          let shiftTotal = 0;
+          const period = buildPayPeriod({
+            from: week.from,
+            to: week.to,
+            shifts: [],
+            trips: visibleTrips.filter((row) => row.person_id === personId).map((row) => ({
+              ...asPeriodTrip(row),
+              paymentStatus: row.payment_id && paid ? "paid" : null,
+            })),
+            reimbursements: visibleCharges.filter((row) => row.person_id === personId && !row.voided).map((row) => {
+              const trip = row.trip_log_id ? tripById.get(row.trip_log_id) : undefined;
+              const held = Boolean(trip && !trip.voided && !trip.receipt_received_at);
+              return {
+                date: trip?.trip_on || (row.created_at ? torontoNow(new Date(row.created_at)).today : ""),
+                note: row.note?.trim() || "Reimbursement",
+                amount: row.amount == null ? null : Number(row.amount),
+                held,
+                alreadyPaid: Boolean(row.paid) && !held,
+              };
+            }),
+          });
+          const payableReimbursements = sumMoney([period.reimbursementsTotal, -period.alreadyPaidTotal]);
+          const hasOtherPay = period.trips.length > 0 || payableReimbursements > 0;
           return (
             <Card key={personId}>
               <p className="text-lg font-semibold">{person?.goes_by ?? "Person"}</p>
+              <h3 className="mt-3 font-semibold">Shifts</h3>
+              {personShifts.length === 0 ? <p className="text-sm text-stone-600">No shifts</p> : null}
               {personShifts.map((shift) => {
                 const minutes = durationMinutes(shift.start_at, shift.end_at);
                 const workerRates = ratesFor(personId);
                 const rate = hourlyRateForWorkedShift(workerRates, shift.service_date);
                 const amount = amountForWorkedShift({ workerRates, minutes, day: shift.service_date });
                 const paying = locked && paidIds.size > 0 ? paidIds.has(shift.id) : included(shift);
-                if (paying && amount != null) total += amount;
+                if (paying && amount != null) shiftTotal += amount;
                 const site = one(shift.sites);
                 const covered = isCoveredShift(claims.data ?? [], shift.site_id, shift.service_date, shift.person_id);
                 return (
@@ -222,17 +372,66 @@ export function PayrollPage() {
                   </div>
                 );
               })}
-              <p className="mt-3 text-lg font-semibold">{paid ? "Paid" : "To pay"} {money(Math.round(total * 100) / 100)}</p>
+              <p className="mt-2 font-semibold">Shifts {money(Math.round(shiftTotal * 100) / 100)}</p>
+              <h3 className="mt-4 font-semibold">Trips</h3>
+              {period.trips.length === 0 ? <p className="text-sm text-stone-600">No trips</p> : null}
+              {period.trips.map((trip) => (
+                <div key={trip.id ?? `${trip.date}-${trip.kind}`} className="mt-3">
+                  <p className="font-medium">
+                    {formatVisitDay(trip.date)} · {tripKindLabel(trip.kind)}
+                    {trip.sites.length ? ` · ${tripSitesLabel(trip.sites)}` : ""}
+                  </p>
+                  <p className="text-sm text-stone-600">
+                    {trip.amount == null ? "" : money(trip.amount)}
+                    {trip.note ? ` · ${trip.note}` : ""}
+                    {trip.kind === "milk_run" && trip.receiptReceived === false ? " · Receipt not in yet" : ""}
+                    {trip.kind === "milk_run" && trip.receiptReceived ? " · Receipt in" : ""}
+                  </p>
+                  {trip.kind === "milk_run" && trip.id && trip.receiptReceived === false ? (
+                    <Button className="mt-2" tone="quiet" disabled={Boolean(busy)} onClick={() => void changeTrip(trip.id!, "receipt")}>
+                      {busy === trip.id ? "Saving…" : "Receipt received"}
+                    </Button>
+                  ) : null}
+                  {!paid && trip.id ? (
+                    <Button className="mt-2" tone="quiet" disabled={Boolean(busy)} onClick={() => void changeTrip(trip.id!, "void")}>
+                      Remove trip
+                    </Button>
+                  ) : null}
+                </div>
+              ))}
+              <p className="mt-2 font-semibold">Trips {money(period.tripsTotal)}</p>
+              <h3 className="mt-4 font-semibold">Reimbursements</h3>
+              {period.reimbursements.length === 0 ? <p className="text-sm text-stone-600">No reimbursements</p> : null}
+              {period.reimbursements.map((row) => (
+                <div key={`${row.date}-${row.note}-${row.amount}`} className="mt-3">
+                  <p className="font-medium">{row.note}</p>
+                  <p className="text-sm text-stone-600">
+                    {formatVisitDay(row.date)}
+                    {row.amount == null ? "" : ` · ${money(row.amount)}`}
+                    {row.held ? " · Waiting for receipt" : ""}
+                    {row.alreadyPaid ? " · Paid" : ""}
+                  </p>
+                </div>
+              ))}
+              <p className="mt-2 font-semibold">Reimbursements {money(period.reimbursementsTotal)}</p>
+              <p className="mt-3 text-lg font-semibold">
+                {paid ? "Paid" : "To pay"} {money(sumMoney([Math.round(shiftTotal * 100) / 100, period.tripsTotal, period.reimbursementsTotal]))}
+              </p>
+              {period.alreadyPaidTotal > 0 ? (
+                <p className="text-sm text-stone-600">
+                  Includes {money(period.alreadyPaidTotal)} already paid on Charges. Marking this week paid will not pay that again.
+                </p>
+              ) : null}
               {run?.paid_on ? <p className="text-sm text-stone-600">Paid {run.paid_on}</p> : null}
               {paid ? null : (
-                <Button className="mt-3 w-full" disabled={busy === personId} onClick={() => void markPaid(personId, personShifts, run?.id, Boolean(locked))}>
+                <Button className="mt-3 w-full" disabled={busy === personId} onClick={() => void markPaid(personId, personShifts, run?.id, Boolean(locked), hasOtherPay)}>
                   {busy === personId ? "Saving…" : "Mark paid"}
                 </Button>
               )}
             </Card>
           );
         })}
-        {!shifts.isLoading && byPerson.size === 0 ? <p className="text-stone-600">No completed shifts in that week.</p> : null}
+        {!shifts.isLoading && !trips.isLoading && personIds.length === 0 ? <p className="text-stone-600">Nothing to pay in that week.</p> : null}
       </div>
       <ErrorText>{error}</ErrorText>
     </Screen>
@@ -363,11 +562,24 @@ function TechPayList() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("charges")
-        .select("id, amount, note, created_at, voided, is_sandbox")
+        .select("id, amount, note, created_at, voided, paid, is_sandbox, trip_log_id")
         .eq("person_id", profile!.id)
         .eq("is_sandbox", practice);
-      if (error) return [] as { id: string; amount: number | null; note: string | null; created_at: string | null; voided?: boolean }[];
-      return (data ?? []) as { id: string; amount: number | null; note: string | null; created_at: string | null; voided?: boolean }[];
+      if (error) return [] as TechCharge[];
+      return (data ?? []) as TechCharge[];
+    },
+  });
+  const trips = useQuery({
+    queryKey: ["my-trips", profile?.id, practice],
+    enabled: Boolean(profile),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("trip_logs")
+        .select("id, person_id, trip_on, kind, rate_amount, note, milk_cost, receipt_received_at, voided, created_at, payment_id, trip_log_sites(site_id, sites(short_name))")
+        .eq("person_id", profile!.id)
+        .eq("is_sandbox", practice);
+      if (error) return [] as TechTrip[];
+      return (data ?? []) as TechTrip[];
     },
   });
   const rates = useQuery({
@@ -395,17 +607,31 @@ function TechPayList() {
       amount: amountForWorkedShift({ workerRates, minutes, day: row.service_date as string }),
     };
   });
+  const tripRows = (trips.data ?? []).map(asPeriodTrip);
+  const tripById = new Map((trips.data ?? []).map((row) => [row.id, row]));
   const reimbursements = (charges.data ?? [])
     .filter((row) => !row.voided)
-    .map((row) => ({
-      date: row.created_at ? torontoNow(new Date(row.created_at)).today : "",
-      note: row.note?.trim() || "Reimbursement",
-      amount: row.amount == null ? null : Number(row.amount),
-    }));
-  const detail = buildPayPeriod({ ...selected, shifts, reimbursements });
-  const past = pastPayPeriods(today, [...shifts.map((row) => row.date), ...reimbursements.map((row) => row.date)]);
+    .map((row) => {
+      const trip = row.trip_log_id ? tripById.get(row.trip_log_id) : undefined;
+      const held = Boolean(trip && !trip.voided && !trip.receipt_received_at);
+      return {
+        date: trip?.trip_on || (row.created_at ? torontoNow(new Date(row.created_at)).today : ""),
+        note: row.note?.trim() || "Reimbursement",
+        amount: row.amount == null ? null : Number(row.amount),
+        held,
+        alreadyPaid: Boolean(row.paid) && !held,
+      };
+    });
+  const detail = buildPayPeriod({ ...selected, shifts, trips: tripRows, reimbursements });
+  const past = pastPayPeriods(today, [
+    ...shifts.map((row) => row.date),
+    ...tripRows.map((row) => row.date),
+    ...reimbursements.map((row) => row.date),
+  ]);
 
   return (
+    <>
+    <LogTripCard />
     <PayPeriodDetailView
       heading={viewingCurrent ? "This period" : "Past period"}
       detail={detail}
@@ -414,6 +640,35 @@ function TechPayList() {
       onCurrent={viewingCurrent ? undefined : () => setParams({})}
       error={sessions.error instanceof Error ? sessions.error.message : ""}
     />
+    </>
+  );
+}
+
+function PaySection({
+  title,
+  empty,
+  total,
+  rows,
+}: {
+  title: string;
+  empty: string;
+  total: number;
+  rows: { key: string; title: string; detail: string }[];
+}) {
+  return (
+    <section className="mt-4 first:mt-0">
+      <h3 className="text-lg font-semibold">{title}</h3>
+      {rows.length === 0 ? <p className="mt-1 text-sm text-stone-600">{empty}</p> : null}
+      <ul className="mt-2 grid gap-3">
+        {rows.map((row) => (
+          <li key={row.key}>
+            <p className="font-semibold">{row.title}</p>
+            {row.detail ? <p className="text-sm text-stone-600">{row.detail}</p> : null}
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 font-semibold">{title} {money(total)}</p>
+    </section>
   );
 }
 
@@ -442,29 +697,46 @@ export function PayPeriodDetailView({
       <Title sub={`${formatVisitDay(detail.from)} – ${formatVisitDay(detail.to)}`}>Your pay</Title>
       <h2 className="mb-3 text-xl font-semibold">{heading}</h2>
       <Card>
-        {detail.shifts.length === 0 && detail.reimbursements.length === 0 ? (
-          <p className="text-stone-600">Nothing in this period.</p>
-        ) : null}
-        <ul className="grid gap-3">
-          {detail.shifts.map((shift) => (
-            <li key={`${shift.date}-${shift.site}-${shift.minutes}`}>
-              <p className="font-semibold">{formatVisitDay(shift.date)} · {shift.site}</p>
-              <p className="text-sm text-stone-600">
-                {durationLabel(shift.minutes)}
-                {shift.amount == null ? "" : ` · ${money(shift.amount)}`}
-              </p>
-            </li>
-          ))}
-          {detail.reimbursements.map((row) => (
-            <li key={`${row.date}-${row.note}`}>
-              <p className="font-semibold">{row.note}</p>
-              <p className="text-sm text-stone-600">
-                {formatVisitDay(row.date)}
-                {row.amount == null ? "" : ` · ${money(row.amount)}`}
-              </p>
-            </li>
-          ))}
-        </ul>
+        <PaySection
+          title="Shifts"
+          empty="No shifts"
+          total={detail.shiftsTotal}
+          rows={detail.shifts.map((shift) => ({
+            key: `${shift.date}-${shift.site}-${shift.minutes}`,
+            title: `${formatVisitDay(shift.date)} · ${shift.site}`,
+            detail: `${durationLabel(shift.minutes)}${shift.amount == null ? "" : ` · ${money(shift.amount)}`}`,
+          }))}
+        />
+        <PaySection
+          title="Trips"
+          empty="No trips"
+          total={detail.tripsTotal}
+          rows={detail.trips.map((trip) => ({
+            key: trip.id ?? `${trip.date}-${trip.kind}-${trip.sites.join("-")}`,
+            title: `${formatVisitDay(trip.date)} · ${tripKindLabel(trip.kind)}${trip.sites.length ? ` · ${tripSitesLabel(trip.sites)}` : ""}`,
+            detail: [
+              trip.amount == null ? "" : money(trip.amount),
+              trip.note,
+              trip.kind === "milk_run" && trip.milkCost != null ? `Milk cost ${money(trip.milkCost)} is under Reimbursements` : "",
+              trip.kind === "milk_run" && trip.receiptReceived === false ? "Receipt not in yet" : "",
+            ].filter(Boolean).join(" · "),
+          }))}
+        />
+        <PaySection
+          title="Reimbursements"
+          empty="No reimbursements"
+          total={detail.reimbursementsTotal}
+          rows={detail.reimbursements.map((row) => ({
+            key: `${row.date}-${row.note}-${row.amount}`,
+            title: row.note,
+            detail: [
+              formatVisitDay(row.date),
+              row.amount == null ? "" : money(row.amount),
+              row.held ? "Waiting for receipt" : "",
+              row.alreadyPaid ? "Paid" : "",
+            ].filter(Boolean).join(" · "),
+          }))}
+        />
         <p className="mt-4 text-xl font-semibold">Total {money(detail.total)}</p>
       </Card>
       {past.length > 0 ? (

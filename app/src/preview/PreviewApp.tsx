@@ -475,7 +475,7 @@ function PayrollLook() {
   return (
     <Screen>
       <p className="text-sm font-semibold text-[var(--accent)]">Admin</p>
-      <Title sub="Nov 9 to Nov 15. These are the shifts technicians finished. Mark each paid, or leave it not yet paid.">Payroll</Title>
+      <Title sub="Nov 9 to Nov 15. Shifts stay hourly. Trips are a flat rate. Reimbursements are listed on their own.">Payroll</Title>
       <p className="mb-4 font-semibold text-[var(--accent)]">Pay rates</p>
       <Card>
         <p className="text-lg font-semibold">Kajsa</p>
@@ -491,7 +491,19 @@ function PayrollLook() {
           <Button>Pay</Button>
           <Button tone="quiet">Not yet paid</Button>
         </div>
-        <p className="mt-3 text-lg font-semibold">To pay $53.16</p>
+        <p className="mt-3 font-semibold">Shifts $53.16</p>
+        <h3 className="mt-4 font-semibold">Trips</h3>
+        <p className="mt-2 font-medium">Wed Nov 11 · Milk run · Sinai, UofT</p>
+        <p className="text-sm text-stone-600">$10.00 · Receipt not in yet</p>
+        <p className="mt-2 font-semibold">Trips $10.00</p>
+        <h3 className="mt-4 font-semibold">Reimbursements</h3>
+        <p className="mt-2 font-medium">Milk run</p>
+        <p className="text-sm text-stone-600">Wed Nov 11 · $6.40 · Waiting for receipt</p>
+        <p className="mt-2 font-medium">Cups</p>
+        <p className="text-sm text-stone-600">Tue Nov 10 · $12.50 · Paid</p>
+        <p className="mt-2 font-semibold">Reimbursements $12.50</p>
+        <p className="mt-3 text-lg font-semibold">To pay $75.66</p>
+        <p className="text-sm text-stone-600">Includes $12.50 already paid on Charges. Marking this week paid will not pay that again.</p>
         <Button className="mt-3 w-full">Mark paid</Button>
       </Card>
       <PreviewTabs active="Pay" admin />
@@ -639,8 +651,17 @@ function PayNowLook() {
           from: "2026-11-16",
           to: "2026-11-22",
           shifts: [{ date: "2026-11-16", site: "Sinai", minutes: 65, amount: 23.83 }],
-          reimbursements: [{ date: "2026-11-16", note: "Oat milk", amount: 18.4 }],
-          total: 42.23,
+          trips: [{ date: "2026-11-18", kind: "milk_run", sites: ["Sinai", "UofT"], note: "", amount: 10, milkCost: 6.4, receiptReceived: false }],
+          reimbursements: [
+            { date: "2026-11-16", note: "Oat milk", amount: 18.4 },
+            { date: "2026-11-18", note: "Milk run", amount: 6.4, held: true },
+          ],
+          shiftsTotal: 23.83,
+          tripsTotal: 10,
+          reimbursementsTotal: 18.4,
+          alreadyPaidTotal: 0,
+          total: 52.23,
+          toPay: 52.23,
         }}
         past={[{ from: "2026-11-09", to: "2026-11-15" }]}
         onPast={() => undefined}
@@ -662,8 +683,14 @@ function PayPastLook() {
             { date: "2026-11-09", site: "UofT", minutes: 65, amount: 23.83 },
             { date: "2026-11-11", site: "Sinai", minutes: 80, amount: 29.33 },
           ],
+          trips: [{ date: "2026-11-11", kind: "warehouse_pickup", sites: [], note: "", amount: 12 }],
           reimbursements: [{ date: "2026-11-10", note: "Cups", amount: 12.5 }],
-          total: 65.66,
+          shiftsTotal: 53.16,
+          tripsTotal: 12,
+          reimbursementsTotal: 12.5,
+          alreadyPaidTotal: 0,
+          total: 77.66,
+          toPay: 77.66,
         }}
         past={[]}
         onCurrent={() => undefined}

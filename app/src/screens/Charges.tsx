@@ -57,11 +57,14 @@ export function ChargesPage({ embedded = false }: { embedded?: boolean }) {
     queryFn: async () => {
       const full = await supabase
         .from("charges")
-        .select("id, person_id, site_id, amount, note, receipt_url, paid, voided, created_at, edited_at, edited_by, is_sandbox")
+        .select("id, person_id, site_id, amount, note, receipt_url, paid, voided, created_at, edited_at, edited_by, is_sandbox, trip_log_id, trip_logs(receipt_received_at)")
         .eq("is_sandbox", practice)
         .order("created_at", { ascending: false });
       if (!full.error) {
-        let rows = (full.data ?? []) as (ChargeRow & { is_sandbox: boolean })[];
+        let rows = ((full.data ?? []) as (ChargeRow & { is_sandbox: boolean; trip_logs?: { receipt_received_at: string | null } | { receipt_received_at: string | null }[] | null })[]).map((row) => {
+          const linked = Array.isArray(row.trip_logs) ? row.trip_logs[0] : row.trip_logs;
+          return { ...row, receipt_received_at: linked?.receipt_received_at ?? null };
+        });
         if (!admin && profile?.id) rows = rows.filter((row) => row.person_id === profile.id);
         return rows;
       }
@@ -197,14 +200,19 @@ export function ChargesPage({ embedded = false }: { embedded?: boolean }) {
           </a>
         ) : null}
         <div className="mt-2 flex flex-wrap gap-2">
-          {access.canEdit ? (
+          {row.trip_log_id ? (
+            <p className="text-sm font-medium text-stone-600">Change this on the trip</p>
+          ) : access.canEdit ? (
             <Button tone="quiet" disabled={Boolean(busy)} onClick={() => openEdit(row)}>
               Edit
             </Button>
           ) : locked ? (
             <p className="text-sm font-medium text-stone-600">{locked}</p>
           ) : null}
-          {admin && showPaidActions && !row.paid ? (
+          {admin && showPaidActions && !row.paid && row.trip_log_id && !row.receipt_received_at ? (
+            <p className="text-sm font-medium text-stone-600">Waiting for the receipt</p>
+          ) : null}
+          {admin && showPaidActions && !row.paid && !(row.trip_log_id && !row.receipt_received_at) ? (
             <Button tone="quiet" disabled={Boolean(busy)} onClick={() => void markPaid(row, true)}>
               {busy === `paid-${row.id}` ? "Saving…" : "Mark paid"}
             </Button>

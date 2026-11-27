@@ -14,6 +14,8 @@ export type ChargeRow = {
   created_at?: string;
   edited_at?: string | null;
   edited_by?: string | null;
+  trip_log_id?: string | null;
+  receipt_received_at?: string | null;
 };
 
 export function parseChargeAmount(raw: string): number | null {
